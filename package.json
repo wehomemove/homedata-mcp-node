@@ -1,0 +1,59 @@
+{
+  "name": "homedata-mcp",
+  "version": "0.1.0",
+  "description": "MCP server + CLI for the Homedata UK property data API — 29M UK properties (EPC, flood risk, planning, comparables, demographics, schools, broadband) for Claude, Cursor, Codex and other AI coding assistants.",
+  "type": "module",
+  "bin": {
+    "homedata-mcp": "dist/server.js",
+    "homedata": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "test": "node --test dist/test/*.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "homedata",
+    "uk-property",
+    "property-data",
+    "claude",
+    "cursor",
+    "codex",
+    "windsurf",
+    "epc",
+    "flood-risk",
+    "planning",
+    "uprn"
+  ],
+  "homepage": "https://homedata.co.uk/mcp",
+  "bugs": {
+    "url": "https://github.com/wehomemove/homedata-mcp-node/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wehomemove/homedata-mcp-node.git"
+  },
+  "license": "MIT",
+  "author": "Homedata <hello@homedata.co.uk> (https://homedata.co.uk)",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}
