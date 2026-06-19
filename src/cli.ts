@@ -47,26 +47,38 @@ function printHelp(): void {
 
 Usage: homedata <command> [args] [--field PATH] [--compact]
 
-Commands:
-  property <uprn>                       Look up a property by UPRN (base tier).
-  tier <uprn> [--tier T]                Property at a tier (address|base|core|complete).
-  valuation <uprn> [--type sale|rent]   AVM sale-price or monthly-rent estimate.
-  council-tax <uprn>                    Council tax band, charges + billing authority.
-  council-tax-band <uprn>               Council tax band only.
-  epc <uprn>                            Get EPC for a UPRN.
-  flood <uprn>                          Get flood risk for a UPRN.
-  sales <uprn>                          Historical sales (HMLR).
+Property (by UPRN):
+  property <uprn>                       Base-tier property lookup.
+  tier <uprn> [--tier T]                Tier (address|base|core|complete).
+  discover <uprn>                       Available add-ons + per-slug cost.
+  custom <uprn> --with a,b,c            Custom à-la-carte slug bundle.
+  batch <uprn> <uprn> ...               Batch lookup (max 50).
+  epc <uprn>                            Energy Performance Certificate.
+  council-tax <uprn>                    Band, charges + authority.
+  council-tax-band <uprn>               Band only.
+  valuation <uprn> [--type sale|rent]   AVM sale-price / rent estimate.
+  avm <uprn> [--count N]                AVM comparable evidence set.
+  sales <uprn>                          Sale + listing timeline.
+  lr-sales <uprn>                       HM Land Registry price-paid.
   listings <uprn>                       Past + current listings.
-  comparables <uprn> [--count N]        Nearest N comparables (default 20).
-  planning <uprn>                       Planning applications near a UPRN.
-  schools <uprn> [--radius N]           Schools near a UPRN (default 1000m).
-  transport <uprn> [--radius N]         Transport near a UPRN (default 800m).
-  crime <postcode> [--date YYYY-MM]     Recorded crime in a postcode.
-  demographics <postcode>               ONS Census 2021 profile.
-  broadband <postcode>                  Ofcom broadband availability.
-  postcode <postcode>                   Aggregated postcode profile.
+  comparables <uprn> [--count N]        Nearest N comparables.
+  planning <uprn>                       Planning applications nearby.
+  schools <uprn> [--radius --phase --ofsted]   Nearby schools.
+  flood <uprn> | risks <uprn> --type T  Flood / environmental risk.
+  energy|brownfield|boreholes|environment-report|rights-of-way <uprn>
+  solar <uprn>                          Solar/PV assessment.
+  amenities|fuel|healthcare <uprn> [--radius --limit]   Nearby POIs.
+  agent-stats <uprn>                    Local agent performance.
+
+Area (by postcode / outcode):
   search <query> [--postcode PC]        Free-text address search.
-  batch <uprn> <uprn> ...               Batch property lookup (max 50).
+  addresses <postcode>                  All addresses at a postcode.
+  transport <postcode> [--radius N]     Nearby transport stops.
+  crime <postcode> [--date --category]  Recorded crime.
+  demographics|deprivation|broadband|postcode <postcode>
+  conservation-areas|listed-buildings|planning-designations <postcode>
+  price-trends|price-distribution|price-growth <outcode>
+  live-listings [--postcode --min_price --max_price --min_bedrooms --type]
 
 Flags:
   --field <dotted.path>   Extract a single value from the response (e.g. last_sold_price).
@@ -117,32 +129,63 @@ async function run(args: ParsedArgs): Promise<number> {
   const p = args.positional;
   let data: unknown;
 
+  const num = (k: string) => (args.flags[k] !== undefined ? Number(args.flags[k]) : undefined);
+  const str = (k: string) => args.flags[k] as string | undefined;
+
   switch (args.command) {
+    // Property
     case "property": data = await t.lookup_property(client, p[0]!); break;
     case "tier": data = await t.get_property_tier(client, p[0]!, ((args.flags["tier"] as string) ?? "base") as t.PropertyTier); break;
-    case "valuation": data = await t.estimate_valuation(
-      client,
-      p[0]!,
-      ((args.flags["type"] as string) ?? "sale") as "sale" | "rent",
-      args.flags["bedrooms"] ? Number(args.flags["bedrooms"]) : undefined,
-      args.flags["property_type"] as string | undefined,
-    ); break;
+    case "discover": data = await t.discover_property(client, p[0]!); break;
+    case "custom": data = await t.get_property_custom(client, p[0]!, (str("with") ?? "").split(",").filter(Boolean)); break;
+    case "batch": data = await t.batch_property_lookup(client, p); break;
+    // EPC / council tax
+    case "epc": data = await t.lookup_epc(client, p[0]!); break;
     case "council-tax": data = await t.lookup_council_tax(client, p[0]!); break;
     case "council-tax-band": data = await t.lookup_council_tax_band(client, p[0]!); break;
-    case "epc": data = await t.lookup_epc(client, p[0]!); break;
-    case "flood": data = await t.lookup_flood_risk(client, p[0]!); break;
+    // Valuation
+    case "valuation": data = await t.estimate_valuation(client, p[0]!, ((str("type")) ?? "sale") as "sale" | "rent", num("bedrooms"), str("property_type")); break;
+    case "avm": data = await t.get_avm_comparables(client, p[0]!, Number(args.flags["count"] ?? 20)); break;
+    // Sales / listings
     case "sales": data = await t.get_property_sales(client, p[0]!); break;
+    case "lr-sales": data = await t.get_lr_sales(client, p[0]!); break;
     case "listings": data = await t.search_property_listings(client, p[0]!); break;
-    case "planning": data = await t.get_planning_applications(client, p[0]!); break;
     case "comparables": data = await t.get_comparables(client, p[0]!, Number(args.flags["count"] ?? 20)); break;
-    case "schools": data = await t.get_schools(client, p[0]!, Number(args.flags["radius"] ?? 1000)); break;
-    case "transport": data = await t.get_transport(client, p[0]!, Number(args.flags["radius"] ?? 800)); break;
-    case "crime": data = await t.get_crime(client, p[0]!, args.flags["date"] as string | undefined); break;
+    case "live-listings": data = await t.search_live_listings(client, { postcode: str("postcode"), min_price: num("min_price"), max_price: num("max_price"), min_bedrooms: num("min_bedrooms"), transaction_type: str("type") as ("Sale" | "Rental" | undefined) }); break;
+    // Address
+    case "search": data = await t.search_address(client, p[0]!, str("postcode")); break;
+    case "addresses": data = await t.get_addresses_at_postcode(client, p[0]!); break;
+    // Local / area
+    case "planning": data = await t.get_planning_applications(client, p[0]!); break;
+    case "schools": data = await t.get_schools(client, p[0]!, num("radius") ?? 3, str("phase"), str("ofsted")); break;
+    case "transport": data = await t.get_transport(client, p[0]!, num("radius") ?? 1); break;
+    case "crime": data = await t.get_crime(client, p[0]!, str("date"), str("category")); break;
     case "demographics": data = await t.get_demographics(client, p[0]!); break;
+    case "deprivation": data = await t.get_deprivation(client, p[0]!); break;
     case "broadband": data = await t.get_broadband(client, p[0]!); break;
     case "postcode": data = await t.get_postcode_profile(client, p[0]!); break;
-    case "search": data = await t.search_address(client, p[0]!, args.flags["postcode"] as string | undefined); break;
-    case "batch": data = await t.batch_property_lookup(client, p); break;
+    case "conservation-areas": data = await t.get_conservation_areas(client, p[0]!, num("radius")); break;
+    case "listed-buildings": data = await t.get_listed_buildings(client, p[0]!, num("radius"), str("grade")); break;
+    case "planning-designations": data = await t.get_planning_designations(client, p[0]!, num("radius"), str("type")); break;
+    // Amenities / POIs (uprn positional)
+    case "amenities": data = await t.get_amenities(client, { uprn: p[0]!, radius_km: num("radius"), limit: num("limit") }); break;
+    case "fuel": data = await t.get_fuel_stations(client, { uprn: p[0]!, radius_km: num("radius"), limit: num("limit") }); break;
+    case "healthcare": data = await t.get_healthcare(client, { uprn: p[0]!, radius_km: num("radius"), limit: num("limit") }); break;
+    // Environment / risk
+    case "flood": data = await t.lookup_flood_risk(client, p[0]!); break;
+    case "risks": data = await t.get_risks(client, (str("type") ?? "all") as t.RiskType, p[0]!); break;
+    case "energy": data = await t.get_energy(client, { uprn: p[0]!, radius_m: num("radius_m") }); break;
+    case "brownfield": data = await t.get_brownfield(client, { uprn: p[0]!, radius_m: num("radius_m") }); break;
+    case "boreholes": data = await t.get_boreholes(client, { uprn: p[0]!, radius_m: num("radius_m") }); break;
+    case "environment-report": data = await t.get_environment_report(client, { uprn: p[0]! }); break;
+    case "rights-of-way": data = await t.get_rights_of_way(client, { uprn: p[0]!, radius_m: num("radius_m") }); break;
+    case "solar": data = await t.get_solar_assessment(client, p[0]!); break;
+    // Pricing trends (outcode)
+    case "price-trends": data = await t.get_price_trends(client, p[0]!); break;
+    case "price-distribution": data = await t.get_price_distribution(client, p[0]!); break;
+    case "price-growth": data = await t.get_price_growth(client, p[0]!); break;
+    // Agents
+    case "agent-stats": data = await t.get_agent_stats(client, p[0]!); break;
     default:
       console.error(`unknown command: ${args.command}`);
       printHelp();

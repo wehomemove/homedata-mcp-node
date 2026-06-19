@@ -4,6 +4,23 @@ All notable changes to the Node.js edition of the Homedata MCP server.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-19
+
+### Added — full API parity
+Wrapped every remaining public Homedata endpoint as a tool. New tools:
+`discover_property`, `get_property_custom`, `get_avm_comparables`, `get_lr_sales`,
+`search_live_listings`, `get_addresses_at_postcode`, `get_deprivation`,
+`get_conservation_areas`, `get_listed_buildings`, `get_planning_designations`,
+`get_amenities`, `get_fuel_stations`, `get_healthcare`, `get_risks`, `get_energy`,
+`get_brownfield`, `get_boreholes`, `get_environment_report`, `get_rights_of_way`,
+`get_solar_assessment`, `get_price_trends`, `get_price_distribution`,
+`get_price_growth`, `get_agent_stats`. CLI gains matching commands.
+
+### Fixed
+- `get_schools` / `get_transport` signatures corrected (schools takes phase/ofsted
+  filters; transport is postcode-keyed, not UPRN). `get_crime` gains `category`.
+- JSON-Schema converter now also emits `boolean` types.
+
 ## [0.2.0] - 2026-06-19
 
 ### Fixed
