@@ -8,4 +8,4 @@ export { HomedataClient, HomedataError } from "./client.js";
 export type { HomedataResponse } from "./client.js";
 export * as tools from "./tools.js";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";

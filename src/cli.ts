@@ -48,7 +48,11 @@ function printHelp(): void {
 Usage: homedata <command> [args] [--field PATH] [--compact]
 
 Commands:
-  property <uprn>                       Look up a property by UPRN.
+  property <uprn>                       Look up a property by UPRN (base tier).
+  tier <uprn> [--tier T]                Property at a tier (address|base|core|complete).
+  valuation <uprn> [--type sale|rent]   AVM sale-price or monthly-rent estimate.
+  council-tax <uprn>                    Council tax band, charges + billing authority.
+  council-tax-band <uprn>               Council tax band only.
   epc <uprn>                            Get EPC for a UPRN.
   flood <uprn>                          Get flood risk for a UPRN.
   sales <uprn>                          Historical sales (HMLR).
@@ -115,6 +119,16 @@ async function run(args: ParsedArgs): Promise<number> {
 
   switch (args.command) {
     case "property": data = await t.lookup_property(client, p[0]!); break;
+    case "tier": data = await t.get_property_tier(client, p[0]!, ((args.flags["tier"] as string) ?? "base") as t.PropertyTier); break;
+    case "valuation": data = await t.estimate_valuation(
+      client,
+      p[0]!,
+      ((args.flags["type"] as string) ?? "sale") as "sale" | "rent",
+      args.flags["bedrooms"] ? Number(args.flags["bedrooms"]) : undefined,
+      args.flags["property_type"] as string | undefined,
+    ); break;
+    case "council-tax": data = await t.lookup_council_tax(client, p[0]!); break;
+    case "council-tax-band": data = await t.lookup_council_tax_band(client, p[0]!); break;
     case "epc": data = await t.lookup_epc(client, p[0]!); break;
     case "flood": data = await t.lookup_flood_risk(client, p[0]!); break;
     case "sales": data = await t.get_property_sales(client, p[0]!); break;

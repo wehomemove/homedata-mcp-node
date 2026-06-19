@@ -6,8 +6,29 @@
 
 import type { HomedataClient, HomedataResponse } from "./client.js";
 
+// Canonical singular route. The deprecated plural `/api/properties/{uprn}/`
+// is being sunset; the `base` tier is its true superset successor.
 export const lookup_property = (c: HomedataClient, uprn: string) =>
-  c.get(`/api/properties/${encodeURIComponent(uprn)}/`);
+  c.get(`/api/property/${encodeURIComponent(uprn)}/base/`);
+
+// Property tiers — strict supersets: address ⊂ base ⊂ core ⊂ complete.
+export type PropertyTier = "address" | "base" | "core" | "complete";
+export const get_property_tier = (c: HomedataClient, uprn: string, tier: PropertyTier = "base") =>
+  c.get(`/api/property/${encodeURIComponent(uprn)}/${encodeURIComponent(tier)}/`);
+
+// Valuation estimate — sale or rent. bedrooms / property_type are optional
+// overrides; the engine falls back to the property record when omitted.
+export const estimate_valuation = (
+  c: HomedataClient,
+  uprn: string,
+  type: "sale" | "rent" = "sale",
+  bedrooms?: number,
+  property_type?: string,
+) => c.get(`/api/valuations/estimate/`, { uprn, type, bedrooms, property_type });
+
+// Council tax band only — cheaper than the full council_tax bundle.
+export const lookup_council_tax_band = (c: HomedataClient, uprn: string) =>
+  c.get(`/api/council_tax_band/${encodeURIComponent(uprn)}/`);
 
 export const lookup_epc = (c: HomedataClient, uprn: string) =>
   c.get(`/api/epc-checker/${encodeURIComponent(uprn)}/`);
@@ -51,11 +72,7 @@ export const search_address = (c: HomedataClient, query: string, postcode?: stri
 export const batch_property_lookup = (c: HomedataClient, uprns: string[]) =>
   c.post(`/api/property/batch/`, { uprns });
 
-export const lookup_council_tax = (_c: HomedataClient, _uprn: string): Promise<HomedataResponse> =>
-  // Short-circuit — endpoint is documented "coming soon" and 404s today.
-  // Matches the Python 0.1.1 fix; keeps behaviour aligned across SDKs.
-  Promise.resolve({
-    error: "in_development",
-    status_code: 503,
-    detail: "Council tax band is in development. See https://homedata.co.uk/changelog",
-  });
+// Full council tax bundle (band + charges). Live since the council_tax split —
+// the old 503 "coming soon" stub was removed in 0.2.0.
+export const lookup_council_tax = (c: HomedataClient, uprn: string): Promise<HomedataResponse> =>
+  c.get(`/api/council_tax/${encodeURIComponent(uprn)}/`);

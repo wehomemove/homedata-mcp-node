@@ -1,6 +1,6 @@
 {
   "name": "homedata-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server + CLI for the Homedata UK property data API — 29M UK properties (EPC, flood risk, planning, comparables, demographics, schools, broadband) for Claude, Cursor, Codex and other AI coding assistants.",
   "type": "module",
   "bin": {

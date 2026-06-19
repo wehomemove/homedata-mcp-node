@@ -4,7 +4,9 @@
  */
 
 const DEFAULT_BASE_URL = "https://api.homedata.co.uk";
-const DEFAULT_TIMEOUT_MS = 10_000;
+// 30s — the valuation/AVM endpoints run live comparable computation and can
+// take well over 10s. Overridable via HOMEDATA_TIMEOUT_MS.
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 export class HomedataError extends Error {}
 
@@ -34,7 +36,9 @@ export class HomedataClient {
   static fromEnv(version?: string): HomedataClient {
     const apiKey = (process.env.HOMEDATA_API_KEY ?? "").trim();
     const baseUrl = (process.env.HOMEDATA_BASE_URL ?? "").trim() || undefined;
-    return new HomedataClient({ apiKey, baseUrl, version });
+    const rawTimeout = Number((process.env.HOMEDATA_TIMEOUT_MS ?? "").trim());
+    const timeoutMs = Number.isFinite(rawTimeout) && rawTimeout > 0 ? rawTimeout : undefined;
+    return new HomedataClient({ apiKey, baseUrl, timeoutMs, version });
   }
 
   async get(path: string, params?: Record<string, string | number | undefined>): Promise<HomedataResponse> {
