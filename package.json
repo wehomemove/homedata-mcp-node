@@ -1,7 +1,7 @@
 {
   "name": "homedata-mcp",
-  "version": "0.1.0",
-  "description": "MCP server + CLI for the Homedata UK property data API — 29M UK properties (EPC, flood risk, planning, comparables, demographics, schools, broadband) for Claude, Cursor, Codex and other AI coding assistants.",
+  "version": "1.0.0",
+  "description": "MCP server and CLI for the Homedata UK property data API: addresses and UPRNs, EPC, council tax, planning, environmental risk, schools, broadband and more.",
   "type": "module",
   "bin": {
     "homedata-mcp": "dist/server.js",
@@ -16,9 +16,10 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-manifest.mjs",
     "prepare": "npm run build",
-    "test": "node --test dist/test/*.js"
+    "test": "node --test dist/test/*.test.js",
+    "vendor": "node scripts/vendor-manifest.mjs"
   },
   "keywords": [
     "mcp",
