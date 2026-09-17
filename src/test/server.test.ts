@@ -16,7 +16,8 @@ interface Sent {
 
 async function connect(opts: { response?: () => Response; withKey?: boolean } = {}) {
   const sent: Sent[] = [];
-  const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+  const fetchImpl = (async (...args: Parameters<typeof fetch>) => {
+    const [input, init] = args;
     const url = new URL(String(input));
     sent.push({
       method: init?.method ?? "GET",
@@ -91,9 +92,9 @@ test("the helpers spend nothing", async () => {
   const { client, sent } = await connect();
   const realFetch = globalThis.fetch;
   const globalCalls: string[] = [];
-  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    globalCalls.push(String(input));
-    return realFetch(input as RequestInfo, init);
+  globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+    globalCalls.push(String(args[0]));
+    return realFetch(...args);
   }) as typeof fetch;
   try {
     for (const helper of staticTools()) await client.callTool({ name: helper.name, arguments: {} });
