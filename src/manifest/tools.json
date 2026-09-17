@@ -1,0 +1,1601 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repository": "wehomemove/thor",
+    "commit": "a644dab7882778b7c11cf4568e80819da83f17d9",
+    "catalogue": "resources/js/Pages/Developer/Playground/Index.vue",
+    "catalogue_sha256": "518702f753b007fa507663c4d8936b169f6da1fd685565dfb49b3f73a01ce529",
+    "llms_full_api_surface_source_hash": "a13bdec5a7a2310094837195a4935cafb2874a09c04eb1f128acbe2eee59c561"
+  },
+  "rules": {
+    "offered": "Playground ENDPOINTS entries with a path, not enterprise:true, not adminOnly:true",
+    "tool_name": "snake_case of the Playground id (hyphens become underscores). A design choice: the Playground has ids and labels, no tool names.",
+    "base_url": "Paths are relative to https://api.homedata.co.uk and also answer under /api/."
+  },
+  "tools": [
+    {
+      "name": "address_find",
+      "playground_id": "address-find",
+      "label": "Address Find",
+      "method": "GET",
+      "path": "/address/find/",
+      "params": [
+        {
+          "name": "q",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "playground_hint": "Street address, postcode, or place name"
+        }
+      ],
+      "tokens": {
+        "default": 2
+      }
+    },
+    {
+      "name": "property_discovery",
+      "playground_id": "property-discovery",
+      "label": "Property — Discovery",
+      "method": "GET",
+      "path": "/property/{uprn}/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "property_address",
+      "playground_id": "property-address",
+      "label": "Property — Address tier",
+      "method": "GET",
+      "path": "/property/{uprn}/address/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number"
+        }
+      ],
+      "tokens": {
+        "default": 5
+      }
+    },
+    {
+      "name": "property_base",
+      "playground_id": "property-base",
+      "label": "Property — Base tier",
+      "method": "GET",
+      "path": "/property/{uprn}/base/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number"
+        }
+      ],
+      "tokens": {
+        "default": 10
+      }
+    },
+    {
+      "name": "property_core",
+      "playground_id": "property-core",
+      "label": "Property — Core tier",
+      "method": "GET",
+      "path": "/property/{uprn}/core/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number"
+        }
+      ],
+      "tokens": {
+        "default": 25
+      }
+    },
+    {
+      "name": "property_complete",
+      "playground_id": "property-complete",
+      "label": "Property — Complete tier",
+      "method": "GET",
+      "path": "/property/{uprn}/complete/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number"
+        }
+      ],
+      "tokens": {
+        "default": 50
+      }
+    },
+    {
+      "name": "property_custom",
+      "playground_id": "property-custom",
+      "label": "Property — Custom (?with=…)",
+      "method": "GET",
+      "path": "/property/{uprn}/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number"
+        },
+        {
+          "name": "with",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "playground_hint": "Comma-separated add-on slugs (see tokens.addons), or all. The Playground builds this with its add-on picker rather than a declared param."
+        }
+      ],
+      "tokens": {
+        "default": 1,
+        "plus_with_addons": true,
+        "addons": {
+          "address": 5,
+          "rooms": 1,
+          "lr_title": 1,
+          "risks": 7,
+          "council_tax": 3,
+          "council_tax_full": 5,
+          "solar": 5,
+          "broadband": 1,
+          "roof": 1,
+          "garden": 1,
+          "parking": 1,
+          "epc_renovations": 1,
+          "dimensions": 1,
+          "land": 1,
+          "construction": 1
+        }
+      }
+    },
+    {
+      "name": "attr_rooms",
+      "playground_id": "attr-rooms",
+      "label": "Rooms",
+      "method": "GET",
+      "path": "/properties/{uprn}/rooms/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "attr_roof",
+      "playground_id": "attr-roof",
+      "label": "Roof",
+      "method": "GET",
+      "path": "/properties/{uprn}/roof/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "attr_garden",
+      "playground_id": "attr-garden",
+      "label": "Garden",
+      "method": "GET",
+      "path": "/properties/{uprn}/garden/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "attr_parking",
+      "playground_id": "attr-parking",
+      "label": "Parking",
+      "method": "GET",
+      "path": "/properties/{uprn}/parking/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "attr_epc_renovations",
+      "playground_id": "attr-epc-renovations",
+      "label": "EPC Renovations",
+      "method": "GET",
+      "path": "/properties/{uprn}/epc_renovations/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "attr_dimensions",
+      "playground_id": "attr-dimensions",
+      "label": "Dimensions",
+      "method": "GET",
+      "path": "/properties/{uprn}/dimensions/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "attr_land",
+      "playground_id": "attr-land",
+      "label": "Land Area",
+      "method": "GET",
+      "path": "/properties/{uprn}/land/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits) — must be a house, not a flat"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "attr_construction",
+      "playground_id": "attr-construction",
+      "label": "Construction",
+      "method": "GET",
+      "path": "/properties/{uprn}/construction/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "attr_epc",
+      "playground_id": "attr-epc",
+      "label": "EPC Rating",
+      "method": "GET",
+      "path": "/properties/{uprn}/epc/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "risks",
+      "playground_id": "risks",
+      "label": "Environmental Risks",
+      "method": "GET",
+      "path": "/risks/{risk_type}/",
+      "params": [
+        {
+          "name": "risk_type",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "enum": [
+            "all",
+            "flood",
+            "radon",
+            "landfill",
+            "coal_mining",
+            "non_coal_mining",
+            "noise",
+            "air_quality_today",
+            "invasive_plants"
+          ],
+          "playground_hint": "The screening band gives you a score; the flood layers below it give you the evidence — zones, history, defences and the 2080s outlook."
+        },
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "pattern": "^\\d+$",
+          "playground_hint": "Property UPRN. The flood layers also accept lat+lng instead."
+        },
+        {
+          "name": "lat",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "alternative_to_previous": true,
+          "playground_hint": "Latitude (WGS84) — flood layers only"
+        },
+        {
+          "name": "lng",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "alternative_to_previous": true,
+          "paired_with": "lat",
+          "playground_hint": "Longitude (WGS84) — paired with latitude"
+        }
+      ],
+      "tokens": {
+        "default": 1,
+        "when": [
+          {
+            "param": "risk_type",
+            "in": [
+              "all"
+            ],
+            "tokens": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "deprivation",
+      "playground_id": "deprivation",
+      "label": "Deprivation Index",
+      "method": "GET",
+      "path": "/deprivation/",
+      "params": [
+        {
+          "name": "postcode",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "playground_hint": "England only — try E1 6AN, SE1 7PB, LS1 1AA, or BS1 1AA"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "price_trends",
+      "playground_id": "price-trends",
+      "label": "Price Trends",
+      "method": "GET",
+      "path": "/price_trends/{outcode}/",
+      "params": [
+        {
+          "name": "outcode",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "playground_hint": "First half of a UK postcode (e.g. SW1A, E1, M1)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "price_distributions",
+      "playground_id": "price-distributions",
+      "label": "Price Distributions",
+      "method": "GET",
+      "path": "/price_distributions/{outcode}/",
+      "params": [
+        {
+          "name": "outcode",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "playground_hint": "First half of a UK postcode (e.g. SW1A, E1, M1)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "address_postcode",
+      "playground_id": "address-postcode",
+      "label": "Postcode Lookup",
+      "method": "GET",
+      "path": "/address/postcode/{postcode}/",
+      "params": [
+        {
+          "name": "postcode",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "playground_hint": "UK postcode (e.g. SW1A 2AA, E1 1AA)"
+        }
+      ],
+      "tokens": {
+        "default": 2
+      }
+    },
+    {
+      "name": "council_tax",
+      "playground_id": "council-tax",
+      "label": "Council Tax Band",
+      "method": "GET",
+      "path": "/council_tax_band/{uprn}/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "UPRN of the property — use the UPRN finder above to look one up by address."
+        }
+      ],
+      "tokens": {
+        "default": 3
+      }
+    },
+    {
+      "name": "council_tax_full",
+      "playground_id": "council-tax-full",
+      "label": "Council Tax Full",
+      "method": "GET",
+      "path": "/council_tax/{uprn}/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "UPRN of the property — use the UPRN finder above to look one up by address."
+        }
+      ],
+      "tokens": {
+        "default": 5
+      }
+    },
+    {
+      "name": "property_lr_titles",
+      "playground_id": "property-lr-titles",
+      "label": "Land Registry Titles",
+      "method": "GET",
+      "path": "/property_lr_titles/{uprn}/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits)"
+        }
+      ],
+      "tokens": {
+        "default": 10
+      }
+    },
+    {
+      "name": "boundaries",
+      "playground_id": "boundaries",
+      "label": "Boundary Autocomplete",
+      "method": "GET",
+      "path": "/boundaries/autocomplete/",
+      "params": [
+        {
+          "name": "q",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "playground_hint": "Area name, borough, or district (e.g. \"Hackney\", \"SW1\", \"Norwich\")"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "planning",
+      "playground_id": "planning",
+      "label": "Planning Applications",
+      "method": "GET",
+      "path": "/planning/search/",
+      "params": [
+        {
+          "name": "postcode",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "playground_hint": "UK postcode — use this OR lat+lng below"
+        },
+        {
+          "name": "lat",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "alternative_to_previous": true,
+          "playground_hint": "Latitude (WGS84) — alternative to postcode"
+        },
+        {
+          "name": "lng",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "alternative_to_previous": true,
+          "paired_with": "lat",
+          "playground_hint": "Longitude (WGS84) — paired with latitude"
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "advanced": true,
+          "playground_hint": "Search radius in kilometres (default: 0.5, max: 5)"
+        },
+        {
+          "name": "days",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "pattern": "^\\d+$",
+          "advanced": true,
+          "playground_hint": "Applications from last N days (default: 90, max: 365)"
+        },
+        {
+          "name": "type",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "advanced": true,
+          "playground_hint": "Filter: Full, Outline, Heritage, Trees, Conditions"
+        },
+        {
+          "name": "status",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "advanced": true,
+          "playground_hint": "Filter: Undecided, Approved, Refused, Withdrawn"
+        }
+      ],
+      "tokens": {
+        "default": 5
+      }
+    },
+    {
+      "name": "crime",
+      "playground_id": "crime",
+      "label": "Crime Data",
+      "method": "GET",
+      "path": "/crime/",
+      "params": [
+        {
+          "name": "postcode",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "playground_hint": "UK postcode — use this OR lat+lng below"
+        },
+        {
+          "name": "lat",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "alternative_to_previous": true,
+          "playground_hint": "Latitude (WGS84) — alternative to postcode"
+        },
+        {
+          "name": "lng",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "alternative_to_previous": true,
+          "paired_with": "lat",
+          "playground_hint": "Longitude (WGS84) — paired with latitude"
+        },
+        {
+          "name": "date",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "advanced": true,
+          "playground_hint": "YYYY-MM format — defaults to latest available"
+        },
+        {
+          "name": "category",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "advanced": true,
+          "playground_hint": "e.g. burglary, violent-crime, anti-social-behaviour"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "solar",
+      "playground_id": "solar",
+      "label": "Solar Assessment",
+      "method": "GET",
+      "path": "/solar-assessment/{uprn}/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits)"
+        }
+      ],
+      "tokens": {
+        "default": 5
+      }
+    },
+    {
+      "name": "postcode_profile",
+      "playground_id": "postcode-profile",
+      "label": "Postcode Profile",
+      "method": "GET",
+      "path": "/postcode-profile/",
+      "params": [
+        {
+          "name": "postcode",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "playground_hint": "UK postcode (e.g. SW1A 2AA, E1 6AN, M1 1AE)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "price_growth",
+      "playground_id": "price-growth",
+      "label": "Price Growth",
+      "method": "GET",
+      "path": "/price-growth/{outcode}/",
+      "params": [
+        {
+          "name": "outcode",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "playground_hint": "First half of a UK postcode (e.g. SW1A, E1, M1, BS1)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "schools",
+      "playground_id": "schools",
+      "label": "Schools Nearby",
+      "method": "GET",
+      "path": "/schools/nearby",
+      "params": [
+        {
+          "name": "postcode",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "playground_hint": "UK postcode (England only — e.g. SW1A 2AA, E1 6AN)"
+        },
+        {
+          "name": "radius",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "playground_hint": "Search radius in miles — 0.1 to 5.0 (default: 0.5)"
+        },
+        {
+          "name": "phase",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "enum": [
+            "Primary",
+            "Secondary",
+            "All-through",
+            "Nursery",
+            "16 plus"
+          ],
+          "advanced": true,
+          "playground_hint": "Filter by education phase — leave blank for all"
+        },
+        {
+          "name": "ofsted",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "enum": [
+            "Outstanding",
+            "Good",
+            "Requires Improvement",
+            "Inadequate"
+          ],
+          "advanced": true,
+          "playground_hint": "Filter by Ofsted inspection rating — leave blank for all"
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "advanced": true,
+          "playground_hint": "Max results — 1 to 50 (default: 20)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "broadband",
+      "playground_id": "broadband",
+      "label": "Broadband Speed",
+      "method": "GET",
+      "path": "/broadband/",
+      "params": [
+        {
+          "name": "postcode",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "playground_hint": "UK postcode (e.g. SW1A 2AA or SW1A2AA — spaces optional)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "amenities_all",
+      "playground_id": "amenities-all",
+      "label": "Amenities (all)",
+      "method": "GET",
+      "path": "/amenities/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 5
+      }
+    },
+    {
+      "name": "amenities_food",
+      "playground_id": "amenities-food",
+      "label": "Food",
+      "method": "GET",
+      "path": "/amenities/food/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "amenities_education",
+      "playground_id": "amenities-education",
+      "label": "Education",
+      "method": "GET",
+      "path": "/amenities/education/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "amenities_healthcare",
+      "playground_id": "amenities-healthcare",
+      "label": "Healthcare (OSM)",
+      "method": "GET",
+      "path": "/amenities/healthcare/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "amenities_financial",
+      "playground_id": "amenities-financial",
+      "label": "Financial",
+      "method": "GET",
+      "path": "/amenities/financial/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "amenities_civic",
+      "playground_id": "amenities-civic",
+      "label": "Civic",
+      "method": "GET",
+      "path": "/amenities/civic/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "amenities_worship",
+      "playground_id": "amenities-worship",
+      "label": "Worship",
+      "method": "GET",
+      "path": "/amenities/worship/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "amenities_culture",
+      "playground_id": "amenities-culture",
+      "label": "Culture",
+      "method": "GET",
+      "path": "/amenities/culture/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "amenities_convenience",
+      "playground_id": "amenities-convenience",
+      "label": "Convenience",
+      "method": "GET",
+      "path": "/amenities/convenience/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "amenities_green_spaces",
+      "playground_id": "amenities-green-spaces",
+      "label": "Green Spaces",
+      "method": "GET",
+      "path": "/amenities/green_spaces/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "amenities_transport",
+      "playground_id": "amenities-transport",
+      "label": "Transport",
+      "method": "GET",
+      "path": "/amenities/transport/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "amenities_shops",
+      "playground_id": "amenities-shops",
+      "label": "Shops",
+      "method": "GET",
+      "path": "/amenities/shops/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "fuel_stations_all",
+      "playground_id": "fuel-stations-all",
+      "label": "Fuel Stations (all)",
+      "method": "GET",
+      "path": "/fuel-stations/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "fuel_stations_petrol",
+      "playground_id": "fuel-stations-petrol",
+      "label": "Petrol Stations",
+      "method": "GET",
+      "path": "/fuel-stations/petrol/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "fuel_stations_ev",
+      "playground_id": "fuel-stations-ev",
+      "label": "EV Chargers",
+      "method": "GET",
+      "path": "/fuel-stations/ev/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 8km, max 25km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "healthcare_all",
+      "playground_id": "healthcare-all",
+      "label": "Healthcare (all)",
+      "method": "GET",
+      "path": "/healthcare/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 1km, max 10km."
+        }
+      ],
+      "tokens": {
+        "default": 3
+      }
+    },
+    {
+      "name": "healthcare_gps",
+      "playground_id": "healthcare-gps",
+      "label": "GPs",
+      "method": "GET",
+      "path": "/healthcare/gps/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 1km, max 10km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "healthcare_dentists",
+      "playground_id": "healthcare-dentists",
+      "label": "Dentists",
+      "method": "GET",
+      "path": "/healthcare/dentists/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 1km, max 10km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "healthcare_pharmacies",
+      "playground_id": "healthcare-pharmacies",
+      "label": "Pharmacies",
+      "method": "GET",
+      "path": "/healthcare/pharmacies/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 1km, max 10km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "healthcare_hospitals",
+      "playground_id": "healthcare-hospitals",
+      "label": "Hospitals",
+      "method": "GET",
+      "path": "/healthcare/hospitals/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Anchors the search at the property's geopoint."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "playground_hint": "Default 1km, max 10km."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "demographics",
+      "playground_id": "demographics",
+      "label": "Demographics",
+      "method": "GET",
+      "path": "/demographics/",
+      "params": [
+        {
+          "name": "postcode",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "playground_hint": "UK postcode — resolves to MSOA area"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "listed_buildings",
+      "playground_id": "listed-buildings",
+      "label": "Listed Buildings",
+      "method": "GET",
+      "path": "/listed-buildings/",
+      "params": [
+        {
+          "name": "postcode",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "playground_hint": "UK postcode — radius is 1km by default."
+        },
+        {
+          "name": "radius_km",
+          "in": "query",
+          "type": "number",
+          "required": false,
+          "advanced": true,
+          "playground_hint": "Search radius in km. Default 1, max 5."
+        },
+        {
+          "name": "grade",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "enum": [
+            "I",
+            "II*",
+            "II"
+          ],
+          "advanced": true,
+          "playground_hint": "Filter to a single grade — leave blank for all."
+        }
+      ],
+      "tokens": {
+        "default": 3
+      }
+    },
+    {
+      "name": "calc_stamp_duty",
+      "playground_id": "calc-stamp-duty",
+      "label": "Stamp Duty Calculator",
+      "method": "GET",
+      "path": "/calculators/stamp-duty/",
+      "params": [
+        {
+          "name": "price",
+          "in": "query",
+          "type": "number",
+          "required": true,
+          "playground_hint": "Property purchase price in GBP (positive integer)."
+        },
+        {
+          "name": "buyer_type",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "enum": [
+            "standard",
+            "first_time",
+            "additional"
+          ],
+          "playground_hint": "standard = main residence, first_time = first-time buyer relief, additional = second home / BTL (5% surcharge)."
+        },
+        {
+          "name": "country",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "enum": [
+            "england"
+          ],
+          "advanced": true,
+          "playground_hint": "Currently England + Northern Ireland (SDLT). Scotland (LBTT) and Wales (LTT) coming soon."
+        }
+      ],
+      "tokens": {
+        "default": 0
+      }
+    },
+    {
+      "name": "calc_mortgage",
+      "playground_id": "calc-mortgage",
+      "label": "Mortgage Calculator",
+      "method": "GET",
+      "path": "/calculators/mortgage/",
+      "params": [
+        {
+          "name": "price",
+          "in": "query",
+          "type": "number",
+          "required": true,
+          "playground_hint": "Property purchase price in GBP."
+        },
+        {
+          "name": "deposit",
+          "in": "query",
+          "type": "number",
+          "required": true,
+          "playground_hint": "Non-negative integer — what you put down up-front."
+        },
+        {
+          "name": "rate",
+          "in": "query",
+          "type": "number",
+          "required": true,
+          "playground_hint": "Mortgage interest rate, percent (e.g. 4.5 for 4.5%)."
+        },
+        {
+          "name": "term_years",
+          "in": "query",
+          "type": "number",
+          "required": true,
+          "playground_hint": "Mortgage term in years (typically 25-35)."
+        }
+      ],
+      "tokens": {
+        "default": 0
+      }
+    }
+  ],
+  "static_tools": [
+    {
+      "name": "start_homedata_signup",
+      "billable": false,
+      "http_requests": [],
+      "params": [
+        {
+          "name": "email",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "purpose": "Walks a user without an API key through getting one. Makes no API call.",
+      "stub_description": "Start a Homedata signup: returns the signup link and the steps to get an API key for UK property data. Makes no API call."
+    },
+    {
+      "name": "check_homedata_api_key",
+      "billable": false,
+      "http_requests": [],
+      "params": [],
+      "purpose": "Reports whether HOMEDATA_API_KEY is set and active. TARGET contract: must not spend tokens. As of 0.4.0 it calls /address/find/ (2 tokens); T2 decides how to meet the contract.",
+      "stub_description": "Check whether a Homedata API key is configured for this server and what to do next if it is not."
+    }
+  ],
+  "excluded": [
+    {
+      "playground_id": "property-listings",
+      "reason": "enterprise"
+    },
+    {
+      "playground_id": "property-sale-events",
+      "reason": "enterprise"
+    },
+    {
+      "playground_id": "property-sales",
+      "reason": "admin_only",
+      "note": "adminOnly in the Playground (hidden from customers). Excluded by the generic rule; requester confirmation pending as of 2026-09-17. To include, add the id to include_admin_only."
+    },
+    {
+      "playground_id": "lr-sales",
+      "reason": "enterprise"
+    },
+    {
+      "playground_id": "comparables",
+      "reason": "enterprise"
+    },
+    {
+      "playground_id": "live-listings",
+      "reason": "enterprise"
+    },
+    {
+      "playground_id": "listing-address",
+      "reason": "enterprise"
+    },
+    {
+      "playground_id": "premium-flood-expert",
+      "reason": "no_path"
+    },
+    {
+      "playground_id": "premium-plot-intelligence",
+      "reason": "no_path"
+    },
+    {
+      "playground_id": "premium-development-suitability",
+      "reason": "no_path"
+    },
+    {
+      "playground_id": "premium-lender-avm",
+      "reason": "no_path"
+    },
+    {
+      "playground_id": "premium-subsidence-risk",
+      "reason": "no_path"
+    },
+    {
+      "playground_id": "premium-land-quality",
+      "reason": "no_path"
+    }
+  ]
+}
