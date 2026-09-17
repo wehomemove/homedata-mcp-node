@@ -1,76 +1,26 @@
 #!/usr/bin/env node
 /**
- * homedata — command line interface mirroring the Python CLI.
+ * homedata — command line interface.
  *
- * Same data as the MCP server but for human shells, scripting, and CI.
- * Usage:
- *   homedata property 100021421083
- *   homedata epc 100021421083 --field current_energy_efficiency
- *   homedata search "10 downing street" --postcode SW1A2AA
- *   homedata batch 100021421083 100022121211
+ * Built from the same manifest as the MCP tools, so a command and its tool
+ * cannot drift apart: same names, same arguments, same requests, same prices.
+ *
+ *   homedata tools                              list the tools and their prices
+ *   homedata address_find --q "10 Downing St"   run one
+ *   homedata property_core --uprn 100023336956 --field epc
+ *
+ * Reads HOMEDATA_API_KEY from the environment. The calculators need no key.
  */
-
+import { buildRequest, InvalidArguments } from "./calls.js";
 import { HomedataClient, HomedataError } from "./client.js";
-import * as t from "./tools.js";
 import { VERSION } from "./index.js";
+import { descriptionFor, paramTextFor, tools, type ToolSpec, type ToolTokens } from "./manifest.js";
 
-interface ParsedArgs {
-  command?: string;
-  positional: string[];
-  flags: Record<string, string | boolean | string[]>;
-}
-
-function parseArgv(argv: string[]): ParsedArgs {
-  const out: ParsedArgs = { positional: [], flags: {} };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]!;
-    if (a.startsWith("--")) {
-      const key = a.slice(2);
-      const next = argv[i + 1];
-      if (next === undefined || next.startsWith("--")) {
-        out.flags[key] = true;
-      } else {
-        out.flags[key] = next;
-        i++;
-      }
-    } else if (!out.command) {
-      out.command = a;
-    } else {
-      out.positional.push(a);
-    }
-  }
-  return out;
-}
-
-function printHelp(): void {
-  console.log(`homedata ${VERSION} — UK property data CLI
-
-Usage: homedata <command> [args] [--field PATH] [--compact]
-
-Commands:
-  property <uprn>                       Look up a property by UPRN.
-  epc <uprn>                            Get EPC for a UPRN.
-  flood <uprn>                          Get flood risk for a UPRN.
-  sales <uprn>                          Historical sales (HMLR).
-  listings <uprn>                       Past + current listings.
-  comparables <uprn> [--count N]        Nearest N comparables (default 20).
-  planning <uprn>                       Planning applications near a UPRN.
-  schools <uprn> [--radius N]           Schools near a UPRN (default 1000m).
-  transport <uprn> [--radius N]         Transport near a UPRN (default 800m).
-  crime <postcode> [--date YYYY-MM]     Recorded crime in a postcode.
-  demographics <postcode>               ONS Census 2021 profile.
-  broadband <postcode>                  Ofcom broadband availability.
-  postcode <postcode>                   Aggregated postcode profile.
-  search <query> [--postcode PC]        Free-text address search.
-  batch <uprn> <uprn> ...               Batch property lookup (max 50).
-
-Flags:
-  --field <dotted.path>   Extract a single value from the response (e.g. last_sold_price).
-  --compact               Single-line JSON output (good for jq, pipes).
-  --version               Show version.
-  --help                  Show this help.
-
-Set HOMEDATA_API_KEY in your environment. Get a free key at https://homedata.co.uk/developer.`);
+export function price(tokens: ToolTokens): string {
+  if (tokens.plus_with_addons) return `${tokens.default} + add-ons`;
+  if (tokens.default === 0) return "free";
+  const rules = (tokens.when ?? []).map((w) => `, ${w.tokens} when ${w.param}=${w.in.join("/")}`).join("");
+  return `${tokens.default}${rules}`;
 }
 
 function format(data: unknown, compact: boolean, field?: string): string {
@@ -89,62 +39,109 @@ function format(data: unknown, compact: boolean, field?: string): string {
   return JSON.stringify(data, null, compact ? 0 : 2);
 }
 
-async function run(args: ParsedArgs): Promise<number> {
-  if (args.flags["help"] || args.flags["h"] || !args.command) {
-    printHelp();
-    return 0;
+function parseFlags(argv: string[]): Record<string, string | boolean> {
+  const flags: Record<string, string | boolean> = {};
+  for (let i = 0; i < argv.length; i++) {
+    const item = argv[i]!;
+    if (!item.startsWith("--")) continue;
+    const key = item.slice(2).replace(/-/g, "_");
+    const next = argv[i + 1];
+    if (next === undefined || next.startsWith("--")) flags[key] = true;
+    else {
+      flags[key] = next;
+      i++;
+    }
   }
-  if (args.flags["version"] || args.flags["v"]) {
+  return flags;
+}
+
+function usage(): string {
+  const lines = ["homedata <tool> [--argument value]", "", "Tools:"];
+  for (const spec of tools()) lines.push(`  ${spec.name.padEnd(24)} ${price(spec.tokens).padStart(14)} tokens`);
+  lines.push("", "  tools                     list every tool with its description", "",
+    "Options: --field <dotted.path>, --compact, --version");
+  return lines.join("\n");
+}
+
+function argumentsFor(spec: ToolSpec, flags: Record<string, string | boolean>): Record<string, unknown> {
+  const args: Record<string, unknown> = {};
+  for (const param of spec.params) {
+    const value = flags[param.name];
+    if (value === undefined || value === true) continue;
+    args[param.name] = param.type === "number" ? Number(value) : value;
+  }
+  return args;
+}
+
+export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
+  const command = argv[0];
+  const flags = parseFlags(argv);
+
+  if (!command || command === "--help" || command === "-h" || command === "help") {
+    console.log(usage());
+    return command ? 0 : 1;
+  }
+  if (command === "--version") {
     console.log(`homedata ${VERSION}`);
     return 0;
   }
+  if (command === "tools") {
+    const listing = tools().map((spec) => ({
+      tool: spec.name,
+      tokens: price(spec.tokens),
+      description: descriptionFor(spec.name),
+    }));
+    console.log(format(listing, flags["compact"] === true));
+    return 0;
+  }
 
+  const spec = tools().find((t) => t.name === command);
+  if (!spec) {
+    console.error(`homedata: unknown tool "${command}". Run "homedata tools" for the list.`);
+    return 2;
+  }
+  if (flags["help"] === true) {
+    const text = paramTextFor(spec.name);
+    console.log([
+      `${spec.name} — ${descriptionFor(spec.name)}`,
+      "",
+      ...spec.params.map((p) => `  --${p.name.replace(/_/g, "-")}${p.required ? " (required)" : ""}  ${text[p.name] ?? ""}`),
+    ].join("\n"));
+    return 0;
+  }
+
+  let request;
+  try {
+    request = buildRequest(spec, argumentsFor(spec, flags));
+  } catch (err) {
+    if (!(err instanceof InvalidArguments)) throw err;
+    console.error(`homedata: ${err.message}`);
+    return 2;
+  }
+
+  const free = spec.tokens.default === 0 && !spec.tokens.when;
   let client: HomedataClient;
   try {
-    client = HomedataClient.fromEnv(VERSION);
+    client = HomedataClient.fromEnv(VERSION, free);
   } catch (err) {
-    if (err instanceof HomedataError) {
-      console.error(`error: ${err.message}`);
-      return 2;
-    }
-    throw err;
+    if (!(err instanceof HomedataError)) throw err;
+    console.error(`homedata: ${err.message}`);
+    return 2;
   }
 
-  const p = args.positional;
-  let data: unknown;
-
-  switch (args.command) {
-    case "property": data = await t.lookup_property(client, p[0]!); break;
-    case "epc": data = await t.lookup_epc(client, p[0]!); break;
-    case "flood": data = await t.lookup_flood_risk(client, p[0]!); break;
-    case "sales": data = await t.get_property_sales(client, p[0]!); break;
-    case "listings": data = await t.search_property_listings(client, p[0]!); break;
-    case "planning": data = await t.get_planning_applications(client, p[0]!); break;
-    case "comparables": data = await t.get_comparables(client, p[0]!, Number(args.flags["count"] ?? 20)); break;
-    case "schools": data = await t.get_schools(client, p[0]!, Number(args.flags["radius"] ?? 1000)); break;
-    case "transport": data = await t.get_transport(client, p[0]!, Number(args.flags["radius"] ?? 800)); break;
-    case "crime": data = await t.get_crime(client, p[0]!, args.flags["date"] as string | undefined); break;
-    case "demographics": data = await t.get_demographics(client, p[0]!); break;
-    case "broadband": data = await t.get_broadband(client, p[0]!); break;
-    case "postcode": data = await t.get_postcode_profile(client, p[0]!); break;
-    case "search": data = await t.search_address(client, p[0]!, args.flags["postcode"] as string | undefined); break;
-    case "batch": data = await t.batch_property_lookup(client, p); break;
-    default:
-      console.error(`unknown command: ${args.command}`);
-      printHelp();
-      return 2;
+  const response = await client.send(request.method, request.path, request.query);
+  console.log(format(response.body, flags["compact"] === true, typeof flags["field"] === "string" ? flags["field"] : undefined));
+  const charged = response.headers.get("X-Tokens-Charged");
+  if (charged !== null) {
+    const balance = response.headers.get("X-Tokens-Balance");
+    console.error(`tokens charged: ${charged}${balance ? ` (balance ${balance})` : ""}`);
   }
-
-  console.log(format(data, args.flags["compact"] === true, args.flags["field"] as string | undefined));
-  if (data && typeof data === "object" && "error" in (data as Record<string, unknown>)) {
-    return 1;
-  }
-  return 0;
+  return response.statusCode < 400 ? 0 : 1;
 }
 
-run(parseArgv(process.argv.slice(2)))
-  .then((code) => process.exit(code))
-  .catch((err) => {
+if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+  main().then((code) => process.exit(code)).catch((err) => {
     console.error("[homedata] fatal:", err);
     process.exit(1);
   });
+}
