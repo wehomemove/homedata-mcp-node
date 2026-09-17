@@ -1,16 +1,31 @@
 /**
- * Thin HTTP client for the Homedata API (Loki).
- * Mirrors the Python implementation 1:1 so both packages have identical behaviour.
+ * Thin HTTP client for the Homedata API.
+ *
+ * Mirrors the Python package's client: one request in, status, body and headers
+ * out, and never throws for a failed call. An MCP client is better served by a
+ * readable error body than by a transport exception.
  */
-
 const DEFAULT_BASE_URL = "https://api.homedata.co.uk";
-const DEFAULT_TIMEOUT_MS = 10_000;
+// The deepest property tiers assemble a lot of data; 10s was too tight for them.
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 export class HomedataError extends Error {}
 
-export interface HomedataResponse {
-  // success body OR { error, status_code, detail }
-  [key: string]: unknown;
+export interface ApiResponse {
+  statusCode: number;
+  body: unknown;
+  headers: Headers;
+}
+
+export interface HomedataClientOptions {
+  apiKey: string;
+  baseUrl?: string;
+  timeoutMs?: number;
+  version?: string;
+  /** Allowed for the free calculators, which answer without a key. */
+  allowKeyless?: boolean;
+  /** Injectable for tests; defaults to global fetch. */
+  fetchImpl?: typeof fetch;
 }
 
 export class HomedataClient {
@@ -18,78 +33,67 @@ export class HomedataClient {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly userAgent: string;
+  private readonly fetchImpl: typeof fetch;
 
-  constructor(opts: { apiKey: string; baseUrl?: string; timeoutMs?: number; version?: string }) {
-    if (!opts.apiKey) {
+  constructor(opts: HomedataClientOptions) {
+    if (!opts.apiKey && !opts.allowKeyless) {
       throw new HomedataError(
-        "HOMEDATA_API_KEY is required. Get a key at https://homedata.co.uk/developer",
+        "HOMEDATA_API_KEY is required. Get a key at https://homedata.co.uk/register",
       );
     }
     this.apiKey = opts.apiKey;
     this.baseUrl = (opts.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.userAgent = `homedata-mcp-node/${opts.version ?? "0.1.0"}`;
+    this.userAgent = `homedata-mcp-node/${opts.version ?? "0.0.0"}`;
+    this.fetchImpl = opts.fetchImpl ?? fetch;
   }
 
-  static fromEnv(version?: string): HomedataClient {
-    const apiKey = (process.env.HOMEDATA_API_KEY ?? "").trim();
-    const baseUrl = (process.env.HOMEDATA_BASE_URL ?? "").trim() || undefined;
-    return new HomedataClient({ apiKey, baseUrl, version });
+  static fromEnv(version?: string, allowKeyless = false): HomedataClient {
+    return new HomedataClient({
+      apiKey: (process.env["HOMEDATA_API_KEY"] ?? "").trim(),
+      baseUrl: (process.env["HOMEDATA_BASE_URL"] ?? "").trim() || undefined,
+      version,
+      allowKeyless,
+    });
   }
 
-  async get(path: string, params?: Record<string, string | number | undefined>): Promise<HomedataResponse> {
+  async send(method: string, path: string, query: Record<string, string> = {}): Promise<ApiResponse> {
     const url = new URL(this.baseUrl + path);
-    if (params) {
-      for (const [k, v] of Object.entries(params)) {
-        if (v !== undefined && v !== null) {
-          url.searchParams.set(k, String(v));
-        }
-      }
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== null) url.searchParams.set(key, value);
     }
-    return this._request("GET", url.toString());
-  }
 
-  async post(path: string, body: unknown): Promise<HomedataResponse> {
-    return this._request("POST", this.baseUrl + path, body);
-  }
-
-  private async _request(method: "GET" | "POST", url: string, body?: unknown): Promise<HomedataResponse> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const resp = await fetch(url, {
+      const response = await this.fetchImpl(url.toString(), {
         method,
         headers: {
-          Authorization: `Api-Key ${this.apiKey}`,
+          ...(this.apiKey ? { Authorization: `Api-Key ${this.apiKey}` } : {}),
           Accept: "application/json",
           "User-Agent": this.userAgent,
-          ...(body ? { "Content-Type": "application/json" } : {}),
         },
-        body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
-      let parsed: unknown;
+      let body: unknown;
       try {
-        parsed = await resp.json();
+        body = await response.json();
       } catch {
-        parsed = await resp.text().catch(() => "");
+        body = await response.text().catch(() => "");
       }
-      if (!resp.ok) {
-        return { error: "api_error", status_code: resp.status, detail: parsed };
+      if (!response.ok) {
+        body = { error: "api_error", status_code: response.status, detail: body };
       }
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        return parsed as HomedataResponse;
-      }
-      return { data: parsed };
+      return { statusCode: response.status, body, headers: response.headers };
     } catch (err) {
-      if ((err as Error).name === "AbortError") {
-        return {
-          error: "timeout",
-          status_code: 504,
-          detail: `Homedata API did not respond within ${this.timeoutMs}ms`,
-        };
-      }
-      return { error: "network_error", status_code: 0, detail: String(err) };
+      const timedOut = (err as Error).name === "AbortError";
+      return {
+        statusCode: timedOut ? 504 : 0,
+        body: timedOut
+          ? { error: "timeout", status_code: 504, detail: `Homedata API did not respond within ${this.timeoutMs}ms` }
+          : { error: "network_error", status_code: 0, detail: String(err) },
+        headers: new Headers(),
+      };
     } finally {
       clearTimeout(timer);
     }
