@@ -44,14 +44,27 @@ const arg = (name, fallback = null) => {
     return i === -1 ? fallback : argv[i + 1];
 };
 
+/** A bare branch name is qualified; anything already qualified is left alone. */
+export function qualifyRef(ref) {
+    return /^refs\//.test(ref) ? ref : `refs/heads/${ref}`;
+}
+
 export function resolveUpstreamHead(remote, ref, run = execFileSync) {
-    const out = String(run('git', ['ls-remote', remote, ref], { encoding: 'utf8', timeout: 60_000 }));
-    const line = out.split('\n').find((l) => l.trim().endsWith(ref));
-    const sha = line ? line.split(/\s+/)[0] : null;
-    if (!sha || !/^[0-9a-f]{40}$/.test(sha)) {
-        throw new Error(`could not resolve ${ref} on ${remote}: ls-remote returned ${JSON.stringify(out.slice(0, 200))}`);
+    // git ls-remote TAIL-MATCHES its pattern, so `main` also matches
+    // refs/heads/release/main. Qualify the ref and match the returned ref
+    // exactly, or the head of some other branch can be compared instead.
+    const qualified = qualifyRef(ref);
+    const out = String(run('git', ['ls-remote', remote, qualified], { encoding: 'utf8', timeout: 60_000 }));
+    const matches = out.split('\n')
+        .map((line) => line.split(/\s+/))
+        .filter(([sha, name]) => name === qualified && /^[0-9a-f]{40}$/.test(String(sha || '')));
+    if (matches.length !== 1) {
+        throw new Error(
+            `could not resolve ${qualified} on ${remote}: ls-remote returned ${matches.length} exact matches in `
+            + JSON.stringify(out.slice(0, 200)),
+        );
     }
-    return sha;
+    return matches[0][0];
 }
 
 /** Pure: given the recorded and upstream shas, is the vendored manifest current? */
@@ -75,7 +88,7 @@ function main() {
         return 2;
     }
     const remote = arg('--remote', `https://github.com/${source.repository}`);
-    const ref = arg('--ref', 'refs/heads/main');
+    const ref = qualifyRef(arg('--ref', 'refs/heads/main'));
 
     let upstreamHead;
     try {

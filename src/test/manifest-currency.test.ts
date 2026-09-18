@@ -12,7 +12,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 // @ts-expect-error - plain ESM script, no types
-import { compare, resolveUpstreamHead } from "../../scripts/check-manifest-current.mjs";
+import { compare, qualifyRef, resolveUpstreamHead } from "../../scripts/check-manifest-current.mjs";
 
 const ROOT = join(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 const HEAD = "1c3a344fec8085651cb5eb9f41aa0b9c4e0bf2c8";
@@ -55,4 +55,22 @@ test("the committed SOURCE.json records a full commit sha", () => {
   const source = JSON.parse(readFileSync(join(ROOT, "src/manifest/SOURCE.json"), "utf8")) as { ref: string; repository: string };
   assert.match(source.ref, /^[0-9a-f]{40}$/);
   assert.equal(source.repository, "wehomemove/homedata-mcp");
+});
+
+test("a bare branch name is qualified before matching", () => {
+  // git ls-remote tail-matches: `main` also matches refs/heads/release/main.
+  assert.equal(qualifyRef("main"), "refs/heads/main");
+  assert.equal(qualifyRef("refs/heads/main"), "refs/heads/main");
+  assert.equal(qualifyRef("refs/tags/v1.0.0"), "refs/tags/v1.0.0");
+});
+
+test("the wrong branch cannot be picked when refs tail-match", () => {
+  const ambiguous = () => `deadbeef${"0".repeat(32)}\trefs/heads/release/main\n${HEAD}\trefs/heads/main\n`;
+  // The release branch is listed FIRST, so a suffix search would have taken it.
+  assert.equal(resolveUpstreamHead("https://example.invalid/x.git", "main", ambiguous), HEAD);
+});
+
+test("an ambiguous or absent exact match raises", () => {
+  const onlyOther = () => `deadbeef${"0".repeat(32)}\trefs/heads/release/main\n`;
+  assert.throws(() => resolveUpstreamHead("https://example.invalid/x.git", "main", onlyOther), /0 exact matches/);
 });
