@@ -75,11 +75,14 @@ export class HomedataClient {
         },
         signal: controller.signal,
       });
+      // Read the body ONCE: response.json() consumes the stream, so a later
+      // response.text() on a non-JSON body rejects and the detail is lost.
+      const text = await response.text().catch(() => "");
       let body: unknown;
       try {
-        body = await response.json();
+        body = text === "" ? "" : JSON.parse(text);
       } catch {
-        body = await response.text().catch(() => "");
+        body = text;
       }
       if (!response.ok) {
         body = { error: "api_error", status_code: response.status, detail: body };
@@ -88,10 +91,12 @@ export class HomedataClient {
     } catch (err) {
       const timedOut = (err as Error).name === "AbortError";
       return {
-        statusCode: timedOut ? 504 : 0,
+        // 502, not 0: consumers classify >= 400 as a failure, and a request that
+        // never reached the API must not read as success.
+        statusCode: timedOut ? 504 : 502,
         body: timedOut
           ? { error: "timeout", status_code: 504, detail: `Homedata API did not respond within ${this.timeoutMs}ms` }
-          : { error: "network_error", status_code: 0, detail: String(err) },
+          : { error: "network_error", status_code: 502, detail: String(err) },
         headers: new Headers(),
       };
     } finally {

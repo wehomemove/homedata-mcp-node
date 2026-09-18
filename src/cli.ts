@@ -11,6 +11,8 @@
  *
  * Reads HOMEDATA_API_KEY from the environment. The calculators need no key.
  */
+import { pathToFileURL } from "node:url";
+
 import { buildRequest, InvalidArguments } from "./calls.js";
 import { HomedataClient, HomedataError } from "./client.js";
 import { VERSION } from "./index.js";
@@ -63,7 +65,17 @@ function usage(): string {
   return lines.join("\n");
 }
 
+/** Flags the CLI itself owns; everything else must be a parameter of the tool. */
+const CLI_FLAGS = new Set(["help", "field", "compact", "version"]);
+
 function argumentsFor(spec: ToolSpec, flags: Record<string, string | boolean>): Record<string, unknown> {
+  const known = new Set(spec.params.map((param) => param.name));
+  const unknown = Object.keys(flags).filter((flag) => !known.has(flag) && !CLI_FLAGS.has(flag));
+  if (unknown.length) {
+    // Dropping a misspelt flag here would run, and charge for, a different
+    // request from the one that was typed.
+    throw new InvalidArguments(unknown.map((flag) => `unknown argument ${flag}`));
+  }
   const args: Record<string, unknown> = {};
   for (const param of spec.params) {
     const value = flags[param.name];
@@ -139,7 +151,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   return response.statusCode < 400 ? 0 : 1;
 }
 
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+// pathToFileURL, not a hand-built file:// string: that breaks on Windows paths and
+// on paths containing spaces or #, and the CLI would silently do nothing.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().then((code) => process.exit(code)).catch((err) => {
     console.error("[homedata] fatal:", err);
     process.exit(1);

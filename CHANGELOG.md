@@ -33,7 +33,24 @@ table below maps every 0.1.0 tool.
 - Default request timeout raised from 10s to 30s for the deepest property tiers.
 - Library exports: the per-tool functions are gone. The package now exports
   `HomedataClient`, `buildRequest`, `validateArguments`, `inputSchema`,
-  `buildServer` and the manifest.
+  `buildServer` and the manifest. The client API changed with them:
+  `HomedataResponse` is now `ApiResponse`, and `get()` / `post()` are replaced by
+  one `send()`:
+
+  ```ts
+  // 0.1.0
+  const data = await client.get(`/api/properties/${uprn}/`);
+  // 1.0.0
+  const { statusCode, body, headers } = await client.send("GET", `/properties/${uprn}/`);
+  ```
+- A request that never reaches the API (DNS, connection refused) now comes back as
+  502 rather than 0, so callers that treat >= 400 as failure no longer read it as
+  success. A timeout is still 504.
+- Arguments are checked against the relationships the manifest declares: `lat` and
+  `lng` must be given together, and a tool offering a postcode OR coordinates needs
+  one of them. Non-finite numbers are refused rather than sent as `NaN`.
+- The CLI rejects an unknown `--flag` instead of ignoring it, so a misspelt flag
+  cannot run a different request from the one typed.
 
 ### Migration from 0.1.0
 

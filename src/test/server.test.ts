@@ -146,3 +146,28 @@ test("a path parameter is percent-encoded on the wire", async () => {
   assert.deepEqual(sent, [{ method: "GET", path: "/address/postcode/A%2FB%23C/", query: {} }]);
   await client.close();
 });
+
+test("a request that never reached the API is an error, not a silent success", async () => {
+  // A transport failure used to come back as status 0, which is not >= 400, so the
+  // server reported success and the CLI exited 0.
+  const fetchImpl = (async () => {
+    throw new TypeError("fetch failed");
+  }) as typeof fetch;
+  const homedata = new HomedataClient({ apiKey: "k", fetchImpl });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "test", version: "1" }, { capabilities: {} });
+  await Promise.all([buildServer(homedata).connect(a), client.connect(b)]);
+  const result = await client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
+  assert.equal(result.isError, true);
+  await client.close();
+});
+
+test("a non-JSON error body is preserved", async () => {
+  const { client } = await connect({
+    response: () => new Response("upstream is down", { status: 503, headers: { "Content-Type": "text/plain" } }),
+  });
+  const result = await client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
+  assert.equal(result.isError, true);
+  assert.match(JSON.stringify(result.structuredContent), /upstream is down/);
+  await client.close();
+});

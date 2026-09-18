@@ -73,3 +73,29 @@ test("input schema matches the manifest", () => {
   assert.ok(schema["properties"]["risk_type"]["enum"].includes("all"));
   assert.ok(schema["properties"]["uprn"]["description"]);
 });
+
+test("non-finite numbers are refused before they reach a URL", () => {
+  for (const price of [Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(
+      () => buildRequest(spec("calc_mortgage"), { price, deposit: 1, rate: 1, term_years: 1 }),
+      (err: unknown) => err instanceof InvalidArguments && err.problems.some((p) => p.includes("finite")),
+    );
+  }
+});
+
+test("paired parameters must be given together", () => {
+  // The manifest pairs lng with lat; one without the other is an incomplete request.
+  assert.throws(
+    () => buildRequest(spec("planning"), { lat: "51.5" }),
+    (err: unknown) => err instanceof InvalidArguments && err.problems.some((p) => p.includes("must be given together")),
+  );
+  assert.doesNotThrow(() => buildRequest(spec("planning"), { lat: "51.5", lng: "-0.1" }));
+});
+
+test("one of an alternative group is required", () => {
+  assert.throws(
+    () => buildRequest(spec("crime"), {}),
+    (err: unknown) => err instanceof InvalidArguments && err.problems.some((p) => p.includes("one of postcode or lat")),
+  );
+  assert.doesNotThrow(() => buildRequest(spec("crime"), { postcode: "SW1A 2AA" }));
+});

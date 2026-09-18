@@ -30,7 +30,11 @@ export const asQueryValue = (value: unknown): string =>
 
 function typeProblem(param: ToolParam, value: unknown): string | null {
   if (typeof value === "boolean") return `${param.name} must be a ${param.type}`;
-  if (param.type === "number") return typeof value === "number" ? null : `${param.name} must be a number`;
+  if (param.type === "number") {
+    if (typeof value !== "number") return `${param.name} must be a number`;
+    // NaN and Infinity serialise as "NaN"/"Infinity" and would be sent in the URL.
+    return Number.isFinite(value) ? null : `${param.name} must be a finite number`;
+  }
   return typeof value === "string" ? null : `${param.name} must be a string`;
 }
 
@@ -66,8 +70,40 @@ export function validateArguments(spec: ToolSpec, args: Record<string, unknown>)
     supplied[name] = value;
   }
 
+  problems.push(...relationshipProblems(spec, supplied));
+
   if (problems.length) throw new InvalidArguments(problems);
   return supplied;
+}
+
+/**
+ * The manifest records how parameters relate: `paired_with` (lat needs lng) and
+ * `alternative_to_previous` (a postcode OR coordinates). Checking each parameter
+ * on its own would let "lat without lng", or neither alternative, reach the API.
+ */
+function relationshipProblems(spec: ToolSpec, supplied: Record<string, unknown>): string[] {
+  const problems: string[] = [];
+  for (const param of spec.params) {
+    if (!param.paired_with) continue;
+    const here = param.name in supplied;
+    const there = param.paired_with in supplied;
+    if (here !== there) problems.push(`${param.name} and ${param.paired_with} must be given together`);
+  }
+
+  // An alternative group is a parameter followed by the ones marked as its alternatives.
+  let group: string[] = [];
+  const groups: string[][] = [];
+  for (const param of spec.params) {
+    if (param.alternative_to_previous && group.length) group.push(param.name);
+    else groups.push((group = [param.name]));
+  }
+  for (const names of groups) {
+    if (names.length < 2) continue;
+    if (!names.some((name) => name in supplied)) {
+      problems.push(`one of ${names.join(" or ")} is required`);
+    }
+  }
+  return problems;
 }
 
 export function buildRequest(spec: ToolSpec, args: Record<string, unknown>): ApiRequest {

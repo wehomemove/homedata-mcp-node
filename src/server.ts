@@ -12,6 +12,8 @@
  * user's machine, so their property queries never go through the AI vendor.
  * Without a key the server still starts and offers the two signup helpers.
  */
+import { pathToFileURL } from "node:url";
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -131,7 +133,9 @@ async function main(): Promise<void> {
   await buildServer(client).connect(new StdioServerTransport());
 }
 
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+// pathToFileURL, not a hand-built file:// string: that breaks on Windows paths and
+// on paths containing spaces or #, and the server would exit without connecting.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
     console.error("[homedata-mcp] fatal:", err);
     process.exit(1);
