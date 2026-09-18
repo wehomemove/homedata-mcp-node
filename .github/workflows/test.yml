@@ -4,6 +4,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: '23 6 * * 1'   # Mondays 06:23 UTC, for the currency check below
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -78,3 +81,27 @@ jobs:
 
       - name: Judge them with the Python guard
         run: python -m homedata_mcp.parity --tools-list parity-out/tools.json --requests parity-out/requests.json
+
+  currency:
+    # vendor-manifest --check asks whether the vendored files match the commit
+    # they RECORD. This asks whether that commit is still the upstream head:
+    # without it the package can vendor a year-old tool list and stay green,
+    # because both the parity job and the hash check would still pass.
+    # Weekly, not per-PR: main moving is not a reason to fail someone's PR.
+    name: vendored manifest is still current
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
+        with:
+          node-version: '22'
+
+      # Exit 1 means re-vendor (the failure message says how); exit 2 means the
+      # upstream head could not be resolved, which is not a pass.
+      - run: node scripts/check-manifest-current.mjs
