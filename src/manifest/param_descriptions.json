@@ -1,0 +1,41 @@
+{
+  "_comment": "Argument help shown to AI clients. Keys are a parameter name (applies to every tool) or tool_name.parameter (wins). The Playground's own hints are UI copy and are not used.",
+  "defaults": {
+    "uprn": "Unique Property Reference Number, digits only. Find one with address_find or address_postcode.",
+    "postcode": "UK postcode, for example SW1A 2AA. Spaces optional.",
+    "outcode": "The first half of a UK postcode, for example SW1A, E1 or M1.",
+    "lat": "Latitude (WGS84). Use with lng instead of a postcode.",
+    "lng": "Longitude (WGS84). Use with lat instead of a postcode.",
+    "radius_km": "Search radius in kilometres.",
+    "limit": "Maximum number of results to return.",
+    "date": "Month to report on, as YYYY-MM. Defaults to the latest available.",
+    "category": "Filter to a single crime category, for example burglary or violent-crime.",
+    "type": "Filter results by type.",
+    "status": "Filter results by status.",
+    "days": "Only include applications from the last N days.",
+    "price": "Property price in pounds.",
+    "q": "What to search for."
+  },
+  "tools": {
+    "address_find.q": "Address, postcode or place to search for, for example '10 Downing Street' or 'SW1A 2AA'.",
+    "boundaries.q": "Area name to search for, for example 'Hackney', 'Camden' or 'Norwich'.",
+    "property_custom.with": "Comma-separated add-ons to include, or 'all' for every one. Each add-on adds its own price to the call.",
+    "risks.risk_type": "Which hazard to screen for, or 'all' for every hazard in one response.",
+    "risks.uprn": "Unique Property Reference Number, digits only. Find one with address_find or address_postcode.",
+    "planning.radius_km": "Search radius in kilometres. Defaults to 0.5, maximum 5.",
+    "planning.type": "Filter by application type, for example Full, Outline, Heritage, Trees or Conditions.",
+    "planning.status": "Filter by decision status: Undecided, Approved, Refused or Withdrawn.",
+    "schools.radius": "Search radius in miles, from 0.1 to 5. Defaults to 0.5.",
+    "schools.phase": "Filter by education phase. Leave empty for all phases.",
+    "schools.ofsted": "Filter by Ofsted rating. Leave empty for all ratings.",
+    "listed_buildings.radius_km": "Search radius in kilometres. Defaults to 1, maximum 5.",
+    "listed_buildings.grade": "Filter to a single listing grade. Leave empty for all grades.",
+    "calc_stamp_duty.price": "Purchase price in pounds.",
+    "calc_stamp_duty.buyer_type": "standard for a main residence, first_time for first-time buyer relief, additional for a second home or buy-to-let.",
+    "calc_stamp_duty.country": "Which country's rules to apply.",
+    "calc_mortgage.price": "Purchase price in pounds.",
+    "calc_mortgage.deposit": "Deposit paid up front, in pounds.",
+    "calc_mortgage.rate": "Annual interest rate as a percentage, for example 4.5 for 4.5%.",
+    "calc_mortgage.term_years": "Mortgage term in years."
+  }
+}

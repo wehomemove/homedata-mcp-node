@@ -1,0 +1,80 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    name: build + test (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20', '22']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          # These jobs run npm scripts from the pull request; do not leave a token
+          # in the git config for them to read.
+          persist-credentials: false
+
+      - name: Set up Node ${{ matrix.node-version }}
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  parity:
+    # One guard, from the Python package, judges both servers: the tools this
+    # server lists and the request each one sends must match the manifest.
+    name: parity with the Python package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          # These jobs run npm scripts from the pull request; do not leave a token
+          # in the git config for them to read.
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
+        with:
+          node-version: '22'
+
+      - name: Set up Python
+        uses: actions/setup-python@39cd14951b08e74b54015e9e001cdefcf80e669f # v5.1.1
+        with:
+          python-version: '3.13'
+
+      - run: npm ci
+      - run: npm run build
+
+      # The vendored manifest must be byte-identical to the commit it records.
+      # Without this, the parity step below could pass against a manifest other
+      # than the one this package ships.
+      - name: Vendored manifest matches its source commit
+        run: node scripts/vendor-manifest.mjs --check
+
+      - name: Install the Python package at the vendored commit
+        run: |
+          REF=$(node -p "require('./src/manifest/SOURCE.json').ref")
+          REPO=$(node -p "require('./src/manifest/SOURCE.json').repository")
+          echo "installing $REPO@$REF"
+          python -m pip install --upgrade pip
+          python -m pip install "git+https://github.com/$REPO@$REF"
+
+      - name: Dump this server's tools and requests
+        run: node scripts/parity-dump.mjs parity-out
+
+      - name: Judge them with the Python guard
+        run: python -m homedata_mcp.parity --tools-list parity-out/tools.json --requests parity-out/requests.json

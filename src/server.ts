@@ -2,159 +2,142 @@
 /**
  * MCP server entry point.
  *
- * Wires the Homedata tools into the official @modelcontextprotocol/sdk
- * server, communicates over stdio with the host AI client (Claude Desktop,
- * Cursor, Codex, Cline, Continue.dev, Windsurf, Zed, etc.).
+ * Every data tool is built from the vendored manifest (src/manifest/): the
+ * tools are exactly the endpoints the Homedata Developer Playground offers, with
+ * the same names, arguments and token prices as the Python package. There is no
+ * hand-written tool here; a hand-written one that matched the manifest today
+ * would be a divergence waiting to happen.
  *
- * Auth: reads HOMEDATA_API_KEY from the environment. The MCP runs locally
- * on the user's machine — their property-data queries never go through
- * the AI vendor.
+ * Auth: reads HOMEDATA_API_KEY from the environment. The MCP runs locally on the
+ * user's machine, so their property queries never go through the AI vendor.
+ * Without a key the server still starts and offers the two signup helpers.
  */
+import { pathToFileURL } from "node:url";
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
+import { buildRequest, InvalidArguments, inputSchema } from "./calls.js";
 import { HomedataClient, HomedataError } from "./client.js";
-import * as t from "./tools.js";
 import { VERSION } from "./index.js";
+import { descriptionFor, paramTextFor, staticTools, tools } from "./manifest.js";
+import { checkApiKey, startSignup } from "./signup.js";
 
-const uprnSchema = z.object({ uprn: z.string().describe("UPRN (Unique Property Reference Number)") });
-const postcodeSchema = z.object({ postcode: z.string().describe("UK postcode, e.g. 'SW1A 2AA'") });
-const uprnRadiusSchema = z.object({
-  uprn: z.string(),
-  radius_m: z.number().int().min(100).max(10_000).optional(),
-});
-const comparablesSchema = z.object({
-  uprn: z.string(),
-  count: z.number().int().min(1).max(200).default(20),
-});
-const crimeSchema = z.object({
-  postcode: z.string(),
-  date: z.string().optional().describe("Optional YYYY-MM month filter."),
-});
-const searchSchema = z.object({
-  query: z.string().describe("Address fragment, e.g. '10 downing street'"),
-  postcode: z.string().optional(),
-});
-const batchSchema = z.object({
-  uprns: z.array(z.string()).min(1).max(50),
-});
+const INSTRUCTIONS = [
+  "Homedata answers questions about UK property: addresses and UPRNs, EPC, council tax, sale history,",
+  "planning, environmental risk, schools, broadband, crime, local amenities and area statistics.",
+  "",
+  "Start with `address_find` to turn an address into a UPRN, then use the UPRN tools. Postcode and",
+  "outcode tools cover the surrounding area.",
+  "",
+  "For a whole property, prefer one tier call over many small ones: `property_base` for the basics,",
+  "`property_core` for the usual full picture, `property_complete` for everything. `property_discovery`",
+  "costs 1 token and shows what a property has before you commit.",
+  "",
+  "Calls are paid for in tokens from a prepaid balance. Each tool's description states its price, and a",
+  "call reports what it actually cost in its `homedata.tokens_charged` metadata.",
+].join("\n");
 
-const TOOL_DEFS = [
-  { name: "lookup_property", description: "Look up a UK property by UPRN. Returns property type, EPC summary, last sold price, and core attributes.", schema: uprnSchema },
-  { name: "lookup_epc", description: "Get the Energy Performance Certificate for a UPRN — current and potential ratings, floor area, fuel type.", schema: uprnSchema },
-  { name: "lookup_flood_risk", description: "Get flood risk assessment for a UPRN.", schema: uprnSchema },
-  { name: "get_property_sales", description: "Historical sales for a UPRN (HM Land Registry).", schema: uprnSchema },
-  { name: "search_property_listings", description: "Past and current listings (sales and rentals) for a UPRN.", schema: uprnSchema },
-  { name: "get_comparables", description: "The N nearest comparable properties to a UPRN by geographic proximity.", schema: comparablesSchema },
-  { name: "get_planning_applications", description: "Planning applications near a UPRN.", schema: uprnSchema },
-  { name: "get_schools", description: "Schools near a UPRN within the given radius.", schema: uprnRadiusSchema },
-  { name: "get_transport", description: "Transport (rail, tube, bus) near a UPRN.", schema: uprnRadiusSchema },
-  { name: "get_crime", description: "Recorded crime in the area of the given postcode.", schema: crimeSchema },
-  { name: "get_demographics", description: "ONS Census 2021 demographic profile for the given postcode.", schema: postcodeSchema },
-  { name: "get_broadband", description: "Ofcom broadband availability for the given postcode.", schema: postcodeSchema },
-  { name: "get_postcode_profile", description: "Aggregated profile for a postcode — demographics, broadband, schools, transport, crime.", schema: postcodeSchema },
-  { name: "search_address", description: "Search for an address by free text.", schema: searchSchema },
-  { name: "batch_property_lookup", description: "Look up multiple UPRNs in one request (max 50).", schema: batchSchema },
-  { name: "lookup_council_tax", description: "Council tax band for a UPRN (in development — currently returns a 503 stub).", schema: uprnSchema },
-] as const;
+const HELPER_SCHEMAS: Record<string, Record<string, unknown>> = {
+  start_homedata_signup: {
+    type: "object",
+    properties: { email: { type: "string", description: "Optional. The email address to sign up with." } },
+    additionalProperties: false,
+  },
+  check_homedata_api_key: { type: "object", properties: {}, additionalProperties: false },
+};
 
-async function main(): Promise<void> {
-  let client: HomedataClient;
-  try {
-    client = HomedataClient.fromEnv(VERSION);
-  } catch (err) {
-    if (err instanceof HomedataError) {
-      console.error(err.message);
-      process.exit(1);
-    }
-    throw err;
-  }
+/** What the API says a call cost, when it says so. */
+function spendMeta(headers: Headers): Record<string, unknown> | undefined {
+  const spend: Record<string, string> = {};
+  const charged = headers.get("X-Tokens-Charged");
+  const balance = headers.get("X-Tokens-Balance");
+  if (charged !== null) spend["tokens_charged"] = charged;
+  if (balance !== null) spend["tokens_balance"] = balance;
+  return Object.keys(spend).length ? { homedata: spend } : undefined;
+}
 
+export function buildServer(client: HomedataClient | null): Server {
   const server = new Server(
     { name: "homedata", version: VERSION },
-    { capabilities: { tools: {} } },
+    { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: TOOL_DEFS.map((t) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: zodToJsonSchema(t.schema),
-    })),
+    tools: [
+      ...(client
+        ? tools().map((spec) => ({
+            name: spec.name,
+            description: descriptionFor(spec.name),
+            inputSchema: inputSchema(spec, paramTextFor(spec.name)),
+          }))
+        : []),
+      ...staticTools().map((spec) => ({
+        name: spec.name,
+        description: descriptionFor(spec.name),
+        inputSchema: HELPER_SCHEMAS[spec.name] ?? { type: "object", properties: {}, additionalProperties: false },
+      })),
+    ],
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    const args = req.params.arguments ?? {};
-    const result = await dispatch(req.params.name, args, client);
-    return {
-      content: [{ type: "text", text: JSON.stringify(result) }],
-    };
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const name = request.params.name;
+    const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+
+    if (name === "start_homedata_signup") return jsonResult(startSignup(args["email"] as string | undefined));
+    if (name === "check_homedata_api_key") return jsonResult(checkApiKey(client !== null));
+
+    const spec = client ? tools().find((t) => t.name === name) : undefined;
+    if (!spec) {
+      return jsonResult({ error: "unknown_tool", detail: name }, true);
+    }
+
+    let apiRequest;
+    try {
+      apiRequest = buildRequest(spec, args);
+    } catch (err) {
+      // Refused here: an invalid request can still be a charged one.
+      if (err instanceof InvalidArguments) return jsonResult({ error: "invalid_arguments", detail: err.problems }, true);
+      throw err;
+    }
+
+    const response = await client!.send(apiRequest.method, apiRequest.path, apiRequest.query);
+    return jsonResult(response.body, response.statusCode >= 400, spendMeta(response.headers));
   });
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  return server;
 }
 
-async function dispatch(
-  name: string,
-  args: Record<string, unknown>,
-  c: HomedataClient,
-): Promise<unknown> {
-  switch (name) {
-    case "lookup_property": return t.lookup_property(c, String(args.uprn));
-    case "lookup_epc": return t.lookup_epc(c, String(args.uprn));
-    case "lookup_flood_risk": return t.lookup_flood_risk(c, String(args.uprn));
-    case "get_property_sales": return t.get_property_sales(c, String(args.uprn));
-    case "search_property_listings": return t.search_property_listings(c, String(args.uprn));
-    case "get_comparables": return t.get_comparables(c, String(args.uprn), Number(args.count ?? 20));
-    case "get_planning_applications": return t.get_planning_applications(c, String(args.uprn));
-    case "get_schools": return t.get_schools(c, String(args.uprn), Number(args.radius_m ?? 1000));
-    case "get_transport": return t.get_transport(c, String(args.uprn), Number(args.radius_m ?? 800));
-    case "get_crime": return t.get_crime(c, String(args.postcode), args.date ? String(args.date) : undefined);
-    case "get_demographics": return t.get_demographics(c, String(args.postcode));
-    case "get_broadband": return t.get_broadband(c, String(args.postcode));
-    case "get_postcode_profile": return t.get_postcode_profile(c, String(args.postcode));
-    case "search_address": return t.search_address(c, String(args.query), args.postcode ? String(args.postcode) : undefined);
-    case "batch_property_lookup": return t.batch_property_lookup(c, (args.uprns as string[]) ?? []);
-    case "lookup_council_tax": return t.lookup_council_tax(c, String(args.uprn));
-    default: return { error: "unknown_tool", detail: name };
+function jsonResult(body: unknown, isError = false, meta?: Record<string, unknown>) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(body, null, 2) }],
+    structuredContent: body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : { data: body },
+    ...(meta ? { _meta: meta } : {}),
+    ...(isError ? { isError: true } : {}),
+  };
+}
+
+async function main(): Promise<void> {
+  let client: HomedataClient | null = null;
+  try {
+    client = HomedataClient.fromEnv(VERSION);
+  } catch (err) {
+    if (!(err instanceof HomedataError)) throw err;
+    console.error(
+      "homedata-mcp: HOMEDATA_API_KEY is not set, so only start_homedata_signup and " +
+        "check_homedata_api_key are available. Set the key and restart this server to activate the " +
+        `${tools().length} data tools.`,
+    );
   }
+  await buildServer(client).connect(new StdioServerTransport());
 }
 
-// Minimal Zod → JSON Schema converter — sufficient for our flat objects.
-// We could pull in zod-to-json-schema if our shapes get more complex.
-function zodToJsonSchema(s: z.ZodTypeAny): Record<string, unknown> {
-  if (s instanceof z.ZodObject) {
-    const properties: Record<string, unknown> = {};
-    const required: string[] = [];
-    for (const [key, value] of Object.entries(s.shape as Record<string, z.ZodTypeAny>)) {
-      properties[key] = zodLeaf(value);
-      if (!(value instanceof z.ZodOptional) && !(value instanceof z.ZodDefault)) {
-        required.push(key);
-      }
-    }
-    return { type: "object", properties, ...(required.length ? { required } : {}) };
-  }
-  return zodLeaf(s);
+// pathToFileURL, not a hand-built file:// string: that breaks on Windows paths and
+// on paths containing spaces or #, and the server would exit without connecting.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error("[homedata-mcp] fatal:", err);
+    process.exit(1);
+  });
 }
-
-function zodLeaf(s: z.ZodTypeAny): Record<string, unknown> {
-  const desc = (s as { description?: string }).description;
-  const meta = desc ? { description: desc } : {};
-  if (s instanceof z.ZodOptional || s instanceof z.ZodDefault) return zodLeaf((s as unknown as { _def: { innerType: z.ZodTypeAny } })._def.innerType);
-  if (s instanceof z.ZodString) return { type: "string", ...meta };
-  if (s instanceof z.ZodNumber) return { type: "number", ...meta };
-  if (s instanceof z.ZodArray) return { type: "array", items: zodLeaf(s.element), ...meta };
-  return meta;
-}
-
-main().catch((err) => {
-  console.error("[homedata-mcp] fatal:", err);
-  process.exit(1);
-});
