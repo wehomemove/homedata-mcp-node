@@ -65,8 +65,50 @@ jobs:
       # The vendored manifest must be byte-identical to the commit it records.
       # Without this, the parity step below could pass against a manifest other
       # than the one this package ships.
+      #
+      # Exit 1 and exit 2 are different events and the annotation must say which.
+      #
+      # Exit 1 is about THE CHANGE: every byte arrived and they differ, so
+      # re-running produces the same answer.
+      #
+      # Exit 2 means only that NOTHING WAS COMPARED. It deliberately does not
+      # say why, because seven different things reach it and they do not share a
+      # cause: a refused connection, a non-OK status, an unreadable body — and
+      # also a missing or malformed --ref, an unreadable SOURCE.json, and an
+      # unreadable local manifest file. The first three are infrastructure and
+      # re-running is right; the last four are the change and re-running is
+      # pointless. An annotation that called exit 2 "infrastructure" would send
+      # someone to the network for a bad --ref.
+      #
+      # That is not hypothetical: this block DID say "infrastructure, re-running
+      # is the right response" when first written, in the same PR that removed
+      # the identical mistake from the script it wraps. CodeRabbit caught it.
+      # The command's own stderr names the specific cause; the annotation points
+      # at it rather than summarising it.
+      #
+      # Both still FAIL the job. A failure that went green would be a check
+      # reporting a comparison it never made, which is the worse bug: this step
+      # exists to stop the parity step below running against unverified bytes,
+      # and it cannot do that by passing when it could not look.
+      #
+      # Deliberately NOT retried here. A retry hides the distinction instead of
+      # drawing it, and the point is that whoever reads the red knows which
+      # happened.
       - name: Vendored manifest matches its source commit
-        run: node scripts/vendor-manifest.mjs --check
+        run: |
+          set +e
+          node scripts/vendor-manifest.mjs --check
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then exit 0; fi
+          if [ "$code" -eq 1 ]; then
+            echo "::error title=Vendored manifest does not match its source commit::This is about the change, not the network. Re-running will give the same answer. Re-vendor from the recorded commit."
+          elif [ "$code" -eq 2 ]; then
+            echo "::error title=The vendored manifest check did not complete::NOTHING WAS COMPARED, so this says nothing about the manifest and is not a parity defect. The reason is in the step output above - it may be a fetch failure, or a bad --ref, or an unreadable local file. Read it before deciding whether re-running helps."
+          else
+            echo "::error title=vendor-manifest --check exited $code::Unexpected exit code. The command documents 0, 1 and 2 only."
+          fi
+          exit 1
 
       - name: Install the Python package at the vendored commit
         run: |
