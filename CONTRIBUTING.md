@@ -14,10 +14,21 @@ node scripts/readme-tools.mjs
 npm run build && npm test
 ```
 
-`SOURCE.json` records the commit and a sha256 per file.
-`node scripts/vendor-manifest.mjs --check` re-fetches at that commit and fails
-if a vendored byte differs; CI runs it before the parity job, so the parity
-result always applies to the copy this package ships.
+`SOURCE.json` records the commit and a sha256 per file. Two different checks
+guard it, and neither replaces the other:
+
+- `node scripts/vendor-manifest.mjs --check` asks whether the vendored files
+  match **the commit they record**. CI runs it before the parity job, so the
+  parity result always applies to the copy this package ships.
+- `node scripts/check-manifest-current.mjs` asks whether that commit is still
+  **the upstream head**. Without it, this package could vendor a year-old tool
+  list and stay green: the files would still match the commit they record, and
+  the parity job would still pass. It runs weekly, not per-PR, because main
+  moving is not a reason to fail someone's pull request.
+
+When the weekly check fails, the fix is to re-vendor from the head it names and
+commit the result; the failure message spells out the three commands. Expect the
+README tool table and the tests to change with it if the upstream manifest did.
 
 ## What the tests enforce
 
