@@ -161,3 +161,29 @@ test("a mismatch and an unreachable do not share an exit code", async () => {
   const differing = await serve((file) => ({ status: 200, body: `${vendored(file)} ` }));
   assert.notEqual((await runCheck(differing)).code, (await runCheck(await deadPort())).code);
 });
+
+test("the CI annotation for exit 2 names no cause either", () => {
+  /**
+   * The workflow is the one surface here that no other test reads, and it is
+   * where this exact mistake was made: the first version of that annotation
+   * said "(infrastructure)" and "re-running is the right response", in the same
+   * PR that removed the identical claim from the script it wraps. CodeRabbit
+   * caught it, not this suite.
+   *
+   * Seven things reach exit 2 and they do not share a cause. Three are
+   * infrastructure (refused connection, non-OK status, unreadable body) and
+   * four are the change (missing --ref, malformed --ref, unreadable
+   * SOURCE.json, unreadable local manifest file). Any annotation that picks one
+   * family sends someone to the wrong place for the other.
+   */
+  const workflow = readFileSync(join(ROOT, ".github/workflows/test.yml"), "utf8");
+  const line = workflow.split("\n").find((l) => l.includes("::error title=") && l.includes("did not complete"));
+  assert.ok(line, "the exit-2 annotation is gone or renamed — re-read this guard before deleting it");
+
+  for (const cause of [/infrastructure/i, /\bnetwork\b/i, /offline/i, /github is (down|unreachable)/i,
+    /re-?running is the right/i, /just re-?run/i]) {
+    assert.equal(cause.test(line!), false, `the exit-2 annotation asserts a cause it cannot know: ${line}`);
+  }
+  // It must still carry the one thing that IS true of all seven routes.
+  assert.match(line!, /NOTHING WAS COMPARED/);
+});
