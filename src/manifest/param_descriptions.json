@@ -22,13 +22,12 @@
     "property_custom.with": "Comma-separated add-ons to include, or 'all' for every one. Each add-on adds its own price to the call.",
     "risks.risk_type": "Which hazard to screen for, or 'all' for every hazard in one response.",
     "risks.uprn": "Unique Property Reference Number, digits only. Find one with address_find or address_postcode.",
-    "planning.radius_km": "Search radius in kilometres. Defaults to 0.5, maximum 5.",
+    "planning.radius_km": "Search radius in kilometres. Defaults to 0.5. Values above 5 are reduced to 5.",
     "planning.type": "Filter by application type, for example Full, Outline, Heritage, Trees or Conditions.",
     "planning.status": "Filter by decision status: Undecided, Approved, Refused or Withdrawn.",
-    "schools.radius": "Search radius in miles, from 0.1 to 5. Defaults to 0.5.",
     "schools.phase": "Filter by education phase. Leave empty for all phases.",
     "schools.ofsted": "Filter by Ofsted rating. Leave empty for all ratings.",
-    "listed_buildings.radius_km": "Search radius in kilometres. Defaults to 1, maximum 5.",
+    "listed_buildings.radius_km": "Search radius in kilometres. Defaults to 1. Values above 5 are reduced to 5.",
     "listed_buildings.grade": "Filter to a single listing grade. Leave empty for all grades.",
     "calc_stamp_duty.price": "Purchase price in pounds.",
     "calc_stamp_duty.buyer_type": "standard for a main residence, first_time for first-time buyer relief, additional for a second home or buy-to-let.",
@@ -36,6 +35,8 @@
     "calc_mortgage.price": "Purchase price in pounds.",
     "calc_mortgage.deposit": "Deposit paid up front, in pounds.",
     "calc_mortgage.rate": "Annual interest rate as a percentage, for example 4.5 for 4.5%.",
-    "calc_mortgage.term_years": "Mortgage term in years."
+    "calc_mortgage.term": "Mortgage term in years.",
+    "schools.radius_km": "Search radius in kilometres. Defaults to 3. Values above 10 are reduced to 10.",
+    "planning.days": "Only include applications from the last N days. Defaults to 90. Values above 365 are reduced to 365."
   }
 }
