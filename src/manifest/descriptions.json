@@ -41,7 +41,7 @@
   "healthcare_pharmacies": "Pharmacies near a property, with name, address, phone and website where known. Costs 1 token.",
   "listed_buildings": "Listed buildings within a radius of a postcode: Grade I, II* and II entries with name, location, listing date and a link to the official record. Costs 3 tokens.",
   "planning": "Planning applications near a postcode or coordinates: type, status, description and decision date, with filters for recency, type and status. Costs 5 tokens.",
-  "postcode_profile": "One-call summary of a postcode: deprivation, crime, average property price, nearby schools, transport and broadband. Cheaper than calling those tools separately. Costs 1 token.",
+  "postcode_profile": "One-call summary of a postcode: deprivation, crime, average property price, nearby schools, transport and broadband. Cheaper than calling those tools separately. The first call for a postcode is slow, because the parts are gathered and combined when you ask for them; the result is then cached, so asking again for the same postcode is fast. Wait for the first call rather than retrying it — retrying abandons the work already in progress and starts it over. Costs 1 token.",
   "price_distributions": "How property prices are spread across an outcode area: percentiles, median and transaction counts by property type. Costs 1 token.",
   "price_growth": "Capital growth for an outcode area: annual growth rate, returns over one, three, five and ten years, and a historical price index, from Land Registry sold prices. Costs 1 token.",
   "price_trends": "Average property prices over time for an outcode area. Costs 1 token.",

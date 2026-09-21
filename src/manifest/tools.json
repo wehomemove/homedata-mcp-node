@@ -2,10 +2,10 @@
   "schema_version": 1,
   "source": {
     "repository": "wehomemove/thor",
-    "commit": "a644dab7882778b7c11cf4568e80819da83f17d9",
+    "commit": "63868e0f76536fcfc02936dedd45831e536c55cd",
     "catalogue": "resources/js/Pages/Developer/Playground/Index.vue",
-    "catalogue_sha256": "518702f753b007fa507663c4d8936b169f6da1fd685565dfb49b3f73a01ce529",
-    "llms_full_api_surface_source_hash": "a13bdec5a7a2310094837195a4935cafb2874a09c04eb1f128acbe2eee59c561"
+    "catalogue_sha256": "12a2154a45b2280f28da3edca0bca1315d1184a74b628de515715d990e501c91",
+    "llms_full_api_surface_source_hash": "a9b4c23269a18452e3b4a718a41aed654bb8cfe41d8338fae2fdc88311a8eeea"
   },
   "rules": {
     "offered": "Playground ENDPOINTS entries with a path, not enterprise:true, not adminOnly:true",
@@ -386,26 +386,9 @@
           "name": "uprn",
           "in": "query",
           "type": "string",
-          "required": false,
+          "required": true,
           "pattern": "^\\d+$",
-          "playground_hint": "Property UPRN. The flood layers also accept lat+lng instead."
-        },
-        {
-          "name": "lat",
-          "in": "query",
-          "type": "string",
-          "required": false,
-          "alternative_to_previous": true,
-          "playground_hint": "Latitude (WGS84) — flood layers only"
-        },
-        {
-          "name": "lng",
-          "in": "query",
-          "type": "string",
-          "required": false,
-          "alternative_to_previous": true,
-          "paired_with": "lat",
-          "playground_hint": "Longitude (WGS84) — paired with latitude"
+          "playground_hint": "Property UPRN. Required — this endpoint returns 400 without it."
         }
       ],
       "tokens": {
@@ -770,11 +753,11 @@
           "playground_hint": "UK postcode (England only — e.g. SW1A 2AA, E1 6AN)"
         },
         {
-          "name": "radius",
+          "name": "radius_km",
           "in": "query",
           "type": "string",
           "required": false,
-          "playground_hint": "Search radius in miles — 0.1 to 5.0 (default: 0.5)"
+          "playground_hint": "Search radius in kilometres — up to 10 (default: 3)"
         },
         {
           "name": "phase",
@@ -1507,7 +1490,7 @@
           "playground_hint": "Mortgage interest rate, percent (e.g. 4.5 for 4.5%)."
         },
         {
-          "name": "term_years",
+          "name": "term",
           "in": "query",
           "type": "number",
           "required": true,

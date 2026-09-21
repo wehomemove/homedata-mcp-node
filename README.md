@@ -121,7 +121,7 @@ shows what a property has before you commit to a tier.
 | `healthcare_pharmacies` | 1 | Pharmacies near a property, with name, address, phone and website where known. |
 | `listed_buildings` | 3 | Listed buildings within a radius of a postcode: Grade I, II* and II entries with name, location, listing date and a link to the official record. |
 | `planning` | 5 | Planning applications near a postcode or coordinates: type, status, description and decision date, with filters for recency, type and status. |
-| `postcode_profile` | 1 | One-call summary of a postcode: deprivation, crime, average property price, nearby schools, transport and broadband. Cheaper than calling those tools separately. |
+| `postcode_profile` | 1 | One-call summary of a postcode: deprivation, crime, average property price, nearby schools, transport and broadband. Cheaper than calling those tools separately. The first call for a postcode is slow, because the parts are gathered and combined when you ask for them; the result is then cached, so asking again for the same postcode is fast. Wait for the first call rather than retrying it — retrying abandons the work already in progress and starts it over. |
 | `price_distributions` | 1 | How property prices are spread across an outcode area: percentiles, median and transaction counts by property type. |
 | `price_growth` | 1 | Capital growth for an outcode area: annual growth rate, returns over one, three, five and ten years, and a historical price index, from Land Registry sold prices. |
 | `price_trends` | 1 | Average property prices over time for an outcode area. |
