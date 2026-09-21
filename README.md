@@ -160,7 +160,7 @@ The package also installs `homedata`, built from the same tool list:
 homedata tools                                   # every tool and its price
 homedata address_find --q "10 Downing Street"
 homedata property_core --uprn 100023336956 --field epc
-homedata calc_mortgage --price 300000 --deposit 30000 --rate 4.5 --term-years 25
+homedata calc_mortgage --price 300000 --deposit 30000 --rate 4.5 --term 25
 homedata risks --help                            # the arguments for one tool
 ```
 
