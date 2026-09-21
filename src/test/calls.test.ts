@@ -26,8 +26,8 @@ test("optional parameters left out are not sent", () => {
 });
 
 test("whole numbers are sent without a decimal point", () => {
-  const request = buildRequest(spec("calc_mortgage"), { price: 300000, deposit: 30000, rate: 4.5, term_years: 25 });
-  assert.deepEqual(request.query, { price: "300000", deposit: "30000", rate: "4.5", term_years: "25" });
+  const request = buildRequest(spec("calc_mortgage"), { price: 300000, deposit: 30000, rate: 4.5, term: 25 });
+  assert.deepEqual(request.query, { price: "300000", deposit: "30000", rate: "4.5", term: "25" });
 });
 
 test("property_custom sends with", () => {
@@ -42,8 +42,8 @@ const INVALID: Array<[string, Record<string, unknown>, string]> = [
   ["property_core", { uprn: 100023336956 }, "uprn must be a string"],
   ["property_core", { uprn: "1", extra: "x" }, "unknown argument extra"],
   ["risks", { risk_type: "volcano", uprn: "1" }, "risk_type must be one of"],
-  ["calc_mortgage", { price: "lots", deposit: 1, rate: 1, term_years: 1 }, "price must be a number"],
-  ["calc_mortgage", { price: true, deposit: 1, rate: 1, term_years: 1 }, "price must be a number"],
+  ["calc_mortgage", { price: "lots", deposit: 1, rate: 1, term: 1 }, "price must be a number"],
+  ["calc_mortgage", { price: true, deposit: 1, rate: 1, term: 1 }, "price must be a number"],
 ];
 
 for (const [name, args, problem] of INVALID) {
@@ -68,7 +68,12 @@ test("a path rule routes a prefixed value", () => {
 
 test("input schema matches the manifest", () => {
   const schema = inputSchema(spec("risks"), paramTextFor("risks")) as Record<string, any>;
-  assert.deepEqual(schema["required"], ["risk_type"]);
+  // Spelled out rather than read back from the manifest: this test exists to catch
+  // inputSchema silently dropping or inventing a required key, and a value derived
+  // from the same manifest it is checking would agree with any of those. The cost
+  // is that the list moves when the catalogue does — uprn became required when
+  // risks stopped offering lat/lng, and this line had to move with it.
+  assert.deepEqual(schema["required"], ["risk_type", "uprn"]);
   assert.equal(schema["additionalProperties"], false);
   assert.ok(schema["properties"]["risk_type"]["enum"].includes("all"));
   assert.ok(schema["properties"]["uprn"]["description"]);
@@ -77,7 +82,7 @@ test("input schema matches the manifest", () => {
 test("non-finite numbers are refused before they reach a URL", () => {
   for (const price of [Number.NaN, Number.POSITIVE_INFINITY]) {
     assert.throws(
-      () => buildRequest(spec("calc_mortgage"), { price, deposit: 1, rate: 1, term_years: 1 }),
+      () => buildRequest(spec("calc_mortgage"), { price, deposit: 1, rate: 1, term: 1 }),
       (err: unknown) => err instanceof InvalidArguments && err.problems.some((p) => p.includes("finite")),
     );
   }
