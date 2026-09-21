@@ -34,7 +34,27 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Trusted publishing needs a recent npm. Node 20 ships npm 10, which
+      # predates OIDC support, so the runner's npm is upgraded rather than the
+      # Node version bumped — a Node bump would change what the package is
+      # built and tested against, which is a different decision.
+      #
+      # The version is PRINTED, not assumed. Nobody on this change could verify
+      # the exact minimum from evidence we hold, so the release run records what
+      # it actually used; if a publish ever fails on version grounds the log
+      # answers it instead of the next person re-deriving it.
+      - name: Upgrade npm for trusted publishing
+        run: |
+          npm install -g npm@latest
+          echo "npm $(npm --version) on node $(node --version)"
+
+      # NO NODE_AUTH_TOKEN. With trusted publishing the identity comes from the
+      # OIDC token that `id-token: write` mints, and npm exchanges it for a
+      # short-lived credential at publish time.
+      #
+      # Passing the env var with the secret ABSENT is worse than not passing it:
+      # setup-node writes an EMPTY _authToken into .npmrc, npm then attempts
+      # token auth, fails, and never reaches the OIDC path — a confusing
+      # failure that looks like a bad token rather than a missing publisher.
       - name: Publish to npm
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
