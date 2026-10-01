@@ -5,7 +5,15 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import type { GoldenSet } from "../golden.js";
-import { buildManifest, contrast, outOfScopeClaims, validatePackage, type Asset, type Manifest } from "../plugin-package.js";
+import {
+  APPROVED_PAID_CREDIT_DISCLOSURE,
+  buildManifest,
+  contrast,
+  outOfScopeClaims,
+  validatePackage,
+  type Asset,
+  type Manifest,
+} from "../plugin-package.js";
 import { PROFILES } from "../profile.js";
 import { profileTools } from "../server.js";
 
@@ -23,6 +31,46 @@ test("the plugin package is ready to submit", () => {
   const manifest = build();
   assert.deepEqual(validatePackage(manifest, TOOLS, ASSETS), []);
   assert.equal(manifest.extensions["com.openai"].interface["websiteURL"], "https://homedata.co.uk/chatgpt");
+  assert.match(String(manifest["description"]), new RegExp(`${APPROVED_PAID_CREDIT_DISCLOSURE.replace(".", "\\.")}$`));
+  assert.deepEqual(manifest.extensions["com.openai"].publication!["countries"], []);
+  assert.equal(manifest.extensions["com.openai"].review!["commerce"], false);
+});
+
+test("the package check permits only the approved paid-credit disclosure", () => {
+  const approved = build();
+  assert.deepEqual(validatePackage(approved, TOOLS, ASSETS), []);
+
+  const forbidden = [
+    "Lookups cost £2.",
+    "Lookups cost 20p.",
+    "Lookups cost 20 credits.",
+    "Get 3 lookups free.",
+    "Start a trial.",
+    "Claim a discount.",
+    "Choose a subscription.",
+    "Upgrade your account.",
+    "Lookups consume paid credits from an account.",
+  ];
+  for (const sentence of forbidden) {
+    const manifest = build();
+    manifest["description"] = `${manifest["description"]} ${sentence}`;
+    assert.match(validatePackage(manifest, TOOLS, ASSETS).join("\n"), /mentions pricing or an offer/, sentence);
+  }
+
+  const missing = build();
+  missing["description"] = String(missing["description"]).replace(APPROVED_PAID_CREDIT_DISCLOSURE, "");
+  assert.match(validatePackage(missing, TOOLS, ASSETS).join("\n"), /must contain the approved paid-credit disclosure exactly once/);
+});
+
+test("the package check enforces the approved non-commerce declaration", () => {
+  for (const mutate of [
+    (manifest: Manifest) => { manifest.extensions["com.openai"].review!["commerce"] = true; },
+    (manifest: Manifest) => { manifest.extensions["com.openai"].review!["commerce_description"] = "The plugin takes no payments."; },
+  ]) {
+    const manifest = build();
+    mutate(manifest);
+    assert.match(validatePackage(manifest, TOOLS, ASSETS).join("\n"), /review\.commerce/);
+  }
 });
 
 test("review cases come from the golden set: five positive, three negative, real tools", () => {

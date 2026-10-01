@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "homedata",
   "version": "1.0.0",
-  "description": "Look up UK homes and neighbourhoods in ChatGPT with your Homedata account: EPC rating, council tax band, flood risk, schools, broadband, crime, planning and house price trends.",
+  "description": "Look up UK homes and neighbourhoods in ChatGPT with your Homedata account: EPC rating, council tax band, flood risk, schools, broadband, crime, planning and house price trends. Lookups consume paid credits from your Homedata account.",
   "author": { "name": "Homedata", "email": "hello@homedata.co.uk", "url": "https://homedata.co.uk" },
   "homepage": "https://homedata.co.uk/mcp",
   "repository": "https://github.com/wehomemove/homedata-mcp-node",
@@ -72,10 +72,10 @@
       },
       "review": {
         "commerce": false,
-        "commerce_description": "The plugin sells nothing and takes no payments. Signed-in users look up data with their existing Homedata account."
+        "commerce_description": "Lookups consume paid credits from the connected account. Credits are bought outside ChatGPT, and the plugin takes no payments."
       },
       "publication": {
-        "countries": ["GB"],
+        "countries": [],
         "release_notes": "First release: UK address, property and area lookups for signed-in Homedata users."
       }
     }

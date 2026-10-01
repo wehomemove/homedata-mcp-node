@@ -74,10 +74,18 @@ export function contrast(a: string, b: string): number {
  * (Homedata's positioning rule), internals, and "MCP"/"plugin" in the name.
  */
 const BANNED_LISTING_TEXT: Array<[RegExp, string]> = [
-  [/£|\$|\bprice[sd]? (from|at)\b|\btokens?\b|\bcredits?\b|\bfree\b|\btrial\b|\bdiscount|\bsubscri|\bupgrade\b|\bcheap/i, "pricing or an offer"],
+  [/£|\$|\b\d+(?:\.\d+)?\s*(?:p|pence|pounds?|dollars?|tokens?|credits?)\b|\bprice[sd]? (from|at)\b|\btokens?\b|\bcredits?\b|\bfree\b|\btrial\b|\bdiscount|\bsubscri|\bupgrade\b|\bcheap/i, "pricing or an offer"],
   [/\brightmove\b|\bzoopla\b|\bonthemarket\b|\bOTM\b/i, "a competitor portal"],
   [/\bscrap(e|ed|ing)\b|\bVOA\b|\bloki\b|\bthor\b/i, "an internal detail"],
 ];
+
+/** The one paid-credit disclosure approved for the public listing. */
+export const APPROVED_PAID_CREDIT_DISCLOSURE = "Lookups consume paid credits from your Homedata account.";
+
+/** Remove only the exact approved sentence before applying the pricing rules. */
+function withoutApprovedPaidCreditDisclosure(text: string): string {
+  return text.split(APPROVED_PAID_CREDIT_DISCLOSURE).join("");
+}
 
 /**
  * Homedata does not value homes or search homes for sale, so text the model or
@@ -158,8 +166,12 @@ export function validatePackage(manifest: Manifest, toolNames: string[], assets:
   ]
     .map(text)
     .join("\n");
+  if (text(manifest["description"]).split(APPROVED_PAID_CREDIT_DISCLOSURE).length !== 2) {
+    problems.push("description must contain the approved paid-credit disclosure exactly once");
+  }
+  const guardedListingText = withoutApprovedPaidCreditDisclosure(listingText);
   for (const [pattern, why] of BANNED_LISTING_TEXT) {
-    const hit = pattern.exec(listingText);
+    const hit = pattern.exec(guardedListingText);
     if (hit) problems.push(`listing text mentions ${why}: "${hit[0]}"`);
   }
   for (const sentence of outOfScopeClaims(listingText)) {
@@ -167,6 +179,13 @@ export function validatePackage(manifest: Manifest, toolNames: string[], assets:
   }
 
   const openai = manifest.extensions["com.openai"];
+  if (openai.review?.["commerce"] !== false) problems.push("review.commerce must be false");
+  if (
+    openai.review?.["commerce_description"] !==
+    "Lookups consume paid credits from the connected account. Credits are bought outside ChatGPT, and the plugin takes no payments."
+  ) {
+    problems.push("review.commerce_description must carry the approved paid-credit and no-payments disclosure");
+  }
   const cases = openai.review?.test_cases;
   if (cases?.positive.length !== 5) problems.push(`review: ${cases?.positive.length ?? 0} positive cases; initial review needs exactly 5`);
   if (cases?.negative.length !== 3) problems.push(`review: ${cases?.negative.length ?? 0} negative cases; initial review needs exactly 3`);
