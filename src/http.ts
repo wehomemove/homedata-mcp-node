@@ -10,8 +10,11 @@
  * ChatGPT cannot send an API key, so the server holds one (HOMEDATA_API_KEY,
  * a dedicated test wallet) and the tools are declared `noauth`. Two guards keep
  * that wallet from being spent by whoever finds the URL:
- *   - MCP_PATH: serve only at an unguessable path, e.g. /mcp/<random>.
- *   - MCP_CALLS_PER_MINUTE: a process-wide cap on data tool calls.
+ *   - MCP_PATH: serve only at an unguessable path, e.g. /mcp/<random>. It is
+ *     REQUIRED: the server refuses to start without one, or with a guessable one,
+ *     because a missing variable must not silently open the wallet at /mcp.
+ *   - MCP_CALLS_PER_MINUTE: a process-wide cap on data tool calls. It bounds the
+ *     rate, not access; the path is the access control.
  * Phase 2 replaces this with OAuth and the user's own Homedata key.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -28,11 +31,58 @@ const MAX_BODY_BYTES = 1_000_000;
 
 export interface HttpOptions {
   client: HomedataClient;
-  /** Where the MCP endpoint answers. */
-  mcpPath?: string;
+  /** Where the MCP endpoint answers. Check it with checkMcpPath first. */
+  mcpPath: string;
   /** Data tool calls allowed per rolling minute, across all callers. */
   callsPerMinute?: number;
   now?: () => number;
+}
+
+export class ConfigError extends Error {}
+
+/** A secret path's last segment: at least 16 URL-safe characters (16 hex = 64 bits). */
+const SECRET_SEGMENT = /^[A-Za-z0-9_-]{16,}$/;
+
+/**
+ * The path is the only thing between the internet and the server-held key, so
+ * accept only one whose last segment is long and random-looking, and never a
+ * well-known route such as /mcp.
+ */
+export function checkMcpPath(path: string | undefined): string {
+  if (!path) {
+    throw new ConfigError("MCP_PATH is required: set it to an unguessable path such as /mcp/<32 random hex>.");
+  }
+  const segments = path.split("/");
+  if (!path.startsWith("/") || segments.length < 3 || !SECRET_SEGMENT.test(segments[segments.length - 1]!)) {
+    throw new ConfigError(
+      "MCP_PATH must end in a secret segment of at least 16 URL-safe characters, such as /mcp/<32 random hex>.",
+    );
+  }
+  return path;
+}
+
+export function checkCallsPerMinute(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return 30;
+  const n = Number(raw);
+  // NaN would never compare >= in the limiter, so a typo would remove the cap.
+  if (!Number.isInteger(n) || n < 1) throw new ConfigError("MCP_CALLS_PER_MINUTE must be a whole number of at least 1.");
+  return n;
+}
+
+export interface HttpConfig {
+  mcpPath: string;
+  callsPerMinute: number;
+  port: number;
+  host: string;
+}
+
+export function configFromEnv(env: NodeJS.ProcessEnv): HttpConfig {
+  return {
+    mcpPath: checkMcpPath(env["MCP_PATH"]),
+    callsPerMinute: checkCallsPerMinute(env["MCP_CALLS_PER_MINUTE"]),
+    port: Number(env["PORT"] ?? 4176),
+    host: env["HOST"] ?? "127.0.0.1",
+  };
 }
 
 /** A rolling one-minute window of call timestamps. */
@@ -71,7 +121,7 @@ function toolCalls(body: unknown): number {
 }
 
 export function createHttpHandler(opts: HttpOptions) {
-  const mcpPath = opts.mcpPath ?? "/mcp";
+  const mcpPath = checkMcpPath(opts.mcpPath);
   const limiter = new MinuteLimiter(opts.callsPerMinute ?? 30, opts.now);
 
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -116,14 +166,17 @@ export function createHttpHandler(opts: HttpOptions) {
 }
 
 async function main(): Promise<void> {
+  let config: HttpConfig;
+  try {
+    config = configFromEnv(process.env);
+  } catch (err) {
+    if (!(err instanceof ConfigError)) throw err;
+    console.error(`homedata-mcp-http: ${err.message}`);
+    process.exit(1);
+  }
   const client = HomedataClient.fromEnv(VERSION);
-  const port = Number(process.env["PORT"] ?? 4176);
-  const host = process.env["HOST"] ?? "127.0.0.1";
-  const handler = createHttpHandler({
-    client,
-    mcpPath: process.env["MCP_PATH"] || "/mcp",
-    callsPerMinute: Number(process.env["MCP_CALLS_PER_MINUTE"] ?? 30),
-  });
+  const { port, host } = config;
+  const handler = createHttpHandler({ client, mcpPath: config.mcpPath, callsPerMinute: config.callsPerMinute });
   createServer((req, res) => {
     handler(req, res).catch((err) => {
       console.error("[homedata-mcp-http] request failed:", err);

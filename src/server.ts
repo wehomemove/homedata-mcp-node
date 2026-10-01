@@ -53,11 +53,23 @@ export function profileTools(profile: Profile): ToolSpec[] {
 /**
  * ChatGPT descriptor fields. Every catalogue tool is a GET against a bounded
  * dataset: it reads, never writes, and does not reach the open internet.
+ *
+ * outputSchema: OpenAI asks for one wherever a tool returns structured data.
+ * It says only what the API contract guarantees: the API's OpenAPI spec
+ * publishes no typed response body for any curated tool ("Unspecified response
+ * body" or none at all), and jsonResult always returns an object
+ * (a non-object body is wrapped as { data }). A field list guessed beyond
+ * that would make schema-validating clients reject real answers.
  */
-function chatgptFields(title: string): Record<string, unknown> {
+function chatgptFields(spec: ToolSpec): Record<string, unknown> {
   const securitySchemes = [{ type: "noauth" }];
   return {
-    title,
+    title: spec.label,
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      description: `${spec.label} from the Homedata API, as the API returns it.`,
+    },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     securitySchemes,
     _meta: { securitySchemes },
@@ -78,7 +90,7 @@ export function buildServer(client: HomedataClient | null, profile: Profile = PR
             name: spec.name,
             description: profile.prices ? descriptionFor(spec.name) : withoutPrice(descriptionFor(spec.name)),
             inputSchema: inputSchema(spec, paramTextFor(spec.name)),
-            ...(profile.chatgptMetadata ? chatgptFields(spec.label) : {}),
+            ...(profile.chatgptMetadata ? chatgptFields(spec) : {}),
           }))
         : []),
       ...(profile.signupHelpers

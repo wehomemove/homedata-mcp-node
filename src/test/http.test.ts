@@ -1,24 +1,28 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import { HomedataClient } from "../client.js";
-import { createHttpHandler, MinuteLimiter } from "../http.js";
+import { checkCallsPerMinute, checkMcpPath, ConfigError, createHttpHandler, MinuteLimiter } from "../http.js";
 import { descriptionFor, tools } from "../manifest.js";
 import { CHATGPT_TOOLS, withoutPrice } from "../profile.js";
 
-const MCP_PATH = "/mcp/secret-path";
+const MCP_PATH = "/mcp/0123456789abcdef0123456789abcdef";
+const HTTP_ENTRY = join(dirname(fileURLToPath(import.meta.url)), "..", "http.js");
 
-async function start(opts: { callsPerMinute?: number } = {}) {
+async function start(opts: { callsPerMinute?: number; body?: unknown; status?: number } = {}) {
   const sent: string[] = [];
   const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
     sent.push(new URL(String(input)).pathname);
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
+    return new Response(JSON.stringify(opts.body ?? { ok: true }), {
+      status: opts.status ?? 200,
       headers: { "Content-Type": "application/json", "X-Tokens-Charged": "2" },
     });
   }) as typeof fetch;
@@ -140,4 +144,54 @@ test("withoutPrice drops pricing sentences and keeps costs that are subject matt
   );
   // Every catalogue description keeps some text once its price is gone.
   for (const t of tools()) assert.ok(withoutPrice(descriptionFor(t.name)).length > 0, t.name);
+});
+
+test("every ChatGPT tool publishes an output schema its real results satisfy", async () => {
+  // Bodies the API really returns: an object, a bare list, and an error.
+  for (const [body, status] of [[{ results: [{ uprn: "1" }] }, 200], [[{ uprn: "1" }], 200], [{ detail: "Not found." }, 404]] as const) {
+    const { client, stop } = await start({ body, status });
+    const listed = (await client.listTools()).tools;
+    for (const tool of listed) {
+      assert.equal(tool.outputSchema?.type, "object", tool.name);
+    }
+    // listTools armed the SDK client's validator: callTool rejects any
+    // structuredContent that does not satisfy the tool's outputSchema.
+    const result = await client.callTool({ name: "crime", arguments: { postcode: "SW1A 2AA" } });
+    assert.equal(typeof result.structuredContent, "object", JSON.stringify(body));
+    await stop();
+  }
+});
+
+test("MCP_PATH must be present and unguessable", () => {
+  for (const bad of [undefined, "", "/", "/mcp", "/mcp/", "/mcp/short", "/mcp/has space 0123456789", "mcp/0123456789abcdef"]) {
+    assert.throws(() => checkMcpPath(bad), ConfigError, String(bad));
+  }
+  assert.equal(checkMcpPath(MCP_PATH), MCP_PATH);
+  // The handler applies the same check, so a caller cannot bypass it.
+  assert.throws(
+    () => createHttpHandler({ client: new HomedataClient({ apiKey: "x" }), mcpPath: "/mcp" }),
+    ConfigError,
+  );
+});
+
+test("MCP_CALLS_PER_MINUTE must be a whole number of at least 1", () => {
+  assert.equal(checkCallsPerMinute(undefined), 30);
+  assert.equal(checkCallsPerMinute("5"), 5);
+  for (const bad of ["abc", "0", "-1", "1.5"]) assert.throws(() => checkCallsPerMinute(bad), ConfigError, bad);
+});
+
+test("the server refuses to start with a missing or unsafe configuration", () => {
+  const base: NodeJS.ProcessEnv = { ...process.env, HOMEDATA_API_KEY: "startup-test-key", PORT: "0" };
+  delete base["MCP_PATH"];
+  for (const [env, mentions] of [
+    [{}, /MCP_PATH is required/],
+    [{ MCP_PATH: "/mcp" }, /MCP_PATH must end in a secret segment/],
+    [{ MCP_PATH, MCP_CALLS_PER_MINUTE: "abc" }, /MCP_CALLS_PER_MINUTE/],
+  ] as const) {
+    const run = spawnSync(process.execPath, [HTTP_ENTRY], { env: { ...base, ...env }, encoding: "utf8", timeout: 10_000 });
+    assert.equal(run.status, 1, `${JSON.stringify(env)} started: ${run.stderr}`);
+    assert.match(run.stderr, mentions);
+    assert.doesNotMatch(run.stderr, /listening/);
+    assert.doesNotMatch(run.stderr, /startup-test-key/);
+  }
 });
