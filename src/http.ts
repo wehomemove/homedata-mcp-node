@@ -6,34 +6,50 @@
  * answer any request and nothing is kept between calls. It serves the
  * `chatgpt` profile (src/profile.ts) from the same manifest as the stdio server.
  *
- * Auth, phase 1 (developer-mode testing only, see docs/chatgpt-app/RESEARCH.md):
- * ChatGPT cannot send an API key, so the server holds one (HOMEDATA_API_KEY,
- * a dedicated test wallet) and the tools are declared `noauth`. Two guards keep
- * that wallet from being spent by whoever finds the URL:
- *   - MCP_PATH: serve only at an unguessable path, e.g. /mcp/<random>. It is
- *     REQUIRED: the server refuses to start without one, or with a guessable one,
- *     because a missing variable must not silently open the wallet at /mcp.
- *   - MCP_CALLS_PER_MINUTE: a process-wide cap on data tool calls. It bounds the
- *     rate, not access; the path is the access control.
- * Phase 2 replaces this with OAuth and the user's own Homedata key.
+ * Two auth modes (MCP_AUTH), see docs/chatgpt-app/RUNNING.md:
+ *
+ * - `oauth` (the default): users link their Homedata account in ChatGPT through
+ *   thor's OAuth server. Listing tools is anonymous, as ChatGPT expects; a tool
+ *   call needs a bearer token, which src/auth.ts checks with thor, and runs on
+ *   the key thor returns, so it charges the user's own wallet. No key is held
+ *   here.
+ * - `server-key` (developer-mode testing only): ChatGPT cannot send an API key,
+ *   so the server holds one (HOMEDATA_API_KEY, a dedicated test wallet) and the
+ *   tools are declared `noauth`. MCP_PATH must then be an unguessable path,
+ *   because it is the only thing between the internet and that wallet.
+ *
+ * MCP_CALLS_PER_MINUTE caps tool calls per caller (per signed-in user, or for
+ * the whole server in server-key mode). It bounds the rate, not access.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
 
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
+import { challengeHeader, Introspector, protectedResourceMetadata, SCOPE, type OAuthSettings } from "./auth.js";
 import { HomedataClient } from "./client.js";
 import { VERSION } from "./index.js";
 import { PROFILES } from "./profile.js";
 import { buildServer } from "./server.js";
 
 const MAX_BODY_BYTES = 1_000_000;
+const DEFAULT_ISSUER = "https://homedata.co.uk";
+
+export type HttpAuth =
+  | { mode: "server-key"; client: HomedataClient }
+  | {
+      mode: "oauth";
+      settings: OAuthSettings;
+      introspector: Introspector;
+      /** Builds the API client for a signed-in user's key. */
+      clientFor: (apiKey: string) => HomedataClient;
+    };
 
 export interface HttpOptions {
-  client: HomedataClient;
-  /** Where the MCP endpoint answers. Check it with checkMcpPath first. */
+  auth: HttpAuth;
+  /** Where the MCP endpoint answers. */
   mcpPath: string;
-  /** Data tool calls allowed per rolling minute, across all callers. */
+  /** Tool calls allowed per rolling minute, per caller. */
   callsPerMinute?: number;
   now?: () => number;
 }
@@ -44,9 +60,9 @@ export class ConfigError extends Error {}
 const SECRET_SEGMENT = /^[A-Za-z0-9_-]{16,}$/;
 
 /**
- * The path is the only thing between the internet and the server-held key, so
- * accept only one whose last segment is long and random-looking, and never a
- * well-known route such as /mcp.
+ * In server-key mode the path is the only thing between the internet and the
+ * server-held key, so accept only one whose last segment is long and
+ * random-looking, and never a well-known route such as /mcp.
  */
 export function checkMcpPath(path: string | undefined): string {
   if (!path) {
@@ -69,19 +85,60 @@ export function checkCallsPerMinute(raw: string | undefined): number {
   return n;
 }
 
-export interface HttpConfig {
-  mcpPath: string;
-  callsPerMinute: number;
-  port: number;
-  host: string;
+/** An https URL with no query or fragment; plain http only for this machine (local testing). */
+function checkUrl(name: string, raw: string | undefined): string {
+  let url: URL;
+  try {
+    url = new URL(raw ?? "");
+  } catch {
+    throw new ConfigError(`${name} must be an absolute URL.`);
+  }
+  const local = url.protocol === "http:" && ["127.0.0.1", "localhost"].includes(url.hostname);
+  if ((url.protocol !== "https:" && !local) || url.search || url.hash || url.username || url.password) {
+    throw new ConfigError(`${name} must be an https URL with no query, fragment or credentials.`);
+  }
+  return raw!;
 }
 
+export type HttpConfig =
+  | { mode: "server-key"; mcpPath: string; callsPerMinute: number; port: number; host: string }
+  | { mode: "oauth"; mcpPath: string; callsPerMinute: number; port: number; host: string; oauth: OAuthSettings };
+
 export function configFromEnv(env: NodeJS.ProcessEnv): HttpConfig {
-  return {
-    mcpPath: checkMcpPath(env["MCP_PATH"]),
+  const common = {
     callsPerMinute: checkCallsPerMinute(env["MCP_CALLS_PER_MINUTE"]),
     port: Number(env["PORT"] ?? 4176),
     host: env["HOST"] ?? "127.0.0.1",
+  };
+  const mode = env["MCP_AUTH"] || "oauth";
+
+  if (mode === "server-key") {
+    if (!(env["HOMEDATA_API_KEY"] ?? "").trim()) throw new ConfigError("MCP_AUTH=server-key needs HOMEDATA_API_KEY.");
+    return { mode, mcpPath: checkMcpPath(env["MCP_PATH"]), ...common };
+  }
+  if (mode !== "oauth") throw new ConfigError("MCP_AUTH must be oauth or server-key.");
+
+  // A key here would be unused at best and a silent second wallet at worst.
+  if ((env["HOMEDATA_API_KEY"] ?? "").trim()) {
+    throw new ConfigError("HOMEDATA_API_KEY is not used with MCP_AUTH=oauth: calls run on each user's own key. Unset it.");
+  }
+  const mcpPath = env["MCP_PATH"] || "/mcp";
+  if (!mcpPath.startsWith("/")) throw new ConfigError("MCP_PATH must start with /.");
+  const issuer = checkUrl("OAUTH_ISSUER", env["OAUTH_ISSUER"] || DEFAULT_ISSUER).replace(/\/+$/, "");
+  const secret = env["OAUTH_INTROSPECTION_SECRET"] ?? "";
+  if (secret.length < 32) {
+    throw new ConfigError("OAUTH_INTROSPECTION_SECRET must be set to thor's introspection secret (at least 32 characters).");
+  }
+  return {
+    mode,
+    mcpPath,
+    ...common,
+    oauth: {
+      resource: checkUrl("MCP_RESOURCE", env["MCP_RESOURCE"]),
+      issuer,
+      introspectionUrl: checkUrl("OAUTH_INTROSPECTION_URL", env["OAUTH_INTROSPECTION_URL"] || `${issuer}/oauth/introspect`),
+      introspectionSecret: secret,
+    },
   };
 }
 
@@ -99,8 +156,25 @@ export class MinuteLimiter {
   }
 }
 
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { "Content-Type": "application/json" }).end(JSON.stringify(body));
+/** One MinuteLimiter per caller, created on first use. */
+class CallerLimits {
+  private readonly limiters = new Map<string, MinuteLimiter>();
+  constructor(private readonly limit: number, private readonly now: () => number) {}
+
+  take(caller: string): boolean {
+    let limiter = this.limiters.get(caller);
+    if (!limiter) {
+      // Bound memory: a caller idle for a minute has nothing left to remember.
+      if (this.limiters.size >= 10_000) this.limiters.clear();
+      limiter = new MinuteLimiter(this.limit, this.now);
+      this.limiters.set(caller, limiter);
+    }
+    return limiter.take();
+  }
+}
+
+function sendJson(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
+  res.writeHead(status, { "Content-Type": "application/json", ...headers }).end(JSON.stringify(body));
 }
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
@@ -120,20 +194,37 @@ function toolCalls(body: unknown): number {
   return messages.filter((m) => (m as { method?: unknown })?.method === "tools/call").length;
 }
 
+function bearerToken(req: IncomingMessage): string | null {
+  const header = req.headers["authorization"];
+  const match = typeof header === "string" ? /^Bearer\s+(\S+)$/i.exec(header) : null;
+  return match ? match[1]! : null;
+}
+
+const rpcError = (message: string) => ({ jsonrpc: "2.0", error: { code: -32000, message }, id: null });
+
 export function createHttpHandler(opts: HttpOptions) {
-  const mcpPath = checkMcpPath(opts.mcpPath);
-  const limiter = new MinuteLimiter(opts.callsPerMinute ?? 30, opts.now);
+  const { auth } = opts;
+  const mcpPath = auth.mode === "server-key" ? checkMcpPath(opts.mcpPath) : opts.mcpPath;
+  const limits = new CallerLimits(opts.callsPerMinute ?? 30, opts.now ?? Date.now);
 
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const path = new URL(req.url ?? "/", "http://localhost").pathname;
 
     if (path === "/healthz") return sendJson(res, 200, { ok: true, version: VERSION });
+
+    // RFC 9728: at the root, and with the MCP path appended for clients that
+    // derive the metadata URL from the endpoint URL.
+    if (auth.mode === "oauth" && req.method === "GET" &&
+        (path === "/.well-known/oauth-protected-resource" || path === `/.well-known/oauth-protected-resource${mcpPath}`)) {
+      return sendJson(res, 200, protectedResourceMetadata(auth.settings), { "Cache-Control": "public, max-age=300" });
+    }
+
     if (path !== mcpPath) return sendJson(res, 404, { error: "not_found" });
 
     // Stateless streamable HTTP: no session to resume, so no GET stream and no DELETE.
     if (req.method !== "POST") {
       res.setHeader("Allow", "POST");
-      return sendJson(res, 405, { jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null });
+      return sendJson(res, 405, rpcError("Method not allowed."));
     }
 
     let body: unknown;
@@ -143,18 +234,57 @@ export function createHttpHandler(opts: HttpOptions) {
       return sendJson(res, 400, { jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null });
     }
 
-    for (let i = toolCalls(body); i > 0; i--) {
-      if (!limiter.take()) {
-        res.setHeader("Retry-After", "60");
-        return sendJson(res, 429, {
-          jsonrpc: "2.0",
-          error: { code: -32000, message: "Too many requests. Try again in a minute." },
-          id: null,
-        });
+    let client: HomedataClient | null = null;
+    let caller = "server";
+    if (auth.mode === "server-key") {
+      client = auth.client;
+    } else {
+      const token = bearerToken(req);
+      if (token !== null) {
+        const check = await auth.introspector.check(token);
+        if (!check.ok && check.reason === "unavailable") {
+          // Not a 401: an outage must not make ChatGPT sign the user out.
+          res.setHeader("Retry-After", "30");
+          return sendJson(res, 503, rpcError("Homedata sign-in is temporarily unavailable. Try again shortly."));
+        }
+        if (!check.ok) {
+          const header = challengeHeader(auth.settings.resource, {
+            code: "invalid_token",
+            description: "Your Homedata connection has expired. Connect your account again.",
+          });
+          return sendJson(res, 401, rpcError("Your Homedata connection has expired."), { "WWW-Authenticate": header });
+        }
+        client = auth.clientFor(check.apiKey);
+        caller = `user:${check.subject}`;
+      } else {
+        caller = "anonymous";
       }
     }
 
-    const server = buildServer(opts.client, PROFILES.chatgpt);
+    for (let i = toolCalls(body); i > 0; i--) {
+      if (!limits.take(caller)) {
+        return sendJson(res, 429, rpcError("Too many requests. Try again in a minute."), { "Retry-After": "60" });
+      }
+    }
+
+    const server =
+      auth.mode === "server-key"
+        ? buildServer(client, PROFILES.chatgpt)
+        : buildServer(client, PROFILES.chatgpt, {
+            securitySchemes: [{ type: "oauth2", scopes: [SCOPE] }],
+            signInRequired: () => ({
+              content: [{ type: "text", text: "Connect your Homedata account to use this tool." }],
+              isError: true,
+              _meta: {
+                "mcp/www_authenticate": [
+                  challengeHeader(auth.settings.resource, {
+                    code: "invalid_token",
+                    description: "Connect your Homedata account to continue.",
+                  }),
+                ],
+              },
+            }),
+          });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => {
       void transport.close();
@@ -174,17 +304,25 @@ async function main(): Promise<void> {
     console.error(`homedata-mcp-http: ${err.message}`);
     process.exit(1);
   }
-  const client = HomedataClient.fromEnv(VERSION);
-  const { port, host } = config;
-  const handler = createHttpHandler({ client, mcpPath: config.mcpPath, callsPerMinute: config.callsPerMinute });
+  const baseUrl = (process.env["HOMEDATA_BASE_URL"] ?? "").trim() || undefined;
+  const auth: HttpAuth =
+    config.mode === "server-key"
+      ? { mode: "server-key", client: HomedataClient.fromEnv(VERSION) }
+      : {
+          mode: "oauth",
+          settings: config.oauth,
+          introspector: new Introspector(config.oauth),
+          clientFor: (apiKey) => new HomedataClient({ apiKey, baseUrl, version: VERSION }),
+        };
+  const handler = createHttpHandler({ auth, mcpPath: config.mcpPath, callsPerMinute: config.callsPerMinute });
   createServer((req, res) => {
     handler(req, res).catch((err) => {
       console.error("[homedata-mcp-http] request failed:", err);
       if (!res.headersSent) sendJson(res, 500, { jsonrpc: "2.0", error: { code: -32603, message: "Internal error" }, id: null });
     });
-  }).listen(port, host, () => {
-    // Never log MCP_PATH: it is the only thing keeping the test wallet private.
-    console.error(`homedata-mcp-http ${VERSION} listening on http://${host}:${port}`);
+  }).listen(config.port, config.host, () => {
+    // Never log MCP_PATH or any secret: in server-key mode the path guards the test wallet.
+    console.error(`homedata-mcp-http ${VERSION} (${config.mode}) listening on http://${config.host}:${config.port}`);
   });
 }
 
