@@ -169,6 +169,9 @@ export function validatePackage(manifest: Manifest, toolNames: string[], assets:
   if (text(manifest["description"]).split(APPROVED_PAID_CREDIT_DISCLOSURE).length !== 2) {
     problems.push("description must contain the approved paid-credit disclosure exactly once");
   }
+  if (text(ui["longDescription"]).split(APPROVED_PAID_CREDIT_DISCLOSURE).length !== 2) {
+    problems.push("interface.longDescription must contain the approved paid-credit disclosure exactly once");
+  }
   const guardedListingText = withoutApprovedPaidCreditDisclosure(listingText);
   for (const [pattern, why] of BANNED_LISTING_TEXT) {
     const hit = pattern.exec(guardedListingText);

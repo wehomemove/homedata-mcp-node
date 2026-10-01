@@ -31,7 +31,7 @@ test("the plugin package is ready to submit", () => {
   const manifest = build();
   assert.deepEqual(validatePackage(manifest, TOOLS, ASSETS), []);
   assert.equal(manifest.extensions["com.openai"].interface["websiteURL"], "https://homedata.co.uk/chatgpt");
-  assert.match(String(manifest["description"]), new RegExp(`${APPROVED_PAID_CREDIT_DISCLOSURE.replace(".", "\\.")}$`));
+  assert.ok(String(manifest["description"]).endsWith(APPROVED_PAID_CREDIT_DISCLOSURE));
   assert.deepEqual(manifest.extensions["com.openai"].publication!["countries"], []);
   assert.equal(manifest.extensions["com.openai"].review!["commerce"], false);
 });
@@ -57,9 +57,31 @@ test("the package check permits only the approved paid-credit disclosure", () =>
     assert.match(validatePackage(manifest, TOOLS, ASSETS).join("\n"), /mentions pricing or an offer/, sentence);
   }
 
-  const missing = build();
-  missing["description"] = String(missing["description"]).replace(APPROVED_PAID_CREDIT_DISCLOSURE, "");
-  assert.match(validatePackage(missing, TOOLS, ASSETS).join("\n"), /must contain the approved paid-credit disclosure exactly once/);
+  const missingFromDescription = build();
+  missingFromDescription["description"] = String(missingFromDescription["description"]).replace(APPROVED_PAID_CREDIT_DISCLOSURE, "");
+  assert.match(
+    validatePackage(missingFromDescription, TOOLS, ASSETS).join("\n"),
+    /^description must contain the approved paid-credit disclosure exactly once$/m,
+  );
+
+  const onlyInDescription = build();
+  onlyInDescription.extensions["com.openai"].interface["longDescription"] = String(
+    onlyInDescription.extensions["com.openai"].interface["longDescription"],
+  ).replace(APPROVED_PAID_CREDIT_DISCLOSURE, "Lookups use your existing account.");
+  assert.match(
+    validatePackage(onlyInDescription, TOOLS, ASSETS).join("\n"),
+    /interface\.longDescription must contain the approved paid-credit disclosure exactly once/,
+  );
+  assert.ok(String(onlyInDescription["description"]).includes(APPROVED_PAID_CREDIT_DISCLOSURE));
+
+  const repeated = build();
+  repeated.extensions["com.openai"].interface["longDescription"] = `${String(
+    repeated.extensions["com.openai"].interface["longDescription"],
+  )} ${APPROVED_PAID_CREDIT_DISCLOSURE}`;
+  assert.match(
+    validatePackage(repeated, TOOLS, ASSETS).join("\n"),
+    /interface\.longDescription must contain the approved paid-credit disclosure exactly once/,
+  );
 });
 
 test("the package check enforces the approved non-commerce declaration", () => {
