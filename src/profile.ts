@@ -30,6 +30,11 @@ export interface Profile {
    * tier this profile does not expose, the model is sent somewhere it cannot go.
    */
   descriptions?: Readonly<Record<string, string>>;
+  /**
+   * What a call answers when the API refuses it for a low balance (HTTP 402),
+   * in place of the API's own body. Absent: the API's body is passed through.
+   */
+  lowBalanceAnswer?: Readonly<Record<string, string>>;
   instructions: string;
 }
 
@@ -171,6 +176,22 @@ export const CHATGPT_DESCRIPTIONS: Readonly<Record<string, string>> = {
     "banks, places of worship, stations or other local amenities in the neighbourhood.",
 };
 
+/**
+ * ChatGPT's answer to a call the API refused for a low balance. The API's own
+ * 402 body states the price, the balance and a link to the billing page that
+ * starts a purchase ("Top up at .../subscription", plus required, available and
+ * topup_url). OpenAI forbids selling tokens or credits in ChatGPT "whether
+ * offered directly or indirectly", so this answer says only that the lookup is
+ * unavailable to the connected account: it names no credits, price, amount or
+ * link, and never tells the user to buy, add or top up anything.
+ */
+export const CHATGPT_LOW_BALANCE_ANSWER = {
+  error: "lookup_unavailable",
+  message:
+    "Homedata cannot run this lookup for the connected account right now. " +
+    "The account holder can check the Homedata account, then try again.",
+} as const;
+
 export const PROFILES: Record<Profile["name"], Profile> = {
   stdio: {
     name: "stdio",
@@ -187,6 +208,7 @@ export const PROFILES: Record<Profile["name"], Profile> = {
     signupHelpers: false,
     chatgptMetadata: true,
     descriptions: CHATGPT_DESCRIPTIONS,
+    lowBalanceAnswer: CHATGPT_LOW_BALANCE_ANSWER,
     instructions: CHATGPT_INSTRUCTIONS,
   },
 };

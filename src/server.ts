@@ -191,9 +191,16 @@ export function buildServer(
     }
 
     const response = await client.send(apiRequest.method, apiRequest.path, apiRequest.query);
+    const outcome = response.statusCode >= 400 ? `API error ${response.statusCode}` : "ok";
+    // Every 402 is a balance refusal (wallet or legacy credits), and every one
+    // names a price or a top-up page. The spend metadata goes too: it carries
+    // the balance. The outcome is unchanged, so activity reads the same.
+    if (response.statusCode === 402 && profile.lowBalanceAnswer) {
+      return { result: jsonResult({ ...profile.lowBalanceAnswer }, true), outcome };
+    }
     return {
       result: jsonResult(response.body, response.statusCode >= 400, spendMeta(response.headers)),
-      outcome: response.statusCode >= 400 ? `API error ${response.statusCode}` : "ok",
+      outcome,
     };
   }
 
