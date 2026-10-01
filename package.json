@@ -5,7 +5,8 @@
   "type": "module",
   "bin": {
     "homedata-mcp": "dist/server.js",
-    "homedata": "dist/cli.js"
+    "homedata": "dist/cli.js",
+    "homedata-mcp-http": "dist/http.js"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
