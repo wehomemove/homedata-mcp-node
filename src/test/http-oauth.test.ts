@@ -113,7 +113,7 @@ test("a call without signing in returns the challenge ChatGPT turns into a conne
   const result = body["result"];
   assert.equal(result.isError, true);
   const [challenge] = result._meta["mcp/www_authenticate"] as string[];
-  assert.match(challenge!, /^Bearer resource_metadata="https:\/\/mcp\.homedata\.test\/\.well-known\/oauth-protected-resource"/);
+  assert.match(challenge!, /^Bearer scope="homedata\.read", resource_metadata="https:\/\/mcp\.homedata\.test\/\.well-known\/oauth-protected-resource"/);
   assert.match(challenge!, /error="invalid_token"/);
   assert.match(challenge!, /error_description="/);
   assert.deepEqual(apiCalls, []);

@@ -114,9 +114,14 @@ export function protectedResourceMetadata(settings: OAuthSettings): Record<strin
   };
 }
 
-/** The WWW-Authenticate challenge ChatGPT reads to start or repeat sign-in. */
+/**
+ * The WWW-Authenticate challenge ChatGPT reads to start or repeat sign-in.
+ * scope comes first: auth-param order carries no meaning (RFC 6750), and
+ * leading with resource_metadata makes the line look like a bearer
+ * credential to secret scanners.
+ */
 export function challengeHeader(resource: string, error?: { code: string; description: string }): string {
-  const parts = [`Bearer resource_metadata="${resourceMetadataUrl(resource)}"`, `scope="${SCOPE}"`];
+  const parts = [`Bearer scope="${SCOPE}"`, `resource_metadata="${resourceMetadataUrl(resource)}"`];
   if (error) parts.push(`error="${error.code}"`, `error_description="${error.description}"`);
   return parts.join(", ");
 }
