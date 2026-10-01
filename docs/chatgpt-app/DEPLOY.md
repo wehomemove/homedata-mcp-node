@@ -70,5 +70,6 @@ anonymous `tools/call` returns the `mcp/www_authenticate` challenge; a forged
 token gets `401 invalid_token`, which shows thor introspection and the shared
 secret work; http redirects 301 to https.
 
-Not yet verified: a full sign-in by a real user through ChatGPT. That needs a
-Homedata test account with a funded wallet.
+Not yet verified: a full sign-in by a real user through ChatGPT. A reviewer
+account with a funded wallet was provisioned on 2026-10-01 (see SUBMISSION.md);
+the signed-in run in ChatGPT developer mode has not happened yet.

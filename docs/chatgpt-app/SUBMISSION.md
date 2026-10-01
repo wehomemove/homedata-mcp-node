@@ -26,7 +26,9 @@ npm run build && node scripts/package-chatgpt-plugin.mjs
 | Step | Who | Status |
 | --- | --- | --- |
 | Endpoint live at `https://mcp.homedata.co.uk/mcp`, with sign-in through homedata.co.uk | us | done (DEPLOY.md) |
-| Reviewer account: no MFA, own org, funded wallet | us | done: `chatgpt-review@homedata.co.uk`, credentials in `credentials/homedata-chatgpt-review.json` (never in the package) |
+| Reviewer account: no MFA, own org, funded wallet | us | provisioned 2026-10-01: verified, own organisation, API key issued, 2,000-token grant (measured in production that day). The credentials are kept outside this repository, in the operator credential store; they are never in the package or in Slack. |
+| Hand the reviewer credentials to the submitter, privately | us → submitter | pending |
+| Sign in once with the reviewer account at `https://homedata.co.uk/login` and connect it in developer mode, to prove it works without MFA | submitter | pending: do this before entering it in Review details |
 | Signed-in end-to-end run of the golden set in developer mode | us + Louis's ChatGPT login | pending |
 | Video walkthrough of the test cases (`review.demo_recording_url`) | us, recorded from that run | pending |
 | Privacy policy covers ChatGPT use (PRIVACY-DRAFT.md) | **Louis** (legal sign-off), then publish | pending |
@@ -46,8 +48,9 @@ npm run build && node scripts/package-chatgpt-plugin.mjs
    `curl https://mcp.homedata.co.uk/.well-known/openai-apps-challenge` returns
    exactly the token. The endpoint serves it as plain text and refuses to start
    if the token is malformed.
-4. **Review details**: enter the reviewer credentials from the credentials file
-   and the login URL `https://homedata.co.uk/login`.
+4. **Review details**: enter the reviewer credentials, which you will have
+   received privately and checked by signing in once, and the login URL
+   `https://homedata.co.uk/login`.
 5. **Submit for review**. Publishing after approval is Louis's decision.
 
 The MCP origin `https://mcp.homedata.co.uk` cannot change after publication;
