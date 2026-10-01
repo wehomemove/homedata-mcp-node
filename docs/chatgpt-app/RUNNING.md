@@ -41,7 +41,7 @@ Both modes:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `MCP_CALLS_PER_MINUTE` | `30` | Tool calls per caller per minute: per signed-in user in `oauth` mode, for the whole server in `server-key` mode. A whole number of at least 1. Over the cap, the endpoint answers 429. |
+| `MCP_CALLS_PER_MINUTE` | `30` | Tool calls per caller per minute: per signed-in user in `oauth` mode (unsigned calls only get the sign-in challenge and are not capped), for the whole server in `server-key` mode. A whole number of at least 1. Over the cap, the endpoint answers 429. |
 | `PORT` / `HOST` | `4176` / `127.0.0.1` | Listener. |
 
 `GET /healthz` answers `{ ok, version }`.

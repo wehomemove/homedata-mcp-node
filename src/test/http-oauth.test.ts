@@ -205,3 +205,17 @@ test("oauth is the default mode and its configuration is checked", () => {
     assert.throws(() => configFromEnv(env as NodeJS.ProcessEnv), (err: Error) => err instanceof ConfigError && message.test(err.message));
   }
 });
+
+test("unsigned calls spend no quota, so they cannot block anyone's sign-in challenge", async () => {
+  const { call, apiCalls, stop } = await start({ callsPerMinute: 1, answers: { a: active("ka", "1") } });
+  // One unsigned client calls far past the cap.
+  for (let i = 0; i < 5; i++) assert.equal((await call()).status, 200);
+  // Another new user still gets the challenge, not a 429.
+  const { status, body } = await call();
+  assert.equal(status, 200);
+  assert.ok(body["result"]._meta["mcp/www_authenticate"]);
+  // And a signed-in user's own quota is untouched.
+  assert.equal((await call("a")).status, 200);
+  assert.deepEqual(apiCalls, ["Api-Key ka"]);
+  await stop();
+});

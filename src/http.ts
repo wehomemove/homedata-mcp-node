@@ -19,7 +19,8 @@
  *   because it is the only thing between the internet and that wallet.
  *
  * MCP_CALLS_PER_MINUTE caps tool calls per caller (per signed-in user, or for
- * the whole server in server-key mode). It bounds the rate, not access.
+ * the whole server in server-key mode). Unsigned calls in oauth mode are not
+ * capped: they only receive the sign-in challenge. It bounds the rate, not access.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
@@ -235,7 +236,8 @@ export function createHttpHandler(opts: HttpOptions) {
     }
 
     let client: HomedataClient | null = null;
-    let caller = "server";
+    // Who the call cap is charged to; null means no cap applies.
+    let caller: string | null = "server";
     if (auth.mode === "server-key") {
       client = auth.client;
     } else {
@@ -257,12 +259,16 @@ export function createHttpHandler(opts: HttpOptions) {
         client = auth.clientFor(check.apiKey);
         caller = `user:${check.subject}`;
       } else {
-        caller = "anonymous";
+        // Unsigned calls only ever get the sign-in challenge: they never reach
+        // the API or a wallet, so they spend no quota. One shared bucket here
+        // would let anyone exhaust it and leave every new user facing 429
+        // instead of the connect button.
+        caller = null;
       }
     }
 
-    for (let i = toolCalls(body); i > 0; i--) {
-      if (!limits.take(caller)) {
+    for (let i = caller === null ? 0 : toolCalls(body); i > 0; i--) {
+      if (!limits.take(caller!)) {
         return sendJson(res, 429, rpcError("Too many requests. Try again in a minute."), { "Retry-After": "60" });
       }
     }
