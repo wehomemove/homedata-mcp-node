@@ -26,7 +26,7 @@ prices and the signup helpers.
 `docs/chatgpt-app/golden-prompts.json` holds the labelled prompts to run in
 ChatGPT developer mode after every change to tool names, descriptions,
 schemas or annotations: direct, indirect, follow-up, negative and boundary
-cases. The cases marked `review: true` are the submission packet's five
+cases. A case may list `expect.allowed` calls that can happen but are not required; any other call fails it. The cases marked `review: true` are the submission packet's five
 positive and three negative cases.
 
 `npm test` checks the set against the ChatGPT tool list. To check it against

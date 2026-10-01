@@ -15,8 +15,19 @@ export interface GoldenCase {
   kind: CaseKind;
   review: boolean;
   prompt: string;
-  expect: { calls: Array<{ tool: string; args: Record<string, unknown> }>; outcome: string };
+  expect: {
+    /** Must be called, in order. */
+    calls: ExpectedCall[];
+    /** May be called but is not required. Anything outside calls and allowed fails the case. */
+    allowed?: ExpectedCall[];
+    outcome: string;
+  };
   why?: string;
+}
+
+export interface ExpectedCall {
+  tool: string;
+  args: Record<string, unknown>;
 }
 
 export interface GoldenSet {
@@ -47,20 +58,25 @@ export function checkGoldenSet(set: GoldenSet, tools: ListedTool[]): string[] {
     prompts.add(c.prompt);
     if (!KINDS.includes(c.kind)) problems.push(`${at}: unknown kind ${c.kind}`);
     if (!c.expect?.outcome) problems.push(`${at}: no expected outcome`);
-    if (c.kind === "negative" && c.expect.calls.length > 0) problems.push(`${at}: a negative case must expect no calls`);
+    if (c.kind === "negative" && (c.expect.calls.length > 0 || (c.expect.allowed ?? []).length > 0)) {
+      problems.push(`${at}: a negative case must expect and allow no calls`);
+    }
+    if (c.review && c.kind === "boundary") problems.push(`${at}: boundary cases are not part of the review packet`);
     if ((c.kind === "negative" || c.kind === "boundary") && !c.why) problems.push(`${at}: say why it must not act`);
     if (c.kind === "followup") {
       const after = /^\(after ([\w-]+)\)/.exec(c.prompt)?.[1];
       if (!after || !set.cases.some((o) => o.id === after)) problems.push(`${at}: name the case it follows, as "(after <id>)"`);
     }
 
-    for (const call of c.expect.calls) {
+    for (const call of c.expect.calls) exercised.add(call.tool);
+    // Allowed calls are validated like required ones, but only a required
+    // call counts as exercising a tool.
+    for (const call of [...c.expect.calls, ...(c.expect.allowed ?? [])]) {
       const tool = byName.get(call.tool);
       if (!tool) {
         problems.push(`${at}: expects ${call.tool}, which the endpoint does not list`);
         continue;
       }
-      exercised.add(call.tool);
       const properties = tool.inputSchema.properties ?? {};
       for (const [arg, value] of Object.entries(call.args)) {
         const schema = properties[arg];
@@ -79,6 +95,7 @@ export function checkGoldenSet(set: GoldenSet, tools: ListedTool[]): string[] {
   const negative = review.filter((c) => c.kind === "negative").length;
   if (positive !== 5) problems.push(`review packet: ${positive} positive cases, OpenAI asks for 5`);
   if (negative !== 3) problems.push(`review packet: ${negative} negative cases, OpenAI asks for 3`);
+  if (review.length !== 8) problems.push(`review packet: ${review.length} cases in all, OpenAI asks for 8 (5 positive, 3 negative)`);
 
   return problems;
 }

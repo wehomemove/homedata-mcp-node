@@ -52,3 +52,39 @@ test("the checker notices a tool no case exercises", async () => {
   set.cases = set.cases.filter((c) => !c.expect.calls.some((call) => call.tool === "deprivation"));
   assert.match(checkGoldenSet(set, tools).join("\n"), /tool deprivation: no case exercises it/);
 });
+
+test("the review packet is exactly five positive and three negative cases", async () => {
+  const tools = await chatgptTools();
+  const set = loadSet();
+  const boundary = set.cases.find((c) => c.kind === "boundary")!;
+  boundary.review = true;
+
+  const problems = checkGoldenSet(set, tools).join("\n");
+  assert.match(problems, /boundary cases are not part of the review packet/);
+  assert.match(problems, /9 cases in all, OpenAI asks for 8/);
+});
+
+test("allowed calls are checked like required ones, and negatives allow none", async () => {
+  const tools = await chatgptTools();
+  const set = loadSet();
+  const outside = set.cases.find((c) => c.id === "boundary-outside-uk")!;
+  outside.expect.allowed = [{ tool: "address_lookup", args: {} }];
+  const negative = set.cases.find((c) => c.kind === "negative")!;
+  negative.expect.allowed = [{ tool: "address_find", args: {} }];
+
+  const problems = checkGoldenSet(set, tools).join("\n");
+  assert.match(problems, /expects address_lookup, which the endpoint does not list/);
+  assert.match(problems, /a negative case must expect and allow no calls/);
+});
+
+test("a tool only ever allowed, never required, is not exercised", async () => {
+  const tools = await chatgptTools();
+  const set = loadSet();
+  for (const c of set.cases) {
+    if (c.expect.calls.some((call) => call.tool === "broadband")) {
+      c.expect.allowed = [...(c.expect.allowed ?? []), ...c.expect.calls];
+      c.expect.calls = c.expect.calls.filter((call) => call.tool !== "broadband");
+    }
+  }
+  assert.match(checkGoldenSet(set, tools).join("\n"), /tool broadband: no case exercises it/);
+});

@@ -1,5 +1,5 @@
 {
-  "about": "Golden prompt set for the Homedata ChatGPT plugin (OpenAI: https://developers.openai.com/plugins/guides/optimize-metadata). Run it in developer mode after every change to tool names, descriptions, schemas or annotations, and record the tool chosen, its arguments and the outcome. Cases marked review=true are the submission packet's five positive and three negative cases. Addresses are public buildings, never private homes. expect.calls lists the tools that must be called, in order, with the arguments that must be present; other arguments may vary. A case with expect.calls empty must not call any Homedata tool.",
+  "about": "Golden prompt set for the Homedata ChatGPT plugin (OpenAI: https://developers.openai.com/plugins/guides/optimize-metadata). Run it in developer mode after every change to tool names, descriptions, schemas or annotations, and record the tool chosen, its arguments and the outcome. Cases marked review=true are the submission packet's five positive and three negative cases. Addresses are public buildings, never private homes. expect.calls lists the tools that must be called, in order, with the arguments that must be present; other arguments may vary. expect.allowed lists calls that may happen but are not required; any call outside calls and allowed fails the case. A case with expect.calls empty and no expect.allowed must not call any Homedata tool.",
   "version": "2026-10-01",
   "cases": [
     {
@@ -229,9 +229,10 @@
       "prompt": "What's the flood risk at 1 Rue de Rivoli, Paris?",
       "expect": {
         "calls": [],
-        "outcome": "Says coverage is the United Kingdom only. At most one address_find, which finds nothing; no property tool is called."
+        "allowed": [{ "tool": "address_find", "args": {} }],
+        "outcome": "Says coverage is the United Kingdom only. It may try address_find once, which finds nothing; no property tool is called."
       },
-      "why": "UK-only data. An address_find that returns nothing is acceptable; a guessed UPRN is not."
+      "why": "UK-only data. Trying address_find is allowed and finds nothing; calling a property tool with a guessed UPRN is not."
     },
     {
       "id": "boundary-schools-scotland",
