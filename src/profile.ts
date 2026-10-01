@@ -24,6 +24,12 @@ export interface Profile {
   signupHelpers: boolean;
   /** Add title, annotations and securitySchemes to every tool. */
   chatgptMetadata: boolean;
+  /**
+   * Descriptions that replace the catalogue text for this profile. The
+   * catalogue is written for the full tool set; where it points at a tool or
+   * tier this profile does not expose, the model is sent somewhere it cannot go.
+   */
+  descriptions?: Readonly<Record<string, string>>;
   instructions: string;
 }
 
@@ -76,6 +82,22 @@ export const CHATGPT_TOOLS = [
   "amenities_all",
 ] as const;
 
+/**
+ * ChatGPT wording for catalogue descriptions that reference tools outside
+ * CHATGPT_TOOLS (council_tax_full) or tiers it does not expose (Base). Found by
+ * ChatGPT's Plugin Creator against the live endpoint, 2026-10-01.
+ */
+export const CHATGPT_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  property_core:
+    "The full picture of one property in a single call: address, rooms, EPC rating, last sale, construction, " +
+    "dimensions, garden, parking and title basics, plus council tax band, flood risk, schools, broadband, crime, " +
+    "demographics, solar potential, confirmed sales and planning constraints. Use it for a whole-property question " +
+    "rather than calling several smaller tools.",
+  council_tax:
+    "Council tax band for a property, with the billing authority name and its official code. It gives the band, " +
+    "not the yearly or monthly charge in pounds.",
+};
+
 export const PROFILES: Record<Profile["name"], Profile> = {
   stdio: {
     name: "stdio",
@@ -91,6 +113,7 @@ export const PROFILES: Record<Profile["name"], Profile> = {
     prices: false,
     signupHelpers: false,
     chatgptMetadata: true,
+    descriptions: CHATGPT_DESCRIPTIONS,
     instructions: CHATGPT_INSTRUCTIONS,
   },
 };

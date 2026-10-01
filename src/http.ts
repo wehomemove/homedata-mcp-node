@@ -53,6 +53,12 @@ export interface HttpOptions {
   /** Tool calls allowed per rolling minute, per caller. */
   callsPerMinute?: number;
   now?: () => number;
+  /**
+   * The token OpenAI's plugin portal asks the MCP host to serve as plain text
+   * at /.well-known/openai-apps-challenge to prove domain ownership. Unset
+   * answers 404.
+   */
+  appsChallenge?: string;
 }
 
 export class ConfigError extends Error {}
@@ -76,6 +82,15 @@ export function checkMcpPath(path: string | undefined): string {
     );
   }
   return path;
+}
+
+/** The portal's challenge token: plain, single-line, URL-safe text. */
+export function checkAppsChallenge(raw: string | undefined): string | undefined {
+  if (raw === undefined || raw === "") return undefined;
+  if (!/^[A-Za-z0-9._~-]{8,512}$/.test(raw)) {
+    throw new ConfigError("OPENAI_APPS_CHALLENGE must be the portal's token exactly: 8-512 URL-safe characters, no spaces.");
+  }
+  return raw;
 }
 
 export function checkCallsPerMinute(raw: string | undefined): number {
@@ -102,12 +117,21 @@ function checkUrl(name: string, raw: string | undefined): string {
 }
 
 export type HttpConfig =
-  | { mode: "server-key"; mcpPath: string; callsPerMinute: number; port: number; host: string }
-  | { mode: "oauth"; mcpPath: string; callsPerMinute: number; port: number; host: string; oauth: OAuthSettings };
+  | { mode: "server-key"; mcpPath: string; callsPerMinute: number; port: number; host: string; appsChallenge?: string }
+  | {
+      mode: "oauth";
+      mcpPath: string;
+      callsPerMinute: number;
+      port: number;
+      host: string;
+      appsChallenge?: string;
+      oauth: OAuthSettings;
+    };
 
 export function configFromEnv(env: NodeJS.ProcessEnv): HttpConfig {
   const common = {
     callsPerMinute: checkCallsPerMinute(env["MCP_CALLS_PER_MINUTE"]),
+    appsChallenge: checkAppsChallenge(env["OPENAI_APPS_CHALLENGE"]),
     port: Number(env["PORT"] ?? 4176),
     host: env["HOST"] ?? "127.0.0.1",
   };
@@ -212,6 +236,13 @@ export function createHttpHandler(opts: HttpOptions) {
     const path = new URL(req.url ?? "/", "http://localhost").pathname;
 
     if (path === "/healthz") return sendJson(res, 200, { ok: true, version: VERSION });
+
+    if (path === "/.well-known/openai-apps-challenge") {
+      if (!opts.appsChallenge) return sendJson(res, 404, { error: "not_found" });
+      // Exactly the token: OpenAI rejects JSON, a list or a trailing newline.
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" }).end(opts.appsChallenge);
+      return;
+    }
 
     // RFC 9728: at the root, and with the MCP path appended for clients that
     // derive the metadata URL from the endpoint URL.
@@ -320,7 +351,12 @@ async function main(): Promise<void> {
           introspector: new Introspector(config.oauth),
           clientFor: (apiKey) => new HomedataClient({ apiKey, baseUrl, version: VERSION }),
         };
-  const handler = createHttpHandler({ auth, mcpPath: config.mcpPath, callsPerMinute: config.callsPerMinute });
+  const handler = createHttpHandler({
+    auth,
+    mcpPath: config.mcpPath,
+    callsPerMinute: config.callsPerMinute,
+    appsChallenge: config.appsChallenge,
+  });
   createServer((req, res) => {
     handler(req, res).catch((err) => {
       console.error("[homedata-mcp-http] request failed:", err);

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "homedata",
+  "version": "1.0.0",
+  "description": "Look up UK property and area data in ChatGPT with your Homedata account.",
+  "author": { "name": "Homedata", "email": "hello@homedata.co.uk", "url": "https://homedata.co.uk" },
+  "homepage": "https://homedata.co.uk/mcp",
+  "repository": "https://github.com/wehomemove/homedata-mcp-node",
+  "license": "MIT",
+  "keywords": ["property", "UK", "address", "EPC", "council tax", "flood risk", "schools", "planning"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Homedata",
+        "shortDescription": "UK property and area data",
+        "longDescription": "Homedata answers questions about specific UK homes and the areas around them. Give it an address or a postcode and it can look up the property's energy performance (EPC) rating, council tax band, flood and other environmental risks, nearby planning applications, schools and their Ofsted ratings, broadband speeds, recorded crime, deprivation and local amenities, and how prices in the area have moved over time.\n\nIt is for anyone researching a home or a neighbourhood: people buying or renting, property professionals, and anyone comparing places to live.\n\nConnect your Homedata account to use it. Lookups use your existing account.\n\nLimitations: coverage is the United Kingdom only, and some data (schools, deprivation) covers England only. It does not value properties, search homes for sale, or give details about owners or occupants.",
+        "developerName": "Homedata",
+        "category": "Productivity",
+        "capabilities": [
+          "Find UK addresses and their UPRN",
+          "Property overview, EPC rating and council tax band",
+          "Flood and other environmental risks",
+          "Planning applications, schools, broadband and crime nearby",
+          "Area prices, price growth and deprivation"
+        ],
+        "websiteURL": "https://homedata.co.uk/mcp",
+        "supportURL": "https://homedata.co.uk/contact",
+        "privacyPolicyURL": "https://homedata.co.uk/privacy",
+        "termsOfServiceURL": "https://homedata.co.uk/terms",
+        "defaultPrompt": [
+          "What's the flood risk at 10 Downing Street, London SW1A 2AA?",
+          "Are there good primary schools near SW1A 2AA?",
+          "What's the area around M1 1AE like to live in?"
+        ],
+        "brandColor": "#0A1628",
+        "brandColorDark": "#CBD5E1",
+        "composerIcon": "./assets/logo.png",
+        "composerIconDark": "./assets/logo-dark.png",
+        "logo": "./assets/logo.png",
+        "logoDark": "./assets/logo-dark.png"
+      },
+      "review": {
+        "commerce": false,
+        "commerce_description": "The plugin sells nothing and takes no payments. Signed-in users look up data with their existing Homedata account."
+      },
+      "publication": {
+        "countries": ["GB"],
+        "release_notes": "First release: UK address, property and area lookups for signed-in Homedata users."
+      }
+    }
+  }
+}

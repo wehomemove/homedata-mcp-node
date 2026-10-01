@@ -44,6 +44,12 @@ function spendMeta(headers: Headers): Record<string, unknown> | undefined {
   return Object.keys(spend).length ? { homedata: spend } : undefined;
 }
 
+/** A tool's description as this profile presents it. */
+export function describe(name: string, profile: Profile): string {
+  const text = profile.descriptions?.[name] ?? descriptionFor(name);
+  return profile.prices ? text : withoutPrice(text);
+}
+
 /** The catalogue tools a profile exposes, in manifest order. */
 export function profileTools(profile: Profile): ToolSpec[] {
   const wanted = profile.tools;
@@ -106,7 +112,7 @@ export function buildServer(
       ...(listsData
         ? exposed.map((spec) => ({
             name: spec.name,
-            description: profile.prices ? descriptionFor(spec.name) : withoutPrice(descriptionFor(spec.name)),
+            description: describe(spec.name, profile),
             inputSchema: inputSchema(spec, paramTextFor(spec.name)),
             ...(profile.chatgptMetadata ? chatgptFields(spec, schemes) : {}),
           }))

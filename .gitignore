@@ -8,3 +8,4 @@ dist/
 !.env.example
 .venv-parity/
 parity-out/
+dist-plugin/
