@@ -23,7 +23,6 @@
  * capped: they only receive the sign-in challenge. It bounds the rate, not access.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { pathToFileURL } from "node:url";
 
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
@@ -32,6 +31,7 @@ import { HomedataClient } from "./client.js";
 import { VERSION } from "./index.js";
 import { PROFILES } from "./profile.js";
 import { buildServer } from "./server.js";
+import { isMain } from "./entry.js";
 
 const MAX_BODY_BYTES = 1_000_000;
 const DEFAULT_ISSUER = "https://homedata.co.uk";
@@ -332,7 +332,7 @@ async function main(): Promise<void> {
   });
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMain(import.meta.url)) {
   main().catch((err) => {
     console.error("[homedata-mcp-http] fatal:", err);
     process.exit(1);

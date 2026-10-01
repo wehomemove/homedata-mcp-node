@@ -12,7 +12,6 @@
  * user's machine, so their property queries never go through the AI vendor.
  * Without a key the server still starts and offers the two signup helpers.
  */
-import { pathToFileURL } from "node:url";
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -24,6 +23,7 @@ import { VERSION } from "./index.js";
 import { descriptionFor, paramTextFor, staticTools, tools, type ToolSpec } from "./manifest.js";
 import { PROFILES, withoutPrice, type Profile } from "./profile.js";
 import { checkApiKey, startSignup } from "./signup.js";
+import { isMain } from "./entry.js";
 
 const HELPER_SCHEMAS: Record<string, Record<string, unknown>> = {
   start_homedata_signup: {
@@ -176,9 +176,7 @@ async function main(): Promise<void> {
   await buildServer(client).connect(new StdioServerTransport());
 }
 
-// pathToFileURL, not a hand-built file:// string: that breaks on Windows paths and
-// on paths containing spaces or #, and the server would exit without connecting.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMain(import.meta.url)) {
   main().catch((err) => {
     console.error("[homedata-mcp] fatal:", err);
     process.exit(1);

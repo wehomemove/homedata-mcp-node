@@ -11,12 +11,12 @@
  *
  * Reads HOMEDATA_API_KEY from the environment. The calculators need no key.
  */
-import { pathToFileURL } from "node:url";
 
 import { buildRequest, InvalidArguments } from "./calls.js";
 import { HomedataClient, HomedataError } from "./client.js";
 import { VERSION } from "./index.js";
 import { descriptionFor, paramTextFor, tools, type ToolSpec, type ToolTokens } from "./manifest.js";
+import { isMain } from "./entry.js";
 
 export function price(tokens: ToolTokens): string {
   if (tokens.plus_with_addons) return `${tokens.default} + add-ons`;
@@ -151,9 +151,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   return response.statusCode < 400 ? 0 : 1;
 }
 
-// pathToFileURL, not a hand-built file:// string: that breaks on Windows paths and
-// on paths containing spaces or #, and the CLI would silently do nothing.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMain(import.meta.url)) {
   main().then((code) => process.exit(code)).catch((err) => {
     console.error("[homedata] fatal:", err);
     process.exit(1);
