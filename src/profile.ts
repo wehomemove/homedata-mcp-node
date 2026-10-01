@@ -54,8 +54,9 @@ const CHATGPT_INSTRUCTIONS = [
   "Homedata answers questions about specific UK properties and the areas around them.",
   "Always start with `address_find` to turn the address the user gives into a UPRN, then pass that UPRN",
   "to the property tools. For a whole-property question call `property_core` once rather than many small",
-  "tools. Postcode and outcode tools (schools, price trends, postcode profile) cover the surrounding area.",
-  "Coverage is the United Kingdom only; say so plainly for addresses elsewhere.",
+  "tools. Coverage is the United Kingdom only; say so plainly for addresses elsewhere.",
+  "Postcode and outcode tools cover the surrounding area: for what an area is like to live in, call",
+  "`deprivation`, `crime`, `schools` and `broadband` for the postcode.",
 ].join("\n");
 
 /**
@@ -63,6 +64,12 @@ const CHATGPT_INSTRUCTIONS = [
  * conversation: find the address, the whole picture, and the questions asked
  * on their own (EPC, council tax, flood and other risks, planning, schools,
  * broadband, crime, prices in the area, what the area is like).
+ *
+ * `postcode_profile` is left out: measured in production on 2026-10-01 it
+ * returned empty deprivation, school and transport sections (and often empty
+ * broadband and sold prices) for every postcode tried, while its description
+ * promises all of them. An area question is answered from the dedicated tools
+ * instead. Add it back here once the profile returns full data.
  */
 export const CHATGPT_TOOLS = [
   "address_find",
@@ -77,7 +84,6 @@ export const CHATGPT_TOOLS = [
   "crime",
   "price_trends",
   "price_growth",
-  "postcode_profile",
   "deprivation",
   "amenities_all",
 ] as const;

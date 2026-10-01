@@ -213,6 +213,18 @@ test("no ChatGPT description points at a tool or tier ChatGPT cannot use", async
   await stop();
 });
 
+test("postcode_profile stays out of ChatGPT until it returns full data, and stays in stdio", async () => {
+  // Measured 2026-10-01: empty deprivation, school and transport sections for
+  // every postcode tried, which its description promises.
+  assert.ok(!(CHATGPT_TOOLS as readonly string[]).includes("postcode_profile"));
+  assert.ok(tools().some((t) => t.name === "postcode_profile"));
+  const { client, sent, stop } = await start();
+  const result = await client.callTool({ name: "postcode_profile", arguments: { postcode: "M1 1AE" } });
+  assert.match(JSON.stringify(result.content), /unknown_tool/);
+  assert.deepEqual(sent, []);
+  await stop();
+});
+
 test("ChatGPT description overrides only cover exposed tools and carry no prices", () => {
   for (const [name, text] of Object.entries(CHATGPT_DESCRIPTIONS)) {
     assert.ok((CHATGPT_TOOLS as readonly string[]).includes(name), name);
