@@ -12,6 +12,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { HomedataClient } from "../client.js";
 import { checkAppsChallenge, checkCallsPerMinute, checkMcpPath, ConfigError, createHttpHandler, MinuteLimiter } from "../http.js";
 import { descriptionFor, tools } from "../manifest.js";
+import { outOfScopeClaims } from "../plugin-package.js";
 import { CHATGPT_DESCRIPTIONS, CHATGPT_TOOLS, withoutPrice } from "../profile.js";
 
 const MCP_PATH = "/mcp/0123456789abcdef0123456789abcdef";
@@ -229,6 +230,25 @@ test("ChatGPT description overrides only cover exposed tools and carry no prices
   for (const [name, text] of Object.entries(CHATGPT_DESCRIPTIONS)) {
     assert.ok((CHATGPT_TOOLS as readonly string[]).includes(name), name);
     assert.equal(withoutPrice(text), text, `${name} override carries price text`);
+  }
+});
+
+test("every ChatGPT tool says when to use it in everyday words, and names valuations or homes for sale only as limits", async () => {
+  const { client, stop } = await start();
+  try {
+    for (const tool of (await client.listTools()).tools) {
+      const text = tool.description ?? "";
+      assert.equal(text, CHATGPT_DESCRIPTIONS[tool.name], `${tool.name} has no ChatGPT wording`);
+      assert.match(text, /\bUse this when someone\b/, tool.name);
+      assert.deepEqual(outOfScopeClaims(text), [], tool.name);
+    }
+    // The address tools and the property tools between them answer for a house,
+    // a flat and a home; the area tools for an area or neighbourhood.
+    const all = Object.values(CHATGPT_DESCRIPTIONS).join(" ");
+    for (const word of ["house", "flat", "home", "area", "neighbourhood"]) assert.match(all, new RegExp(`\\b${word}\\b`), word);
+    assert.deepEqual(outOfScopeClaims(client.getInstructions() ?? ""), []);
+  } finally {
+    await stop();
   }
 });
 

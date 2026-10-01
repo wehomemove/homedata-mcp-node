@@ -79,6 +79,21 @@ const BANNED_LISTING_TEXT: Array<[RegExp, string]> = [
   [/\bscrap(e|ed|ing)\b|\bVOA\b|\bloki\b|\bthor\b/i, "an internal detail"],
 ];
 
+/**
+ * Homedata does not value homes or search homes for sale, so text the model or
+ * a user reads may name either only to rule it out. Each sentence that does
+ * must carry a negation. Sentences end at ". " or a line break.
+ */
+const OUT_OF_SCOPE = /\bvalu(e|es|ed|ing|ation|ations)\b|\bworth\b|\bfor sale\b|\blistings?\b/i;
+const NEGATED = /\b(not|never|no)\b|n't\b/i;
+
+/** Sentences that offer a valuation or homes for sale instead of stating the limit. */
+export function outOfScopeClaims(text: string): string[] {
+  return text
+    .split(/(?<=\.)\s+|\n+/)
+    .filter((sentence) => OUT_OF_SCOPE.test(sentence) && !NEGATED.test(sentence));
+}
+
 const MAX = { displayName: 30, shortDescription: 30, longDescription: 4000, developerName: 80, prompt: 128 };
 
 export interface Asset {
@@ -130,12 +145,25 @@ export function validatePackage(manifest: Manifest, toolNames: string[], assets:
     else if (asset.width !== asset.height || asset.width < 48 || asset.width > 4096) problems.push(`interface.${field}: must be square, 48 to 4096 pixels`);
   }
 
-  const listingText = [ui["displayName"], ui["shortDescription"], ui["longDescription"], ...prompts, ...(ui["capabilities"] ?? [])]
+  const keywords = Array.isArray(manifest["keywords"]) ? (manifest["keywords"] as unknown[]) : [];
+  if (keywords.length === 0) problems.push("keywords: list the terms people search for");
+  const listingText = [
+    manifest["description"],
+    ui["displayName"],
+    ui["shortDescription"],
+    ui["longDescription"],
+    ...prompts,
+    ...(ui["capabilities"] ?? []),
+    ...keywords,
+  ]
     .map(text)
     .join("\n");
   for (const [pattern, why] of BANNED_LISTING_TEXT) {
     const hit = pattern.exec(listingText);
     if (hit) problems.push(`listing text mentions ${why}: "${hit[0]}"`);
+  }
+  for (const sentence of outOfScopeClaims(listingText)) {
+    problems.push(`listing text names a valuation or homes for sale other than as a limit: "${sentence}"`);
   }
 
   const openai = manifest.extensions["com.openai"];

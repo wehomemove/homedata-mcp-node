@@ -185,6 +185,86 @@
       }
     },
     {
+      "id": "everyday-flat-crime",
+      "kind": "indirect",
+      "review": false,
+      "prompt": "I'm looking at a flat near LS1 4DY. Is it a safe neighbourhood?",
+      "expect": {
+        "calls": [
+          { "tool": "crime", "args": { "postcode": "LS1 4DY" } }
+        ],
+        "allowed": [
+          { "tool": "deprivation", "args": { "postcode": "LS1 4DY" } }
+        ],
+        "outcome": "Summarises recorded crime by category around the postcode, without calling the neighbourhood safe or unsafe on its own authority. Does not ask for the flat's exact address first."
+      }
+    },
+    {
+      "id": "everyday-home-internet",
+      "kind": "indirect",
+      "review": false,
+      "prompt": "We're moving home to M1 1AE. Is the internet good enough to work from home?",
+      "expect": {
+        "calls": [
+          { "tool": "broadband", "args": { "postcode": "M1 1AE" } }
+        ],
+        "outcome": "Gives average and maximum download and upload speeds and full-fibre coverage for the postcode, as postcode figures rather than a promise for one line."
+      }
+    },
+    {
+      "id": "everyday-house-energy",
+      "kind": "indirect",
+      "review": false,
+      "prompt": "How energy efficient is the house at 10 Downing Street, London SW1A 2AA?",
+      "expect": {
+        "calls": [
+          { "tool": "address_find", "args": {} },
+          { "tool": "attr_epc", "args": {} }
+        ],
+        "outcome": "Gives the current and potential energy efficiency rating and the assessment date, or says no certificate is held."
+      }
+    },
+    {
+      "id": "everyday-area-house-prices",
+      "kind": "indirect",
+      "review": false,
+      "prompt": "Are house prices going up in the M1 area?",
+      "expect": {
+        "calls": [
+          { "tool": "price_growth", "args": { "outcode": "M1" } }
+        ],
+        "allowed": [
+          { "tool": "price_trends", "args": { "outcode": "M1" } }
+        ],
+        "outcome": "Gives the area's growth figures for M1 as area averages, not the value of any one home."
+      }
+    },
+    {
+      "id": "everyday-new-development",
+      "kind": "indirect",
+      "review": false,
+      "prompt": "Is anyone building anything new near CB2 1TN? I want to know before we buy a house there.",
+      "expect": {
+        "calls": [
+          { "tool": "planning", "args": { "postcode": "CB2 1TN" } }
+        ],
+        "outcome": "Lists recent planning applications near the postcode with type, status and decision date."
+      }
+    },
+    {
+      "id": "everyday-whats-nearby",
+      "kind": "indirect",
+      "review": false,
+      "prompt": "Is there a doctor, a supermarket and a park near the British Museum, Great Russell Street, London WC1B 3DG?",
+      "expect": {
+        "calls": [
+          { "tool": "address_find", "args": {} },
+          { "tool": "amenities_all", "args": {} }
+        ],
+        "outcome": "Names the nearest healthcare, convenience or shop, and green-space amenities with their distances."
+      }
+    },
+    {
       "id": "negative-valuation",
       "kind": "negative",
       "review": true,

@@ -91,6 +91,13 @@ production it returns empty deprivation, school and transport sections, which
 its description promises. Area questions use `deprivation`, `crime`, `schools`
 and `broadband` instead. The stdio server still offers `postcode_profile`.
 
+Every ChatGPT tool has its own description: what it answers, then a "Use this
+when" line in the words people type (house, home, flat, area, neighbourhood),
+then its limits. Valuations and homes for sale are named only as limits, in the
+tools, the instructions and the listing; the package validator and the tests
+enforce that. The listing's keywords, description and capabilities use the same
+everyday terms. The stdio descriptions are unchanged.
+
 ## [0.1.0] - 2026-05-11
 
 ### Added

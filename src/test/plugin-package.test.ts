@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import type { GoldenSet } from "../golden.js";
-import { buildManifest, contrast, validatePackage, type Asset, type Manifest } from "../plugin-package.js";
+import { buildManifest, contrast, outOfScopeClaims, validatePackage, type Asset, type Manifest } from "../plugin-package.js";
 import { PROFILES } from "../profile.js";
 import { profileTools } from "../server.js";
 
@@ -61,6 +61,24 @@ test("the validator refuses each way a listing goes wrong", () => {
   ]) {
     assert.match(problems, expected);
   }
+});
+
+test("keywords are required and held to the listing rules, and valuations or homes for sale appear only as limits", () => {
+  const empty = build();
+  empty["keywords"] = [];
+  assert.match(validatePackage(empty, TOOLS, ASSETS).join("\n"), /keywords: list the terms/);
+
+  const broken = build();
+  broken["keywords"] = ["house", "free valuation"];
+  (broken.extensions["com.openai"].interface["capabilities"] as string[]).push("Search homes for sale near you");
+  const problems = validatePackage(broken, TOOLS, ASSETS).join("\n");
+  assert.match(problems, /mentions pricing or an offer: "free"/);
+  assert.match(problems, /other than as a limit: "free valuation"/);
+  assert.match(problems, /other than as a limit: "Search homes for sale near you"/);
+
+  // The listing's own limits sentence names both and passes.
+  assert.deepEqual(outOfScopeClaims("It does not value properties, search homes for sale, or give details about owners."), []);
+  assert.deepEqual(outOfScopeClaims("Area averages, not the value of any one home."), []);
 });
 
 test("contrast matches the WCAG formula", () => {
