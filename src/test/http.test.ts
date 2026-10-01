@@ -27,7 +27,7 @@ async function start(opts: { callsPerMinute?: number; body?: unknown; status?: n
     });
   }) as typeof fetch;
   const handler = createHttpHandler({
-    client: new HomedataClient({ apiKey: "http-test", fetchImpl }),
+    auth: { mode: "server-key", client: new HomedataClient({ apiKey: "http-test", fetchImpl }) },
     mcpPath: MCP_PATH,
     callsPerMinute: opts.callsPerMinute,
   });
@@ -169,7 +169,7 @@ test("MCP_PATH must be present and unguessable", () => {
   assert.equal(checkMcpPath(MCP_PATH), MCP_PATH);
   // The handler applies the same check, so a caller cannot bypass it.
   assert.throws(
-    () => createHttpHandler({ client: new HomedataClient({ apiKey: "x" }), mcpPath: "/mcp" }),
+    () => createHttpHandler({ auth: { mode: "server-key", client: new HomedataClient({ apiKey: "x" }) }, mcpPath: "/mcp" }),
     ConfigError,
   );
 });
@@ -181,7 +181,7 @@ test("MCP_CALLS_PER_MINUTE must be a whole number of at least 1", () => {
 });
 
 test("the server refuses to start with a missing or unsafe configuration", () => {
-  const base: NodeJS.ProcessEnv = { ...process.env, HOMEDATA_API_KEY: "startup-test-key", PORT: "0" };
+  const base: NodeJS.ProcessEnv = { ...process.env, MCP_AUTH: "server-key", HOMEDATA_API_KEY: "startup-test-key", PORT: "0" };
   delete base["MCP_PATH"];
   for (const [env, mentions] of [
     [{}, /MCP_PATH is required/],

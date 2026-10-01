@@ -16,7 +16,7 @@ import { pathToFileURL } from "node:url";
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 import { buildRequest, InvalidArguments, inputSchema } from "./calls.js";
 import { HomedataClient, HomedataError } from "./client.js";
@@ -61,8 +61,7 @@ export function profileTools(profile: Profile): ToolSpec[] {
  * (a non-object body is wrapped as { data }). A field list guessed beyond
  * that would make schema-validating clients reject real answers.
  */
-function chatgptFields(spec: ToolSpec): Record<string, unknown> {
-  const securitySchemes = [{ type: "noauth" }];
+function chatgptFields(spec: ToolSpec, securitySchemes: SecurityScheme[]): Record<string, unknown> {
   return {
     title: spec.label,
     outputSchema: {
@@ -76,7 +75,26 @@ function chatgptFields(spec: ToolSpec): Record<string, unknown> {
   };
 }
 
-export function buildServer(client: HomedataClient | null, profile: Profile = PROFILES.stdio): Server {
+export type SecurityScheme = { type: "noauth" } | { type: "oauth2"; scopes: string[] };
+
+export interface BuildOptions {
+  /** Declared on every ChatGPT tool. Default noauth (the server holds the key). */
+  securitySchemes?: SecurityScheme[];
+  /**
+   * Signed-in mode with no signed-in user: tools are still listed (ChatGPT
+   * lists anonymously), and a data tool call returns this result, which
+   * carries the challenge that makes ChatGPT offer to connect the account.
+   */
+  signInRequired?: () => CallToolResult;
+}
+
+export function buildServer(
+  client: HomedataClient | null,
+  profile: Profile = PROFILES.stdio,
+  options: BuildOptions = {},
+): Server {
+  const schemes = options.securitySchemes ?? [{ type: "noauth" }];
+  const listsData = client !== null || options.signInRequired !== undefined;
   const server = new Server(
     { name: "homedata", version: VERSION },
     { capabilities: { tools: {} }, instructions: profile.instructions },
@@ -85,12 +103,12 @@ export function buildServer(client: HomedataClient | null, profile: Profile = PR
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
-      ...(client
+      ...(listsData
         ? exposed.map((spec) => ({
             name: spec.name,
             description: profile.prices ? descriptionFor(spec.name) : withoutPrice(descriptionFor(spec.name)),
             inputSchema: inputSchema(spec, paramTextFor(spec.name)),
-            ...(profile.chatgptMetadata ? chatgptFields(spec) : {}),
+            ...(profile.chatgptMetadata ? chatgptFields(spec, schemes) : {}),
           }))
         : []),
       ...(profile.signupHelpers
@@ -112,10 +130,11 @@ export function buildServer(client: HomedataClient | null, profile: Profile = PR
       if (name === "check_homedata_api_key") return jsonResult(checkApiKey(client !== null));
     }
 
-    const spec = client ? exposed.find((t) => t.name === name) : undefined;
+    const spec = listsData ? exposed.find((t) => t.name === name) : undefined;
     if (!spec) {
       return jsonResult({ error: "unknown_tool", detail: name }, true);
     }
+    if (!client) return options.signInRequired!();
 
     let apiRequest;
     try {
@@ -126,7 +145,7 @@ export function buildServer(client: HomedataClient | null, profile: Profile = PR
       throw err;
     }
 
-    const response = await client!.send(apiRequest.method, apiRequest.path, apiRequest.query);
+    const response = await client.send(apiRequest.method, apiRequest.path, apiRequest.query);
     return jsonResult(response.body, response.statusCode >= 400, spendMeta(response.headers));
   });
 
