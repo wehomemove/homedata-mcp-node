@@ -59,7 +59,7 @@ curl -s https://mcp.homedata.co.uk/.well-known/oauth-protected-resource
 # A forged token must get 401 invalid_token. 503 means thor could not be asked or the secret differs.
 curl -s -o /dev/null -w '%{http_code}\n' https://mcp.homedata.co.uk/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-  -H 'Authorization: Bearer forged-0123456789abcdef' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+  -H 'Authorization: Bearer not-a-token' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 node scripts/golden-check.mjs https://mcp.homedata.co.uk/mcp
 ```
 
