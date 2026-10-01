@@ -9,6 +9,7 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
+import type { ToolCallEvent } from "../activity.js";
 import { HomedataClient } from "../client.js";
 import { checkAppsChallenge, checkCallsPerMinute, checkMcpPath, ConfigError, createHttpHandler, MinuteLimiter } from "../http.js";
 import { descriptionFor, tools } from "../manifest.js";
@@ -18,13 +19,22 @@ import { CHATGPT_DESCRIPTIONS, CHATGPT_TOOLS, withoutPrice } from "../profile.js
 const MCP_PATH = "/mcp/0123456789abcdef0123456789abcdef";
 const HTTP_ENTRY = join(dirname(fileURLToPath(import.meta.url)), "..", "http.js");
 
-async function start(opts: { callsPerMinute?: number; body?: unknown; status?: number; appsChallenge?: string } = {}) {
+async function start(
+  opts: {
+    callsPerMinute?: number;
+    body?: unknown;
+    status?: number;
+    headers?: Record<string, string>;
+    appsChallenge?: string;
+    activity?: (event: ToolCallEvent) => void;
+  } = {},
+) {
   const sent: string[] = [];
   const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
     sent.push(new URL(String(input)).pathname);
     return new Response(JSON.stringify(opts.body ?? { ok: true }), {
       status: opts.status ?? 200,
-      headers: { "Content-Type": "application/json", "X-Tokens-Charged": "2" },
+      headers: opts.headers ?? { "Content-Type": "application/json", "X-Tokens-Charged": "2" },
     });
   }) as typeof fetch;
   const handler = createHttpHandler({
@@ -32,6 +42,7 @@ async function start(opts: { callsPerMinute?: number; body?: unknown; status?: n
     mcpPath: MCP_PATH,
     callsPerMinute: opts.callsPerMinute,
     appsChallenge: opts.appsChallenge,
+    activity: opts.activity,
   });
   const http: HttpServer = createServer((req, res) => void handler(req, res));
   await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
@@ -94,6 +105,75 @@ test("a tool call reaches the API and keeps spend out of the model's text", asyn
   assert.notEqual(result.isError, true);
   assert.deepEqual(sent, ["/address/find/"]);
   assert.deepEqual(result._meta, { homedata: { tokens_charged: "2" } });
+  await stop();
+});
+
+// The API's wallet refusal, exactly as loki (core/permissions.py wallet_refusal)
+// and thor (LokiInternalClient) send it.
+const LOW_BALANCE = {
+  error: {
+    required: 25,
+    available: 3,
+    topup_url: "https://homedata.co.uk/subscription",
+    code: "insufficient_tokens",
+    message: "This call costs 25 tokens and your balance is 3. Top up at https://homedata.co.uk/subscription.",
+    status: 402,
+  },
+};
+
+test("a low balance answers in ChatGPT with a plain message: no price, amounts or billing link", async () => {
+  const events: ToolCallEvent[] = [];
+  const { base, client, sent, stop } = await start({
+    status: 402,
+    body: LOW_BALANCE,
+    headers: { "Content-Type": "application/json", "X-Tokens-Balance": "3" },
+    activity: (event) => events.push(event),
+  });
+  const result = await client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
+  assert.equal(sent.length, 1);
+  assert.equal(result.isError, true);
+  const text = (result.content as Array<{ text: string }>).map((c) => c.text).join("\n");
+  assert.match(text, /does not have enough credits for this lookup/);
+  assert.match(text, /Add credits in the Homedata account, then try again/);
+
+  // Read the raw wire as well: everything ChatGPT receives, _meta included.
+  const wire = await (
+    await fetch(base + MCP_PATH, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "property_core", arguments: { uprn: "100023336956" } },
+      }),
+    })
+  ).text();
+  for (const answer of [JSON.stringify(result), wire]) {
+    assert.match(answer, /enough credits/);
+    assert.doesNotMatch(answer, /https?:|homedata\.co\.uk|subscription|top.?up|billing/i, "a link survived");
+    assert.doesNotMatch(answer, /\b(25|3)\b|£|\btokens?\b|required|available|balance/i, "a price or amount survived");
+  }
+  // Activity still records the API's refusal, as before.
+  assert.deepEqual(
+    events.map((e) => [e.tool, e.outcome]),
+    [
+      ["property_core", "API error 402"],
+      ["property_core", "API error 402"],
+    ],
+  );
+  await stop();
+});
+
+test("other API errors in ChatGPT pass through unchanged", async () => {
+  const { client, stop } = await start({ status: 404, body: { error: { code: "not_found", message: "No data" } } });
+  const result = await client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
+  assert.equal(result.isError, true);
+  assert.deepEqual(result.structuredContent, {
+    error: "api_error",
+    status_code: 404,
+    detail: { error: { code: "not_found", message: "No data" } },
+  });
   await stop();
 });
 

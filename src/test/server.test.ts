@@ -86,6 +86,19 @@ test("an API error is reported as an error", async () => {
   await client.close();
 });
 
+test("the stdio server passes a low-balance refusal through as the API sent it", async () => {
+  const body = {
+    error: { code: "insufficient_tokens", required: 25, available: 3, topup_url: "https://homedata.co.uk/subscription" },
+  };
+  const { client } = await connect({
+    response: () => new Response(JSON.stringify(body), { status: 402, headers: { "Content-Type": "application/json" } }),
+  });
+  const result = await client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
+  assert.equal(result.isError, true);
+  assert.deepEqual(result.structuredContent, { error: "api_error", status_code: 402, detail: body });
+  await client.close();
+});
+
 test("the helpers spend nothing", async () => {
   // Watches both routes out: the client the server was given, and the global fetch a
   // helper could reach for directly. Recording only the injected client would miss that.
