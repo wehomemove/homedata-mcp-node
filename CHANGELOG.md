@@ -81,6 +81,11 @@ distributions and growth, `solar`, `listed_buildings`, amenities, fuel stations,
 healthcare, `boundaries`, council tax, and the stamp duty and mortgage
 calculators. The full list with prices is in the README.
 
+The remote endpoint can post every tool call to Slack (`SLACK_API_TOKEN`,
+`SLACK_ACTIVITY_CHANNEL`, default `#homedata-chatgpt`): organisation, tool,
+outcome and duration, never argument values. Fire and forget; posting never
+slows or fails a call.
+
 ## [0.1.0] - 2026-05-11
 
 ### Added

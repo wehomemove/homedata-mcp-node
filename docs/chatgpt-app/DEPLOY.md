@@ -44,6 +44,15 @@ If the release is unhealthy it switches back to the previous one and exits 1.
 It keeps three releases. When `deploy/deploy.sh` changes, copy it to the box
 first.
 
+## Slack activity
+
+To post tool calls to `#homedata-chatgpt`, create the channel, invite the
+Homedata app to it, and add to the endpoint's `.env` the bot token thor already
+uses (`SLACK_API_TOKEN` in `/home/forge/homedata.co.uk/.env`, an `xoxb-`
+token). Then restart `homedata-mcp`; the log's start line says
+`Slack activity: on, to #homedata-chatgpt`. Settings are in
+[RUNNING.md](RUNNING.md#activity-in-slack).
+
 ## Rotate the shared secret
 
 Generate it on the box and write the same value into both `.env` files. Then
