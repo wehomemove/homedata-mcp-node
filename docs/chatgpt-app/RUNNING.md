@@ -56,7 +56,8 @@ address, postcode or UPRN. The organisation is `organization_name` from thor's
 introspection answer (`organisation <id>` if thor does not send a name),
 `not signed in` for a call that only got the sign-in challenge, and
 `server key (test wallet)` in `server-key` mode. A tool name the endpoint does
-not offer is posted as `unknown tool`, because it is caller text.
+not offer is posted as `unknown tool`, because it is caller text. A call refused
+by `MCP_CALLS_PER_MINUTE` (429) is posted too, with the outcome `rate limited`.
 
 Posting is fire and forget with a 3 second timeout, so Slack never slows or
 fails a tool call. Posts are capped at 60 a minute; calls over the cap are

@@ -35,7 +35,7 @@ import { challengeHeader, Introspector, protectedResourceMetadata, SCOPE, type O
 import { HomedataClient } from "./client.js";
 import { VERSION } from "./index.js";
 import { PROFILES } from "./profile.js";
-import { buildServer } from "./server.js";
+import { buildServer, reportedToolName } from "./server.js";
 import { isMain } from "./entry.js";
 import { MinuteLimiter } from "./limiter.js";
 
@@ -225,9 +225,11 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
 }
 
 /** JSON-RPC requests in a body that call a tool (a body may be a batch). */
-function toolCalls(body: unknown): number {
+function toolCalls(body: unknown): Array<{ name?: unknown }> {
   const messages = Array.isArray(body) ? body : [body];
-  return messages.filter((m) => (m as { method?: unknown })?.method === "tools/call").length;
+  return messages
+    .filter((m) => (m as { method?: unknown })?.method === "tools/call")
+    .map((m) => ((m as { params?: { name?: unknown } }).params ?? {}));
 }
 
 function bearerToken(req: IncomingMessage): string | null {
@@ -312,8 +314,18 @@ export function createHttpHandler(opts: HttpOptions) {
       }
     }
 
-    for (let i = caller === null ? 0 : toolCalls(body); i > 0; i--) {
+    const calls = toolCalls(body);
+    for (let i = caller === null ? 0 : calls.length; i > 0; i--) {
       if (!limits.take(caller!)) {
+        // None of this request's calls run, and each is still activity: report
+        // it, with the same safe tool name a completed call would carry.
+        for (const call of calls) {
+          try {
+            opts.activity?.({ organisation, tool: reportedToolName(PROFILES.chatgpt, call.name), outcome: "rate limited", ms: 0 });
+          } catch {
+            // Reporting never changes the answer.
+          }
+        }
         return sendJson(res, 429, rpcError("Too many requests. Try again in a minute."), { "Retry-After": "60" });
       }
     }

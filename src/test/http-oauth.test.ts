@@ -266,3 +266,25 @@ test("a reporter that throws never fails the tool call", async () => {
   assert.notEqual(body["result"].isError, true);
   await stop();
 });
+
+test("a rate-limited call is still reported, with a safe tool name and no arguments", async () => {
+  const events: ToolCallEvent[] = [];
+  const { call, stop } = await start({
+    callsPerMinute: 1,
+    answers: { a: active("ka", "1", { organization_id: "42", organization_name: "Acme Estates" }) },
+    activity: (e) => events.push(e),
+  });
+  assert.equal((await call("a")).status, 200);
+  assert.equal((await call("a")).status, 429);
+  assert.equal((await call("a", "SW1A 2AA <!channel>")).status, 429);
+  assert.deepEqual(
+    events.map(({ organisation, tool, outcome }) => ({ organisation, tool, outcome })),
+    [
+      { organisation: "Acme Estates", tool: "crime", outcome: "ok" },
+      { organisation: "Acme Estates", tool: "crime", outcome: "rate limited" },
+      { organisation: "Acme Estates", tool: "unknown tool", outcome: "rate limited" },
+    ],
+  );
+  assert.doesNotMatch(JSON.stringify(events), /SW1A|channel/);
+  await stop();
+});

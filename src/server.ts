@@ -82,6 +82,16 @@ function chatgptFields(spec: ToolSpec, securitySchemes: SecurityScheme[]): Recor
   };
 }
 
+/**
+ * The tool name an activity report may carry: a name this profile offers, or
+ * "unknown tool". Anything else is caller text and could hold a query value.
+ */
+export function reportedToolName(profile: Profile, name: unknown): string {
+  const offered =
+    typeof name === "string" && (profileTools(profile).some((t) => t.name === name) || staticTools().some((t) => t.name === name));
+  return offered ? name : "unknown tool";
+}
+
 export type SecurityScheme = { type: "noauth" } | { type: "oauth2"; scopes: string[] };
 
 export interface BuildOptions {
@@ -141,12 +151,9 @@ export function buildServer(
       return answer.result;
     } finally {
       if (options.onToolCall) {
-        // Only a name this server offers is reported: anything else is caller text.
-        const name = request.params.name;
-        const offered = exposed.some((t) => t.name === name) || staticTools().some((t) => t.name === name);
         try {
           options.onToolCall({
-            tool: offered ? name : "unknown tool",
+            tool: reportedToolName(profile, request.params.name),
             outcome: answer?.outcome ?? "failed",
             ms: performance.now() - started,
           });
