@@ -10,14 +10,14 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import { HomedataClient } from "../client.js";
-import { checkCallsPerMinute, checkMcpPath, ConfigError, createHttpHandler, MinuteLimiter } from "../http.js";
+import { checkAppsChallenge, checkCallsPerMinute, checkMcpPath, ConfigError, createHttpHandler, MinuteLimiter } from "../http.js";
 import { descriptionFor, tools } from "../manifest.js";
-import { CHATGPT_TOOLS, withoutPrice } from "../profile.js";
+import { CHATGPT_DESCRIPTIONS, CHATGPT_TOOLS, withoutPrice } from "../profile.js";
 
 const MCP_PATH = "/mcp/0123456789abcdef0123456789abcdef";
 const HTTP_ENTRY = join(dirname(fileURLToPath(import.meta.url)), "..", "http.js");
 
-async function start(opts: { callsPerMinute?: number; body?: unknown; status?: number } = {}) {
+async function start(opts: { callsPerMinute?: number; body?: unknown; status?: number; appsChallenge?: string } = {}) {
   const sent: string[] = [];
   const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
     sent.push(new URL(String(input)).pathname);
@@ -30,6 +30,7 @@ async function start(opts: { callsPerMinute?: number; body?: unknown; status?: n
     auth: { mode: "server-key", client: new HomedataClient({ apiKey: "http-test", fetchImpl }) },
     mcpPath: MCP_PATH,
     callsPerMinute: opts.callsPerMinute,
+    appsChallenge: opts.appsChallenge,
   });
   const http: HttpServer = createServer((req, res) => void handler(req, res));
   await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
@@ -193,5 +194,46 @@ test("the server refuses to start with a missing or unsafe configuration", () =>
     assert.match(run.stderr, mentions);
     assert.doesNotMatch(run.stderr, /listening/);
     assert.doesNotMatch(run.stderr, /startup-test-key/);
+  }
+});
+
+test("no ChatGPT description points at a tool or tier ChatGPT cannot use", async () => {
+  // Plugin Creator flagged council_tax ("use council_tax_full") and
+  // property_core ("everything in Base"): the catalogue text is written for
+  // the full tool set. A tool reference has an identifier's shape (snake_case);
+  // plain words such as "solar" are prose.
+  const { client, stop } = await start();
+  const exposed = new Set<string>(CHATGPT_TOOLS);
+  const hidden = tools().map((t) => t.name).filter((n) => n.includes("_") && !exposed.has(n));
+  for (const tool of (await client.listTools()).tools) {
+    const text = tool.description ?? "";
+    for (const name of hidden) assert.doesNotMatch(text, new RegExp(`\\b${name}\\b`), `${tool.name} mentions ${name}`);
+    assert.doesNotMatch(text, /\b(Base|Core|Complete|Discovery)\b/, `${tool.name} names a tier`);
+  }
+  await stop();
+});
+
+test("ChatGPT description overrides only cover exposed tools and carry no prices", () => {
+  for (const [name, text] of Object.entries(CHATGPT_DESCRIPTIONS)) {
+    assert.ok((CHATGPT_TOOLS as readonly string[]).includes(name), name);
+    assert.equal(withoutPrice(text), text, `${name} override carries price text`);
+  }
+});
+
+test("the domain-verification route serves exactly the portal's token, or 404 when unset", async () => {
+  const set = await start({ appsChallenge: "oai-challenge_Token.123" });
+  const response = await fetch(set.base + "/.well-known/openai-apps-challenge");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^text\/plain/);
+  assert.equal(await response.text(), "oai-challenge_Token.123");
+  await set.stop();
+
+  const unset = await start();
+  assert.equal((await fetch(unset.base + "/.well-known/openai-apps-challenge")).status, 404);
+  await unset.stop();
+
+  assert.equal(checkAppsChallenge(undefined), undefined);
+  for (const bad of ["short", "has space here", "line\nbreak", "{\"token\":1}"]) {
+    assert.throws(() => checkAppsChallenge(bad), ConfigError, bad);
   }
 });
