@@ -9,8 +9,8 @@ section on connected apps, ChatGPT, account linking, or the lookups made
 through them.
 
 This is a draft for sign-off. **Publishing it is a legal decision for Louis**;
-nothing here has been published. Every statement is checked against the code,
-except the item marked **[CONFIRM]**.
+nothing here has been published. Every statement is checked against the code or
+measured in production.
 
 ---
 
@@ -35,8 +35,11 @@ own privacy policy. We do not share your account details with OpenAI.
 
 **How long we keep it.** A connection stays active while you keep it. The
 access it uses lasts one hour and is renewed automatically for up to 30 days of
-inactivity. Lookups are kept with your account's usage history for
-**[CONFIRM: the API usage-log retention period]**.
+inactivity. We keep request logs for 90 days and prune older logs every night.
+Each log records the path and query string, which include the address or
+postcode you asked about, together with the time, status and result count. For
+lookups made through ChatGPT, the IP address in the log is Homedata's own server
+address, not yours.
 
 **Your choices.** You can disconnect Homedata from ChatGPT's settings at any
 time. Rotating your API key in your Homedata dashboard ends every connected app
@@ -44,7 +47,7 @@ at once.
 
 ---
 
-## Checked against the code (homedata-mcp-node, thor; 2026-10-01)
+## Evidence (homedata-mcp-node, thor and production; 2026-10-01)
 
 - Sign-in and consent on homedata.co.uk; ChatGPT never sees the key: thor
   `AuthorizeController`, consent view, `IntrospectController` (the key goes only
@@ -55,4 +58,7 @@ at once.
 - Tool inputs are only an address, postcode, UPRN or outcode plus filters:
   `src/manifest/tools.json` params for the 15 ChatGPT tools.
 - Rate limiting per user: `src/http.ts` `CallerLimits`.
-- **[CONFIRM]**: how long API usage logs are kept was not measured here.
+- Production request-log measurement: the nightly prune runs and the oldest row
+  is exactly 90 days old. Each row stores the request path and query string,
+  time, status, result count and IP address; requests through ChatGPT record
+  Homedata's server IP rather than the user's IP.
