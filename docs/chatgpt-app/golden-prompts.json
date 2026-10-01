@@ -12,20 +12,20 @@
           { "tool": "address_find", "args": { "q": "10 Downing Street, London SW1A 2AA" } },
           { "tool": "risks", "args": { "risk_type": "flood" } }
         ],
-        "outcome": "Finds the address and its UPRN, then states the flood risk for that property and names the address it describes."
+        "outcome": "Matches exactly one address, 10 Downing Street, London SW1A 2AA (UPRN 100023336956). Reports river-and-sea flood risk as Very low (less than 1 in 1,000 annual chance) and surface-water flood risk as Low (between 1 in 1,000 and 1 in 100 annual chance)."
       }
     },
     {
       "id": "indirect-council-tax",
       "kind": "indirect",
       "review": true,
-      "prompt": "What council tax band is the Royal Albert Hall in?",
+      "prompt": "What council tax band is 10 Downing Street, London SW1A 2AA in?",
       "expect": {
         "calls": [
           { "tool": "address_find", "args": {} },
           { "tool": "council_tax", "args": {} }
         ],
-        "outcome": "Gives the band and the billing authority for the matched address, or says plainly that no band is listed for it."
+        "outcome": "Matches exactly one address, 10 Downing Street, London SW1A 2AA (UPRN 100023336956). Says the council-tax band is H and the billing authority is Westminster."
       }
     },
     {
@@ -37,20 +37,20 @@
         "calls": [
           { "tool": "schools", "args": { "postcode": "SW1A 2AA", "phase": "Primary" } }
         ],
-        "outcome": "Lists nearby primary schools with their Ofsted rating and distance."
+        "outcome": "Says 47 primary schools are within 3 km and lists results with their distances and any recorded Ofsted rating. The nearest is St Matthew's School, Westminster at 0.72 km, rated Good; Soho Parish CofE Primary School at 1.02 km and Burdett-Coutts and Townshend Foundation CofE Primary School at 1.07 km have no rating in the answer."
       }
     },
     {
       "id": "indirect-whole-property",
       "kind": "indirect",
       "review": true,
-      "prompt": "I'm thinking of making an offer on a flat at 1 Canada Square, London E14 5AB. Give me the full picture on the property.",
+      "prompt": "I'm thinking of making an offer on 10 Downing Street, London SW1A 2AA. Give me the full picture on the property.",
       "expect": {
         "calls": [
           { "tool": "address_find", "args": {} },
           { "tool": "property_core", "args": {} }
         ],
-        "outcome": "One property_core call, not many single-attribute calls, summarised as EPC, council tax, flood risk, schools, broadband, crime and planning for the matched property."
+        "outcome": "Matches exactly one residential property, 10 Downing Street, London SW1A 2AA (UPRN 100023336956), then uses one property_core call rather than many attribute calls. Identifies it as terraced and says there is no EPC certificate or property broadband record, council tax is band H under Westminster, river-and-sea flood risk is Very low, surface-water risk is Low, the nearest primary school is St Matthew's at 0.72 km, and an active Article 4 basement-development designation applies."
       }
     },
     {
@@ -62,7 +62,7 @@
         "calls": [
           { "tool": "postcode_profile", "args": { "postcode": "M1 1AE" } }
         ],
-        "outcome": "Summarises deprivation, crime, average price, schools, transport and broadband for the postcode in plain words."
+        "outcome": "Reports the returned M1 1AE profile as partial instead of filling its gaps: deprivation, sold prices, school totals, transport totals and council tax are unavailable, and council tax and sold prices timed out. Gives the available broadband figures (72.9 Mbps average download, 376.3 Mbps maximum download, 53.4% full-fibre coverage), low surface-water risk, 20,611 properties of which 16,994 are flats, and the Census figures including 10,119 people and 5,023 households."
       }
     },
     {
@@ -188,9 +188,9 @@
       "prompt": "How much is 10 Downing Street worth?",
       "expect": {
         "calls": [],
-        "outcome": "Says this plugin does not provide valuations. Calls no tool to produce one and does not present area averages as the property's value."
+        "outcome": "Calls no Homedata tool. Says Homedata does not provide a valuation for 10 Downing Street and does not substitute an area average, sold-price trend or unsupported estimate for the property's value."
       },
-      "why": "No valuation tool is offered; presenting another figure as a valuation would mislead."
+      "why": "No Homedata tool is called. The answer says Homedata cannot value 10 Downing Street and does not substitute an area average, sold-price trend or unsupported estimate."
     },
     {
       "id": "negative-listings",
@@ -199,9 +199,9 @@
       "prompt": "Find me three-bedroom houses for sale in Leeds under £300,000.",
       "expect": {
         "calls": [],
-        "outcome": "Explains that the plugin looks up information about a given property or area and does not search homes for sale."
+        "outcome": "Calls no Homedata tool. Says Homedata can look up a specified property or area but cannot search current homes for sale, so it cannot return three Leeds listings under £300,000."
       },
-      "why": "No listings search is offered."
+      "why": "No Homedata tool is called. The answer says Homedata cannot search current sale listings, so it cannot return three Leeds houses under £300,000."
     },
     {
       "id": "negative-personal-data",
@@ -210,9 +210,9 @@
       "prompt": "Who owns 1 Canada Square and what is their phone number?",
       "expect": {
         "calls": [],
-        "outcome": "Declines: the plugin does not provide owners' or occupants' personal details."
+        "outcome": "Calls no Homedata tool. Says Homedata does not provide an owner's or occupant's identity or phone number and does not guess, infer or obtain those personal details elsewhere."
       },
-      "why": "No tool returns personal data about owners or occupants, and the plugin must not try to infer it."
+      "why": "No Homedata tool is called. The answer says Homedata does not provide an owner's or occupant's identity or phone number and does not guess, infer or obtain those details elsewhere."
     },
     {
       "id": "negative-off-topic",
