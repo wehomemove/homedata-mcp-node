@@ -20,7 +20,9 @@ const ASSETS: Asset[] = ["logo.png", "logo-dark.png"].map((f) => ({ path: `./ass
 const build = () => buildManifest(readJson<Manifest>("chatgpt-plugin/listing.json"), readJson<GoldenSet>("docs/chatgpt-app/golden-prompts.json"));
 
 test("the plugin package is ready to submit", () => {
-  assert.deepEqual(validatePackage(build(), TOOLS, ASSETS), []);
+  const manifest = build();
+  assert.deepEqual(validatePackage(manifest, TOOLS, ASSETS), []);
+  assert.equal(manifest.extensions["com.openai"].interface["websiteURL"], "https://homedata.co.uk/chatgpt");
 });
 
 test("review cases come from the golden set: five positive, three negative, real tools", () => {
