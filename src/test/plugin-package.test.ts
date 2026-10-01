@@ -58,8 +58,23 @@ test("the package check permits only the approved paid-credit disclosure", () =>
   }
 
   const missing = build();
-  missing["description"] = String(missing["description"]).replace(APPROVED_PAID_CREDIT_DISCLOSURE, "");
-  assert.match(validatePackage(missing, TOOLS, ASSETS).join("\n"), /must contain the approved paid-credit disclosure exactly once/);
+  missing.extensions["com.openai"].interface["longDescription"] = String(
+    missing.extensions["com.openai"].interface["longDescription"],
+  ).replace(APPROVED_PAID_CREDIT_DISCLOSURE, "Lookups use your existing account.");
+  assert.match(
+    validatePackage(missing, TOOLS, ASSETS).join("\n"),
+    /interface\.longDescription must contain the approved paid-credit disclosure exactly once/,
+  );
+  assert.match(String(missing["description"]), new RegExp(APPROVED_PAID_CREDIT_DISCLOSURE.replace(".", "\\.")));
+
+  const repeated = build();
+  repeated.extensions["com.openai"].interface["longDescription"] = `${String(
+    repeated.extensions["com.openai"].interface["longDescription"],
+  )} ${APPROVED_PAID_CREDIT_DISCLOSURE}`;
+  assert.match(
+    validatePackage(repeated, TOOLS, ASSETS).join("\n"),
+    /interface\.longDescription must contain the approved paid-credit disclosure exactly once/,
+  );
 });
 
 test("the package check enforces the approved non-commerce declaration", () => {
