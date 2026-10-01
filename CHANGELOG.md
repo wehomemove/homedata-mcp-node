@@ -86,6 +86,11 @@ The remote endpoint can post every tool call to Slack (`SLACK_API_TOKEN`,
 outcome and duration, never argument values. Fire and forget; posting never
 slows or fails a call.
 
+The remote endpoint's ChatGPT tool set leaves out `postcode_profile`: in
+production it returns empty deprivation, school and transport sections, which
+its description promises. Area questions use `deprivation`, `crime`, `schools`
+and `broadband` instead. The stdio server still offers `postcode_profile`.
+
 ## [0.1.0] - 2026-05-11
 
 ### Added

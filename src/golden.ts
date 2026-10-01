@@ -16,7 +16,7 @@ export interface GoldenCase {
   review: boolean;
   prompt: string;
   expect: {
-    /** Must be called, in order. */
+    /** Must be called, in order unless the outcome says any order. */
     calls: ExpectedCall[];
     /** May be called but is not required. Anything outside calls and allowed fails the case. */
     allowed?: ExpectedCall[];

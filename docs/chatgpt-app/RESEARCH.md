@@ -253,6 +253,12 @@ golden set):
 `schools`, `broadband`, `crime`, `price_trends`, `price_growth`,
 `postcode_profile`, `deprivation` and `amenities_all`.
 
+Update 2026-10-01: `postcode_profile` was taken out of this set. Measured in
+production, it returned empty deprivation, school and transport sections (and
+often empty broadband and sold prices) for every postcode tried, while the
+dedicated tools had the data. Re-adding it is one line in `CHATGPT_TOOLS`
+once it returns full data.
+
 **Phase 2: OAuth with the user's own Homedata account.**
 
 - Recommended design: thor becomes the OAuth 2.1 authorization server. Users

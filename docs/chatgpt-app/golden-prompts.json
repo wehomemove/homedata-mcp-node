@@ -1,5 +1,5 @@
 {
-  "about": "Golden prompt set for the Homedata ChatGPT plugin (OpenAI: https://developers.openai.com/plugins/guides/optimize-metadata). Run it in developer mode after every change to tool names, descriptions, schemas or annotations, and record the tool chosen, its arguments and the outcome. Cases marked review=true are the submission packet's five positive and three negative cases. Addresses are public buildings, never private homes. expect.calls lists the tools that must be called, in order, with the arguments that must be present; other arguments may vary. expect.allowed lists calls that may happen but are not required; any call outside calls and allowed fails the case. A case with expect.calls empty and no expect.allowed must not call any Homedata tool.",
+  "about": "Golden prompt set for the Homedata ChatGPT plugin (OpenAI: https://developers.openai.com/plugins/guides/optimize-metadata). Run it in developer mode after every change to tool names, descriptions, schemas or annotations, and record the tool chosen, its arguments and the outcome. Cases marked review=true are the submission packet's five positive and three negative cases. Addresses are public buildings, never private homes. expect.calls lists the tools that must be called, in order unless the outcome says any order, with the arguments that must be present; other arguments may vary. expect.allowed lists calls that may happen but are not required; any call outside calls and allowed fails the case. A case with expect.calls empty and no expect.allowed must not call any Homedata tool.",
   "version": "2026-10-01",
   "cases": [
     {
@@ -60,9 +60,12 @@
       "prompt": "What's the area around postcode M1 1AE like to live in?",
       "expect": {
         "calls": [
-          { "tool": "postcode_profile", "args": { "postcode": "M1 1AE" } }
+          { "tool": "deprivation", "args": { "postcode": "M1 1AE" } },
+          { "tool": "crime", "args": { "postcode": "M1 1AE" } },
+          { "tool": "schools", "args": { "postcode": "M1 1AE" } },
+          { "tool": "broadband", "args": { "postcode": "M1 1AE" } }
         ],
-        "outcome": "Reports the returned M1 1AE profile as partial instead of filling its gaps: deprivation, sold prices, school totals, transport totals and council tax are unavailable, and council tax and sold prices timed out. Gives the available broadband figures (72.9 Mbps average download, 376.3 Mbps maximum download, 53.4% full-fibre coverage), low surface-water risk, 20,611 properties of which 16,994 are flats, and the Census figures including 10,119 people and 5,023 households."
+        "outcome": "Calls deprivation, crime, schools and broadband for M1 1AE, in any order. Says the neighbourhood (Manchester 055D) is in deprivation decile 4, Above Average Deprivation, with crime and living environment in decile 1 and income and employment in decile 10. Reports 3 recorded crimes for April 2026 near the postcode, 2 violence and sexual offences and 1 other crime, without calling the area safe or unsafe on its own authority. Says 67 schools are within 3 km (3 Outstanding, 15 Good, 5 Requires Improvement, 44 not yet inspected), the nearest being Co-op Academy New Islington, a primary at 0.37 km with no Ofsted rating. Gives broadband of 72.9 Mbps average and 376.3 Mbps maximum download with 53.4% full-fibre coverage."
       }
     },
     {

@@ -106,7 +106,7 @@ test("protected-resource metadata points ChatGPT at thor", async () => {
 test("tools are listed without signing in and declare oauth2", async () => {
   const { rpc, introspected, stop } = await start();
   const tools = (await rpc("tools/list")).body["result"].tools as Array<Record<string, any>>;
-  assert.equal(tools.length, 15);
+  assert.equal(tools.length, 14);
   for (const tool of tools) {
     assert.deepEqual(tool["securitySchemes"], [{ type: "oauth2", scopes: ["homedata.read"] }], tool["name"]);
     assert.deepEqual(tool["_meta"].securitySchemes, [{ type: "oauth2", scopes: ["homedata.read"] }]);
