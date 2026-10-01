@@ -11,15 +11,22 @@ npm run build && node scripts/package-chatgpt-plugin.mjs
 ```
 
 - `chatgpt-plugin/listing.json` holds the listing: name, subtitle,
-  description, links, starter prompts, icons, GB-only availability and release
-  notes. It is the only file to edit by hand.
+  description, discovery keywords, capabilities, links, starter prompts, icons,
+  GB-only availability and release notes. It is the only file to edit by hand.
+  Write it in the words people type (house, flat, home, area, neighbourhood,
+  house prices) and name only what the 14 tools answer.
 - The review cases (5 positive, 3 negative) are generated from
   `docs/chatgpt-app/golden-prompts.json` (`review: true`), so the cases we
   submit are the cases we test.
 - `validatePackage()` (run by `npm test` and by the script) enforces OpenAI's
   limits and Homedata's listing rules: no pricing or offers, no competitor
   portals, no internal details, no "MCP"/"Plugin" in the name, HTTPS links,
-  icon sizes, brand-colour contrast, and no credentials in the package.
+  icon sizes, brand-colour contrast, no credentials in the package, keywords
+  present and held to the same rules, and valuations or homes for sale named
+  only in a sentence that rules them out.
+- The tool wording ChatGPT sees is `CHATGPT_DESCRIPTIONS` in `src/profile.ts`:
+  one per tool, each with a "Use this when someone ..." line. Rerun the golden
+  set after changing it.
 
 ## Before submitting
 

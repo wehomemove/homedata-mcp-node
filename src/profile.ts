@@ -57,6 +57,7 @@ const CHATGPT_INSTRUCTIONS = [
   "tools. Coverage is the United Kingdom only; say so plainly for addresses elsewhere.",
   "Postcode and outcode tools cover the surrounding area: for what an area is like to live in, call",
   "`deprivation`, `crime`, `schools` and `broadband` for the postcode.",
+  "It does not value homes, search homes for sale, or say who owns or lives at an address.",
 ].join("\n");
 
 /**
@@ -89,19 +90,85 @@ export const CHATGPT_TOOLS = [
 ] as const;
 
 /**
- * ChatGPT wording for catalogue descriptions that reference tools outside
- * CHATGPT_TOOLS (council_tax_full) or tiers it does not expose (Base). Found by
- * ChatGPT's Plugin Creator against the live endpoint, 2026-10-01.
+ * ChatGPT wording for every exposed tool. The catalogue text is written for the
+ * full tool set (it points at council_tax_full and the Base tier, found by
+ * ChatGPT's Plugin Creator on 2026-10-01) and for developers, so ChatGPT gets
+ * its own: what the tool answers, then a "Use this when" line in the words
+ * people type (house, home, flat, area, neighbourhood), then any limit the
+ * model must state. Name only what the tool returns; valuations and homes for
+ * sale appear only as limits.
  */
 export const CHATGPT_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  address_find:
+    "Find a UK address and its UPRN (Unique Property Reference Number) from what the user typed: a full or partial " +
+    "address, a building name, a postcode or a place. Every property tool takes the UPRN this returns. " +
+    "Use this when someone names a house, home, flat, building or street and you need to identify the property " +
+    "before answering anything about it. United Kingdom only.",
+  address_postcode:
+    "List every registered address at one UK postcode, with the UPRN for each. " +
+    "Use this when someone asks which houses, flats or buildings are at a postcode, or gives only a postcode and " +
+    "needs to pick their home from the list.",
   property_core:
     "The full picture of one property in a single call: address, rooms, EPC rating, last sale, construction, " +
     "dimensions, garden, parking and title basics, plus council tax band, flood risk, schools, broadband, crime, " +
-    "demographics, solar potential, confirmed sales and planning constraints. Use it for a whole-property question " +
-    "rather than calling several smaller tools.",
+    "demographics, solar potential, confirmed sales and planning constraints. " +
+    "Use this when someone wants an overview of, or background on, a house, flat or home they are buying, renting " +
+    "or researching, rather than calling several smaller tools. It does not value the property.",
+  attr_epc:
+    "Energy Performance Certificate (EPC) headline for a property: current and potential energy efficiency rating, " +
+    "EPC floor area and the date of the last assessment. " +
+    "Use this when someone asks how energy efficient a house or flat is, what its energy rating or EPC band is, " +
+    "or when it was last assessed.",
   council_tax:
-    "Council tax band for a property, with the billing authority name and its official code. It gives the band, " +
-    "not the yearly or monthly charge in pounds.",
+    "Council tax band for a property, with the billing authority name and its official code. " +
+    "Use this when someone asks which council tax band a house, flat or home is in, or which council it pays. " +
+    "It gives the band, not the yearly or monthly charge in pounds.",
+  risks:
+    "Environmental risk screening for one property: flood, radon, noise, landfill, coal and other mining, invasive " +
+    "plants and air quality. Ask for one hazard, or for all of them in a single response. " +
+    "Use this when someone asks whether a house, flat or home is at risk of flooding or in a flood zone, about " +
+    "radon, noise, landfill or mining nearby, or wants every environmental check for the property.",
+  planning:
+    "Planning applications near a postcode or coordinates: type, status, description and decision date, with " +
+    "filters for recency, type and status. By default it covers the last 90 days within 0.5 km; it reaches up to " +
+    "365 days and 5 km. " +
+    "Use this when someone asks about planning permission, extensions, building work or new developments near a " +
+    "house, street, area or neighbourhood.",
+  schools:
+    "Schools near a postcode, with Ofsted rating, phase, pupil numbers and distance, from the Department for " +
+    "Education register. " +
+    "Use this when someone asks about good schools, primary or secondary schools, or Ofsted ratings near a home, " +
+    "postcode or neighbourhood. It lists schools by distance, not by admission catchment. England only: for a " +
+    "postcode elsewhere say the data covers England only, never that there are no schools.",
+  broadband:
+    "Broadband availability at a postcode: average and maximum download and upload speeds, superfast, ultrafast, " +
+    "gigabit and full-fibre coverage, and how many premises are covered. From Ofcom Connected Nations. " +
+    "Use this when someone asks how fast the internet or broadband is at a home or postcode, or whether fibre or " +
+    "full fibre is available. Figures cover the postcode, not one line.",
+  crime:
+    "Recorded crime near a postcode or coordinates, by category and month, from Police UK. " +
+    "Use this when someone asks how safe an area or neighbourhood is, or about crime rates, burglary or " +
+    "anti-social behaviour near a house, flat or street. Report the figures; do not call a place safe or unsafe " +
+    "on your own authority.",
+  price_trends:
+    "Average property prices over time for an outcode, the first half of a postcode such as SW1A or M1. " +
+    "Use this when someone asks how house prices or average prices in a town, area or neighbourhood have moved " +
+    "over time. It gives area averages, not the value of any one home.",
+  price_growth:
+    "Capital growth for an outcode area: annual growth rate, returns over one, three, five and ten years, and a " +
+    "historical price index, from Land Registry sold prices. " +
+    "Use this when someone asks whether house prices in an area have gone up or down, or by how much over a number " +
+    "of years. It gives area figures, not the value of any one home.",
+  deprivation:
+    "Index of Multiple Deprivation scores for a postcode, across income, employment, education, health, crime, " +
+    "housing and environment. " +
+    "Use this when someone asks how deprived or well-off an area or neighbourhood is, or about local income, " +
+    "employment or health. England only: say so for postcodes in Scotland, Wales or Northern Ireland.",
+  amenities_all:
+    "Every amenity group near a property in one response: food, education, healthcare, financial, civic, worship, " +
+    "culture, convenience, green spaces, transport and shops. " +
+    "Use this when someone asks what is near a house, flat or home: shops, cafes, restaurants, parks, doctors, " +
+    "banks, places of worship, stations or other local amenities in the neighbourhood.",
 };
 
 export const PROFILES: Record<Profile["name"], Profile> = {
