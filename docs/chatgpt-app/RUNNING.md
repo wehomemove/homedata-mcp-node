@@ -44,6 +44,26 @@ Both modes:
 | `MCP_CALLS_PER_MINUTE` | `30` | Tool calls per caller per minute: per signed-in user in `oauth` mode (unsigned calls only get the sign-in challenge and are not capped), for the whole server in `server-key` mode. A whole number of at least 1. Over the cap, the endpoint answers 429. |
 | `OPENAI_APPS_CHALLENGE` | unset | The token OpenAI's plugin portal shows for domain verification, served as plain text at `/.well-known/openai-apps-challenge`. Unset answers 404. |
 | `PORT` / `HOST` | `4176` / `127.0.0.1` | Listener. |
+| `SLACK_API_TOKEN` | unset (off) | The Homedata Slack app's bot token (`xoxb-`, the same value as thor's `SLACK_API_TOKEN`). When set, every tool call posts one line to Slack. A user token (`xoxp-`) is refused at start, so posts never appear as a person. |
+| `SLACK_ACTIVITY_CHANNEL` | `#homedata-chatgpt` | Where the lines go: a channel name or ID. Invite the Homedata app to it, or Slack answers `not_in_channel`. |
+
+### Activity in Slack
+
+With `SLACK_API_TOKEN` set, each tool call posts one line: organisation, tool,
+outcome and duration, for example
+`✅ Acme Estates · crime · ok · 413 ms`. It never carries an argument value: no
+address, postcode or UPRN. The organisation is `organization_name` from thor's
+introspection answer (`organisation <id>` if thor does not send a name),
+`not signed in` for a call that only got the sign-in challenge, and
+`server key (test wallet)` in `server-key` mode. A tool name the endpoint does
+not offer is posted as `unknown tool`, because it is caller text. A call refused
+by `MCP_CALLS_PER_MINUTE` (429) is posted too, with the outcome `rate limited`.
+
+Posting is fire and forget with a 3 second timeout, so Slack never slows or
+fails a tool call. Posts are capped at 60 a minute; calls over the cap are
+counted on the next line instead. A failed post is logged once per reason
+(`not_in_channel`, `invalid_auth`, `timeout`, ...), never with the token.
+New account connections are posted by thor, not here.
 
 `GET /healthz` answers `{ ok, version }`.
 

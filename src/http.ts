@@ -21,17 +21,25 @@
  * MCP_CALLS_PER_MINUTE caps tool calls per caller (per signed-in user, or for
  * the whole server in server-key mode). Unsigned calls in oauth mode are not
  * capped: they only receive the sign-in challenge. It bounds the rate, not access.
+ *
+ * SLACK_API_TOKEN (the Homedata Slack app's bot token) turns on one Slack line
+ * per tool call in SLACK_ACTIVITY_CHANNEL: organisation, tool, outcome and
+ * duration, never an argument value. See src/activity.ts.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
+import { DEFAULT_SLACK_CHANNEL, SlackActivity, type ActivitySink, type SlackSettings, type ToolCallEvent } from "./activity.js";
 import { challengeHeader, Introspector, protectedResourceMetadata, SCOPE, type OAuthSettings } from "./auth.js";
 import { HomedataClient } from "./client.js";
 import { VERSION } from "./index.js";
 import { PROFILES } from "./profile.js";
-import { buildServer } from "./server.js";
+import { buildServer, reportedToolName } from "./server.js";
 import { isMain } from "./entry.js";
+import { MinuteLimiter } from "./limiter.js";
+
+export { MinuteLimiter };
 
 const MAX_BODY_BYTES = 1_000_000;
 const DEFAULT_ISSUER = "https://homedata.co.uk";
@@ -59,6 +67,8 @@ export interface HttpOptions {
    * answers 404.
    */
   appsChallenge?: string;
+  /** Told about every tool call (src/activity.ts); off when absent. */
+  activity?: ActivitySink;
 }
 
 export class ConfigError extends Error {}
@@ -116,17 +126,31 @@ function checkUrl(name: string, raw: string | undefined): string {
   return raw!;
 }
 
+/**
+ * Activity posting is optional. When set, the token must be a bot token
+ * (xoxb-): a user token (xoxp-) would post as that person.
+ */
+export function checkSlack(env: NodeJS.ProcessEnv): SlackSettings | null {
+  const token = (env["SLACK_API_TOKEN"] ?? "").trim();
+  if (!token) return null;
+  if (!token.startsWith("xoxb-")) {
+    throw new ConfigError("SLACK_API_TOKEN must be the Homedata Slack app's bot token (xoxb-), never a personal user token.");
+  }
+  const channel = (env["SLACK_ACTIVITY_CHANNEL"] ?? "").trim() || DEFAULT_SLACK_CHANNEL;
+  return { token, channel };
+}
+
+type CommonConfig = {
+  mcpPath: string;
+  callsPerMinute: number;
+  port: number;
+  host: string;
+  appsChallenge?: string;
+  slack: SlackSettings | null;
+};
 export type HttpConfig =
-  | { mode: "server-key"; mcpPath: string; callsPerMinute: number; port: number; host: string; appsChallenge?: string }
-  | {
-      mode: "oauth";
-      mcpPath: string;
-      callsPerMinute: number;
-      port: number;
-      host: string;
-      appsChallenge?: string;
-      oauth: OAuthSettings;
-    };
+  | ({ mode: "server-key" } & CommonConfig)
+  | ({ mode: "oauth"; oauth: OAuthSettings } & CommonConfig);
 
 export function configFromEnv(env: NodeJS.ProcessEnv): HttpConfig {
   const common = {
@@ -134,6 +158,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv): HttpConfig {
     appsChallenge: checkAppsChallenge(env["OPENAI_APPS_CHALLENGE"]),
     port: Number(env["PORT"] ?? 4176),
     host: env["HOST"] ?? "127.0.0.1",
+    slack: checkSlack(env),
   };
   const mode = env["MCP_AUTH"] || "oauth";
 
@@ -165,20 +190,6 @@ export function configFromEnv(env: NodeJS.ProcessEnv): HttpConfig {
       introspectionSecret: secret,
     },
   };
-}
-
-/** A rolling one-minute window of call timestamps. */
-export class MinuteLimiter {
-  private readonly stamps: number[] = [];
-  constructor(private readonly limit: number, private readonly now: () => number = Date.now) {}
-
-  take(): boolean {
-    const t = this.now();
-    while (this.stamps.length && t - this.stamps[0]! >= 60_000) this.stamps.shift();
-    if (this.stamps.length >= this.limit) return false;
-    this.stamps.push(t);
-    return true;
-  }
 }
 
 /** One MinuteLimiter per caller, created on first use. */
@@ -214,9 +225,11 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
 }
 
 /** JSON-RPC requests in a body that call a tool (a body may be a batch). */
-function toolCalls(body: unknown): number {
+function toolCalls(body: unknown): Array<{ name?: unknown }> {
   const messages = Array.isArray(body) ? body : [body];
-  return messages.filter((m) => (m as { method?: unknown })?.method === "tools/call").length;
+  return messages
+    .filter((m) => (m as { method?: unknown })?.method === "tools/call")
+    .map((m) => ((m as { params?: { name?: unknown } }).params ?? {}));
 }
 
 function bearerToken(req: IncomingMessage): string | null {
@@ -269,6 +282,8 @@ export function createHttpHandler(opts: HttpOptions) {
     let client: HomedataClient | null = null;
     // Who the call cap is charged to; null means no cap applies.
     let caller: string | null = "server";
+    // Who activity lines name: never anything the caller typed.
+    let organisation = auth.mode === "server-key" ? "server key (test wallet)" : "not signed in";
     if (auth.mode === "server-key") {
       client = auth.client;
     } else {
@@ -289,6 +304,7 @@ export function createHttpHandler(opts: HttpOptions) {
         }
         client = auth.clientFor(check.apiKey);
         caller = `user:${check.subject}`;
+        organisation = check.organisation.name;
       } else {
         // Unsigned calls only ever get the sign-in challenge: they never reach
         // the API or a wallet, so they spend no quota. One shared bucket here
@@ -298,16 +314,29 @@ export function createHttpHandler(opts: HttpOptions) {
       }
     }
 
-    for (let i = caller === null ? 0 : toolCalls(body); i > 0; i--) {
+    const calls = toolCalls(body);
+    for (let i = caller === null ? 0 : calls.length; i > 0; i--) {
       if (!limits.take(caller!)) {
+        // None of this request's calls run, and each is still activity: report
+        // it, with the same safe tool name a completed call would carry.
+        for (const call of calls) {
+          try {
+            opts.activity?.({ organisation, tool: reportedToolName(PROFILES.chatgpt, call.name), outcome: "rate limited", ms: 0 });
+          } catch {
+            // Reporting never changes the answer.
+          }
+        }
         return sendJson(res, 429, rpcError("Too many requests. Try again in a minute."), { "Retry-After": "60" });
       }
     }
 
+    const activity = opts.activity;
+    const onToolCall = activity ? (event: Omit<ToolCallEvent, "organisation">) => activity({ organisation, ...event }) : undefined;
     const server =
       auth.mode === "server-key"
-        ? buildServer(client, PROFILES.chatgpt)
+        ? buildServer(client, PROFILES.chatgpt, { onToolCall })
         : buildServer(client, PROFILES.chatgpt, {
+            onToolCall,
             securitySchemes: [{ type: "oauth2", scopes: [SCOPE] }],
             signInRequired: () => ({
               content: [{ type: "text", text: "Connect your Homedata account to use this tool." }],
@@ -351,11 +380,13 @@ async function main(): Promise<void> {
           introspector: new Introspector(config.oauth),
           clientFor: (apiKey) => new HomedataClient({ apiKey, baseUrl, version: VERSION }),
         };
+  const activity = config.slack ? new SlackActivity(config.slack).report : undefined;
   const handler = createHttpHandler({
     auth,
     mcpPath: config.mcpPath,
     callsPerMinute: config.callsPerMinute,
     appsChallenge: config.appsChallenge,
+    activity,
   });
   createServer((req, res) => {
     handler(req, res).catch((err) => {
@@ -365,6 +396,7 @@ async function main(): Promise<void> {
   }).listen(config.port, config.host, () => {
     // Never log MCP_PATH or any secret: in server-key mode the path guards the test wallet.
     console.error(`homedata-mcp-http ${VERSION} (${config.mode}) listening on http://${config.host}:${config.port}`);
+    console.error(config.slack ? `Slack activity: on, to ${config.slack.channel}` : "Slack activity: off (SLACK_API_TOKEN not set)");
   });
 }
 

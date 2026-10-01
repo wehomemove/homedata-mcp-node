@@ -3,6 +3,7 @@ import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { test } from "node:test";
 
+import type { ToolCallEvent } from "../activity.js";
 import { Introspector, type OAuthSettings } from "../auth.js";
 import { HomedataClient } from "../client.js";
 import { configFromEnv, ConfigError, createHttpHandler } from "../http.js";
@@ -26,7 +27,14 @@ const active = (key: string, sub: string, over: Answer = {}): Answer => ({
   ...over,
 });
 
-async function start(opts: { answers?: Record<string, Answer | "down">; callsPerMinute?: number; now?: () => number } = {}) {
+async function start(
+  opts: {
+    answers?: Record<string, Answer | "down">;
+    callsPerMinute?: number;
+    now?: () => number;
+    activity?: (event: ToolCallEvent) => void;
+  } = {},
+) {
   const introspected: string[] = [];
   const thor = (async (_url: unknown, init?: RequestInit) => {
     assert.equal((init?.headers as Record<string, string>)["Authorization"], `Bearer ${SETTINGS.introspectionSecret}`);
@@ -53,6 +61,7 @@ async function start(opts: { answers?: Record<string, Answer | "down">; callsPer
     mcpPath: "/mcp",
     callsPerMinute: opts.callsPerMinute,
     now: opts.now,
+    activity: opts.activity,
   });
   const http: HttpServer = createServer((req, res) => void handler(req, res));
   await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
@@ -217,5 +226,65 @@ test("unsigned calls spend no quota, so they cannot block anyone's sign-in chall
   // And a signed-in user's own quota is untouched.
   assert.equal((await call("a")).status, 200);
   assert.deepEqual(apiCalls, ["Api-Key ka"]);
+  await stop();
+});
+
+test("every tool call is reported with the organisation thor names, and never its arguments", async () => {
+  const events: ToolCallEvent[] = [];
+  const answers = {
+    named: active("ka", "1", { organization_id: "42", organization_name: "Acme  Estates\n" }),
+    unnamed: active("kb", "2", { organization_id: "7" }),
+  };
+  const { call, stop } = await start({ answers, activity: (e) => events.push(e) });
+  await call("named");
+  await call("unnamed");
+  await call();
+  await call("named", "SW1A 2AA <!channel>");
+  assert.deepEqual(
+    events.map(({ organisation, tool, outcome }) => ({ organisation, tool, outcome })),
+    [
+      { organisation: "Acme Estates", tool: "crime", outcome: "ok" },
+      { organisation: "organisation 7", tool: "crime", outcome: "ok" },
+      { organisation: "not signed in", tool: "crime", outcome: "sign-in required" },
+      { organisation: "Acme Estates", tool: "unknown tool", outcome: "unknown tool" },
+    ],
+  );
+  for (const event of events) assert.ok(event.ms >= 0 && event.ms < 5000);
+  assert.doesNotMatch(JSON.stringify(events), /SW1A|channel/);
+  await stop();
+});
+
+test("a reporter that throws never fails the tool call", async () => {
+  const { call, stop } = await start({
+    answers: { a: active("ka", "1") },
+    activity: () => {
+      throw new Error("slack is on fire");
+    },
+  });
+  const { status, body } = await call("a");
+  assert.equal(status, 200);
+  assert.notEqual(body["result"].isError, true);
+  await stop();
+});
+
+test("a rate-limited call is still reported, with a safe tool name and no arguments", async () => {
+  const events: ToolCallEvent[] = [];
+  const { call, stop } = await start({
+    callsPerMinute: 1,
+    answers: { a: active("ka", "1", { organization_id: "42", organization_name: "Acme Estates" }) },
+    activity: (e) => events.push(e),
+  });
+  assert.equal((await call("a")).status, 200);
+  assert.equal((await call("a")).status, 429);
+  assert.equal((await call("a", "SW1A 2AA <!channel>")).status, 429);
+  assert.deepEqual(
+    events.map(({ organisation, tool, outcome }) => ({ organisation, tool, outcome })),
+    [
+      { organisation: "Acme Estates", tool: "crime", outcome: "ok" },
+      { organisation: "Acme Estates", tool: "crime", outcome: "rate limited" },
+      { organisation: "Acme Estates", tool: "unknown tool", outcome: "rate limited" },
+    ],
+  );
+  assert.doesNotMatch(JSON.stringify(events), /SW1A|channel/);
   await stop();
 });

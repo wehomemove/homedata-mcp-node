@@ -24,6 +24,7 @@ import { descriptionFor, paramTextFor, staticTools, tools, type ToolSpec } from 
 import { PROFILES, withoutPrice, type Profile } from "./profile.js";
 import { checkApiKey, startSignup } from "./signup.js";
 import { isMain } from "./entry.js";
+import type { ToolCallEvent } from "./activity.js";
 
 const HELPER_SCHEMAS: Record<string, Record<string, unknown>> = {
   start_homedata_signup: {
@@ -81,6 +82,16 @@ function chatgptFields(spec: ToolSpec, securitySchemes: SecurityScheme[]): Recor
   };
 }
 
+/**
+ * The tool name an activity report may carry: a name this profile offers, or
+ * "unknown tool". Anything else is caller text and could hold a query value.
+ */
+export function reportedToolName(profile: Profile, name: unknown): string {
+  const offered =
+    typeof name === "string" && (profileTools(profile).some((t) => t.name === name) || staticTools().some((t) => t.name === name));
+  return offered ? name : "unknown tool";
+}
+
 export type SecurityScheme = { type: "noauth" } | { type: "oauth2"; scopes: string[] };
 
 export interface BuildOptions {
@@ -92,6 +103,11 @@ export interface BuildOptions {
    * carries the challenge that makes ChatGPT offer to connect the account.
    */
   signInRequired?: () => CallToolResult;
+  /**
+   * Told about every tool call once it has an answer: tool, outcome and
+   * duration, never the arguments. Must not throw or block; errors are ignored.
+   */
+  onToolCall?: (event: Omit<ToolCallEvent, "organisation">) => void;
 }
 
 export function buildServer(
@@ -128,32 +144,58 @@ export function buildServer(
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const name = request.params.name;
-    const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+    const started = performance.now();
+    let answer: Answer | undefined;
+    try {
+      answer = await callTool(request.params.name, (request.params.arguments ?? {}) as Record<string, unknown>);
+      return answer.result;
+    } finally {
+      if (options.onToolCall) {
+        try {
+          options.onToolCall({
+            tool: reportedToolName(profile, request.params.name),
+            outcome: answer?.outcome ?? "failed",
+            ms: performance.now() - started,
+          });
+        } catch {
+          // Reporting never changes a tool call's answer.
+        }
+      }
+    }
+  });
 
+  /** A tool call's result, and a short outcome for activity reporting. */
+  type Answer = { result: CallToolResult; outcome: string };
+
+  async function callTool(name: string, args: Record<string, unknown>): Promise<Answer> {
     if (profile.signupHelpers) {
-      if (name === "start_homedata_signup") return jsonResult(startSignup(args["email"] as string | undefined));
-      if (name === "check_homedata_api_key") return jsonResult(checkApiKey(client !== null));
+      if (name === "start_homedata_signup") return { result: jsonResult(startSignup(args["email"] as string | undefined)), outcome: "ok" };
+      if (name === "check_homedata_api_key") return { result: jsonResult(checkApiKey(client !== null)), outcome: "ok" };
     }
 
     const spec = listsData ? exposed.find((t) => t.name === name) : undefined;
     if (!spec) {
-      return jsonResult({ error: "unknown_tool", detail: name }, true);
+      return { result: jsonResult({ error: "unknown_tool", detail: name }, true), outcome: "unknown tool" };
     }
-    if (!client) return options.signInRequired!();
+    if (!client) return { result: options.signInRequired!(), outcome: "sign-in required" };
 
     let apiRequest;
     try {
       apiRequest = buildRequest(spec, args);
     } catch (err) {
       // Refused here: an invalid request can still be a charged one.
-      if (err instanceof InvalidArguments) return jsonResult({ error: "invalid_arguments", detail: err.problems }, true);
+      if (err instanceof InvalidArguments) {
+        return { result: jsonResult({ error: "invalid_arguments", detail: err.problems }, true), outcome: "invalid arguments" };
+      }
       throw err;
     }
 
     const response = await client.send(apiRequest.method, apiRequest.path, apiRequest.query);
-    return jsonResult(response.body, response.statusCode >= 400, spendMeta(response.headers));
-  });
+    return {
+      result: jsonResult(response.body, response.statusCode >= 400, spendMeta(response.headers)),
+      outcome: response.statusCode >= 400 ? `API error ${response.statusCode}` : "ok",
+    };
+  }
 
   return server;
 }

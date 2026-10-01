@@ -21,9 +21,15 @@ export interface OAuthSettings {
 }
 
 export type TokenCheck =
-  | { ok: true; apiKey: string; subject: string }
+  | { ok: true; apiKey: string; subject: string; organisation: Organisation }
   | { ok: false; reason: "invalid" }
   | { ok: false; reason: "unavailable" };
+
+/** The signed-in user's organisation, for activity reporting; thor sends the name as an extension field. */
+export interface Organisation {
+  id: string;
+  name: string;
+}
 
 interface Introspection {
   active?: boolean;
@@ -33,6 +39,8 @@ interface Introspection {
   exp?: number;
   sub?: string;
   homedata_api_key?: string;
+  organization_id?: string | number;
+  organization_name?: string;
 }
 
 const CACHE_SECONDS = 60;
@@ -91,11 +99,23 @@ export class Introspector {
       answer.homedata_api_key !== "";
     if (!valid) return { ok: false, reason: "invalid" };
 
-    const result = { ok: true as const, apiKey: answer.homedata_api_key!, subject: String(answer.sub ?? "") };
+    const result = {
+      ok: true as const,
+      apiKey: answer.homedata_api_key!,
+      subject: String(answer.sub ?? ""),
+      organisation: organisationOf(answer),
+    };
     if (this.cache.size >= CACHE_MAX_ENTRIES) this.cache.delete(this.cache.keys().next().value!);
     this.cache.set(key, { result, until: Math.min(this.now() + CACHE_SECONDS * 1000, answer.exp! * 1000) });
     return result;
   }
+}
+
+/** Names are optional: a thor without the name field still gets a readable label. */
+function organisationOf(answer: Introspection): Organisation {
+  const id = answer.organization_id === undefined || answer.organization_id === null ? "" : String(answer.organization_id);
+  const name = typeof answer.organization_name === "string" ? answer.organization_name.replace(/\s+/g, " ").trim().slice(0, 80) : "";
+  return { id, name: name || (id ? `organisation ${id}` : "unknown organisation") };
 }
 
 /** Where this server publishes its protected-resource metadata (RFC 9728). */
