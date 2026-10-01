@@ -180,15 +180,16 @@ export const CHATGPT_DESCRIPTIONS: Readonly<Record<string, string>> = {
  * ChatGPT's answer to a call the API refused for a low balance. The API's own
  * 402 body states the price, the balance and a link to the billing page that
  * starts a purchase ("Top up at .../subscription", plus required, available and
- * topup_url). OpenAI's plugin rules forbid selling credits inside ChatGPT or
- * linking to a page that starts a purchase, so none of that may reach the
- * conversation: no price, no amounts, no link.
+ * topup_url). OpenAI forbids selling tokens or credits in ChatGPT "whether
+ * offered directly or indirectly", so this answer says only that the lookup is
+ * unavailable to the connected account: it names no credits, price, amount or
+ * link, and never tells the user to buy, add or top up anything.
  */
 export const CHATGPT_LOW_BALANCE_ANSWER = {
-  error: "not_enough_credits",
+  error: "lookup_unavailable",
   message:
-    "The Homedata account does not have enough credits for this lookup. " +
-    "Add credits in the Homedata account, then try again.",
+    "Homedata cannot run this lookup for the connected account right now. " +
+    "The account holder can check the Homedata account, then try again.",
 } as const;
 
 export const PROFILES: Record<Profile["name"], Profile> = {

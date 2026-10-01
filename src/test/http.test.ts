@@ -121,7 +121,7 @@ const LOW_BALANCE = {
   },
 };
 
-test("a low balance answers in ChatGPT with a plain message: no price, amounts or billing link", async () => {
+test("a low balance answers in ChatGPT with a plain message: no credits, price, amounts, link or purchase prompt", async () => {
   const events: ToolCallEvent[] = [];
   const { base, client, sent, stop } = await start({
     status: 402,
@@ -129,40 +129,49 @@ test("a low balance answers in ChatGPT with a plain message: no price, amounts o
     headers: { "Content-Type": "application/json", "X-Tokens-Balance": "3" },
     activity: (event) => events.push(event),
   });
-  const result = await client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
-  assert.equal(sent.length, 1);
-  assert.equal(result.isError, true);
-  const text = (result.content as Array<{ text: string }>).map((c) => c.text).join("\n");
-  assert.match(text, /does not have enough credits for this lookup/);
-  assert.match(text, /Add credits in the Homedata account, then try again/);
+  try {
+    const result = await client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
+    assert.equal(sent.length, 1);
+    assert.equal(result.isError, true);
+    const text = (result.content as Array<{ text: string }>).map((c) => c.text).join("\n");
+    assert.match(text, /cannot run this lookup for the connected account/);
+    assert.match(text, /check the Homedata account, then try again/);
 
-  // Read the raw wire as well: everything ChatGPT receives, _meta included.
-  const wire = await (
-    await fetch(base + MCP_PATH, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params: { name: "property_core", arguments: { uprn: "100023336956" } },
-      }),
-    })
-  ).text();
-  for (const answer of [JSON.stringify(result), wire]) {
-    assert.match(answer, /enough credits/);
-    assert.doesNotMatch(answer, /https?:|homedata\.co\.uk|subscription|top.?up|billing/i, "a link survived");
-    assert.doesNotMatch(answer, /\b(25|3)\b|£|\btokens?\b|required|available|balance/i, "a price or amount survived");
+    // Read the raw wire as well: everything ChatGPT receives, _meta included.
+    const wire = await (
+      await fetch(base + MCP_PATH, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "property_core", arguments: { uprn: "100023336956" } },
+        }),
+      })
+    ).text();
+    for (const answer of [JSON.stringify(result), wire]) {
+      assert.match(answer, /cannot run this lookup/);
+      assert.doesNotMatch(answer, /https?:|www\.|\.co\.uk|subscription|billing|pricing/i, "a link survived");
+      assert.doesNotMatch(answer, /\b(25|3)\b|£|\btokens?\b|\brequired\b|\bavailable\b|balance|insufficient/i, "a price or amount survived");
+      assert.doesNotMatch(answer, /\bcredits?\b|\bfunds?\b|\bwallet\b/i, "the answer names what is sold");
+      assert.doesNotMatch(
+        answer,
+        /\b(buy|purchase|pay|payment|add|top.?up|upgrade|plan|subscribe|refill|recharge)\b/i,
+        "the answer prompts a purchase",
+      );
+    }
+    // Activity still records the API's refusal, as before.
+    assert.deepEqual(
+      events.map((e) => [e.tool, e.outcome]),
+      [
+        ["property_core", "API error 402"],
+        ["property_core", "API error 402"],
+      ],
+    );
+  } finally {
+    await stop();
   }
-  // Activity still records the API's refusal, as before.
-  assert.deepEqual(
-    events.map((e) => [e.tool, e.outcome]),
-    [
-      ["property_core", "API error 402"],
-      ["property_core", "API error 402"],
-    ],
-  );
-  await stop();
 });
 
 test("other API errors in ChatGPT pass through unchanged", async () => {
