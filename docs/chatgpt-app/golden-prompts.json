@@ -1,0 +1,248 @@
+{
+  "about": "Golden prompt set for the Homedata ChatGPT plugin (OpenAI: https://developers.openai.com/plugins/guides/optimize-metadata). Run it in developer mode after every change to tool names, descriptions, schemas or annotations, and record the tool chosen, its arguments and the outcome. Cases marked review=true are the submission packet's five positive and three negative cases. Addresses are public buildings, never private homes. expect.calls lists the tools that must be called, in order, with the arguments that must be present; other arguments may vary. A case with expect.calls empty must not call any Homedata tool.",
+  "version": "2026-10-01",
+  "cases": [
+    {
+      "id": "direct-flood-risk",
+      "kind": "direct",
+      "review": true,
+      "prompt": "Use Homedata to check the flood risk at 10 Downing Street, London SW1A 2AA.",
+      "expect": {
+        "calls": [
+          { "tool": "address_find", "args": { "q": "10 Downing Street, London SW1A 2AA" } },
+          { "tool": "risks", "args": { "risk_type": "flood" } }
+        ],
+        "outcome": "Finds the address and its UPRN, then states the flood risk for that property and names the address it describes."
+      }
+    },
+    {
+      "id": "indirect-council-tax",
+      "kind": "indirect",
+      "review": true,
+      "prompt": "What council tax band is the Royal Albert Hall in?",
+      "expect": {
+        "calls": [
+          { "tool": "address_find", "args": {} },
+          { "tool": "council_tax", "args": {} }
+        ],
+        "outcome": "Gives the band and the billing authority for the matched address, or says plainly that no band is listed for it."
+      }
+    },
+    {
+      "id": "indirect-schools",
+      "kind": "indirect",
+      "review": true,
+      "prompt": "Are there any good primary schools near postcode SW1A 2AA?",
+      "expect": {
+        "calls": [
+          { "tool": "schools", "args": { "postcode": "SW1A 2AA", "phase": "Primary" } }
+        ],
+        "outcome": "Lists nearby primary schools with their Ofsted rating and distance."
+      }
+    },
+    {
+      "id": "indirect-whole-property",
+      "kind": "indirect",
+      "review": true,
+      "prompt": "I'm thinking of making an offer on a flat at 1 Canada Square, London E14 5AB. Give me the full picture on the property.",
+      "expect": {
+        "calls": [
+          { "tool": "address_find", "args": {} },
+          { "tool": "property_core", "args": {} }
+        ],
+        "outcome": "One property_core call, not many single-attribute calls, summarised as EPC, council tax, flood risk, schools, broadband, crime and planning for the matched property."
+      }
+    },
+    {
+      "id": "indirect-area-check",
+      "kind": "indirect",
+      "review": true,
+      "prompt": "What's the area around postcode M1 1AE like to live in?",
+      "expect": {
+        "calls": [
+          { "tool": "postcode_profile", "args": { "postcode": "M1 1AE" } }
+        ],
+        "outcome": "Summarises deprivation, crime, average price, schools, transport and broadband for the postcode in plain words."
+      }
+    },
+    {
+      "id": "direct-epc",
+      "kind": "direct",
+      "review": false,
+      "prompt": "Look up the EPC rating of the British Museum, Great Russell Street, London WC1B 3DG on Homedata.",
+      "expect": {
+        "calls": [
+          { "tool": "address_find", "args": {} },
+          { "tool": "attr_epc", "args": {} }
+        ],
+        "outcome": "Gives the current and potential rating and the assessment date, or says no certificate is held."
+      }
+    },
+    {
+      "id": "indirect-broadband",
+      "kind": "indirect",
+      "review": false,
+      "prompt": "How fast is the broadband at postcode EH1 1YZ? Is full fibre available?",
+      "expect": {
+        "calls": [{ "tool": "broadband", "args": { "postcode": "EH1 1YZ" } }],
+        "outcome": "States average and maximum speeds and full-fibre coverage for the postcode."
+      }
+    },
+    {
+      "id": "indirect-crime",
+      "kind": "indirect",
+      "review": false,
+      "prompt": "Is there much crime around LS1 4DY?",
+      "expect": {
+        "calls": [{ "tool": "crime", "args": { "postcode": "LS1 4DY" } }],
+        "outcome": "Summarises recorded crime by category for the area, without calling the area safe or unsafe on its own authority."
+      }
+    },
+    {
+      "id": "indirect-prices",
+      "kind": "indirect",
+      "review": false,
+      "prompt": "Have house prices gone up in the BS1 area over the last five years?",
+      "expect": {
+        "calls": [{ "tool": "price_growth", "args": { "outcode": "BS1" } }],
+        "outcome": "Gives the five-year return and the annual growth rate for BS1."
+      }
+    },
+    {
+      "id": "indirect-price-trend",
+      "kind": "indirect",
+      "review": false,
+      "prompt": "Show me how average property prices in the SW1A outcode have moved over time.",
+      "expect": {
+        "calls": [{ "tool": "price_trends", "args": { "outcode": "SW1A" } }],
+        "outcome": "Describes the trend in average prices over time for SW1A."
+      }
+    },
+    {
+      "id": "indirect-deprivation",
+      "kind": "indirect",
+      "review": false,
+      "prompt": "How deprived is the neighbourhood around B1 1BB?",
+      "expect": {
+        "calls": [{ "tool": "deprivation", "args": { "postcode": "B1 1BB" } }],
+        "outcome": "Gives the Index of Multiple Deprivation scores, and notes that the index covers England only."
+      }
+    },
+    {
+      "id": "indirect-planning",
+      "kind": "indirect",
+      "review": false,
+      "prompt": "Any planning applications near CB2 1TN recently?",
+      "expect": {
+        "calls": [{ "tool": "planning", "args": { "postcode": "CB2 1TN" } }],
+        "outcome": "Lists recent applications with type, status and decision date."
+      }
+    },
+    {
+      "id": "indirect-amenities",
+      "kind": "indirect",
+      "review": false,
+      "prompt": "What shops, cafes and parks are near the Tate Modern, Bankside, London SE1 9TG?",
+      "expect": {
+        "calls": [
+          { "tool": "address_find", "args": {} },
+          { "tool": "amenities_all", "args": {} }
+        ],
+        "outcome": "Groups nearby amenities by type."
+      }
+    },
+    {
+      "id": "direct-postcode-addresses",
+      "kind": "direct",
+      "review": false,
+      "prompt": "List every address registered at postcode SW1A 2AA using Homedata.",
+      "expect": {
+        "calls": [{ "tool": "address_postcode", "args": { "postcode": "SW1A 2AA" } }],
+        "outcome": "Lists the addresses at the postcode."
+      }
+    },
+    {
+      "id": "followup-reuse-uprn",
+      "kind": "followup",
+      "review": false,
+      "prompt": "(after direct-flood-risk) And what about radon there?",
+      "expect": {
+        "calls": [{ "tool": "risks", "args": { "risk_type": "radon" } }],
+        "outcome": "Reuses the UPRN from the earlier answer: no second address_find."
+      }
+    },
+    {
+      "id": "followup-all-risks",
+      "kind": "followup",
+      "review": false,
+      "prompt": "(after direct-flood-risk) Check every other environmental risk for it too.",
+      "expect": {
+        "calls": [{ "tool": "risks", "args": { "risk_type": "all" } }],
+        "outcome": "One call with risk_type all, not one call per hazard."
+      }
+    },
+    {
+      "id": "negative-valuation",
+      "kind": "negative",
+      "review": true,
+      "prompt": "How much is 10 Downing Street worth?",
+      "expect": {
+        "calls": [],
+        "outcome": "Says this plugin does not provide valuations. Calls no tool to produce one and does not present area averages as the property's value."
+      },
+      "why": "No valuation tool is offered; presenting another figure as a valuation would mislead."
+    },
+    {
+      "id": "negative-listings",
+      "kind": "negative",
+      "review": true,
+      "prompt": "Find me three-bedroom houses for sale in Leeds under £300,000.",
+      "expect": {
+        "calls": [],
+        "outcome": "Explains that the plugin looks up information about a given property or area and does not search homes for sale."
+      },
+      "why": "No listings search is offered."
+    },
+    {
+      "id": "negative-personal-data",
+      "kind": "negative",
+      "review": true,
+      "prompt": "Who owns 1 Canada Square and what is their phone number?",
+      "expect": {
+        "calls": [],
+        "outcome": "Declines: the plugin does not provide owners' or occupants' personal details."
+      },
+      "why": "No tool returns personal data about owners or occupants, and the plugin must not try to infer it."
+    },
+    {
+      "id": "negative-off-topic",
+      "kind": "negative",
+      "review": false,
+      "prompt": "What's the weather going to be like in Bristol tomorrow?",
+      "expect": { "calls": [], "outcome": "Does not use the plugin." },
+      "why": "Not a property or area-data question."
+    },
+    {
+      "id": "boundary-outside-uk",
+      "kind": "boundary",
+      "review": false,
+      "prompt": "What's the flood risk at 1 Rue de Rivoli, Paris?",
+      "expect": {
+        "calls": [],
+        "outcome": "Says coverage is the United Kingdom only. At most one address_find, which finds nothing; no property tool is called."
+      },
+      "why": "UK-only data. An address_find that returns nothing is acceptable; a guessed UPRN is not."
+    },
+    {
+      "id": "boundary-schools-scotland",
+      "kind": "boundary",
+      "review": false,
+      "prompt": "Are there good schools near EH1 1YZ?",
+      "expect": {
+        "calls": [{ "tool": "schools", "args": { "postcode": "EH1 1YZ" } }],
+        "outcome": "Says the schools data covers England only when nothing comes back for a Scottish postcode, rather than saying there are no schools."
+      },
+      "why": "The schools register is England-only."
+    }
+  ]
+}
