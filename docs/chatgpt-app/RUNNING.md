@@ -20,3 +20,22 @@ npx @modelcontextprotocol/inspector   # Streamable HTTP → http://127.0.0.1:417
 
 The stdio server (`homedata-mcp`) is unchanged: it serves every tool, with
 prices and the signup helpers.
+
+## Golden prompt set
+
+`docs/chatgpt-app/golden-prompts.json` holds the labelled prompts to run in
+ChatGPT developer mode after every change to tool names, descriptions,
+schemas or annotations: direct, indirect, follow-up, negative and boundary
+cases. A case may list `expect.allowed` calls that can happen but are not required; any other call fails it. The cases marked `review: true` are the submission packet's five
+positive and three negative cases.
+
+`npm test` checks the set against the ChatGPT tool list. To check it against
+a deployed endpoint:
+
+```sh
+npm run build && node scripts/golden-check.mjs https://<host>/mcp/<secret>
+```
+
+It exits 0 when the set holds, 1 when it has drifted from the tools, and 2
+when the endpoint cannot be read. These checks keep the set in step with the
+tools; only a run in ChatGPT shows whether the model picks them.
