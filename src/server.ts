@@ -21,23 +21,9 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import { buildRequest, InvalidArguments, inputSchema } from "./calls.js";
 import { HomedataClient, HomedataError } from "./client.js";
 import { VERSION } from "./index.js";
-import { descriptionFor, paramTextFor, staticTools, tools } from "./manifest.js";
+import { descriptionFor, paramTextFor, staticTools, tools, type ToolSpec } from "./manifest.js";
+import { PROFILES, withoutPrice, type Profile } from "./profile.js";
 import { checkApiKey, startSignup } from "./signup.js";
-
-const INSTRUCTIONS = [
-  "Homedata answers questions about UK property: addresses and UPRNs, EPC, council tax, sale history,",
-  "planning, environmental risk, schools, broadband, crime, local amenities and area statistics.",
-  "",
-  "Start with `address_find` to turn an address into a UPRN, then use the UPRN tools. Postcode and",
-  "outcode tools cover the surrounding area.",
-  "",
-  "For a whole property, prefer one tier call over many small ones: `property_base` for the basics,",
-  "`property_core` for the usual full picture, `property_complete` for everything. `property_discovery`",
-  "costs 1 token and shows what a property has before you commit.",
-  "",
-  "Calls are paid for in tokens from a prepaid balance. Each tool's description states its price, and a",
-  "call reports what it actually cost in its `homedata.tokens_charged` metadata.",
-].join("\n");
 
 const HELPER_SCHEMAS: Record<string, Record<string, unknown>> = {
   start_homedata_signup: {
@@ -58,26 +44,62 @@ function spendMeta(headers: Headers): Record<string, unknown> | undefined {
   return Object.keys(spend).length ? { homedata: spend } : undefined;
 }
 
-export function buildServer(client: HomedataClient | null): Server {
+/** The catalogue tools a profile exposes, in manifest order. */
+export function profileTools(profile: Profile): ToolSpec[] {
+  const wanted = profile.tools;
+  return wanted === "all" ? tools() : tools().filter((t) => wanted.includes(t.name));
+}
+
+/**
+ * ChatGPT descriptor fields. Every catalogue tool is a GET against a bounded
+ * dataset: it reads, never writes, and does not reach the open internet.
+ *
+ * outputSchema: OpenAI asks for one wherever a tool returns structured data.
+ * It says only what the API contract guarantees: the API's OpenAPI spec
+ * publishes no typed response body for any curated tool ("Unspecified response
+ * body" or none at all), and jsonResult always returns an object
+ * (a non-object body is wrapped as { data }). A field list guessed beyond
+ * that would make schema-validating clients reject real answers.
+ */
+function chatgptFields(spec: ToolSpec): Record<string, unknown> {
+  const securitySchemes = [{ type: "noauth" }];
+  return {
+    title: spec.label,
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      description: `${spec.label} from the Homedata API, as the API returns it.`,
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    securitySchemes,
+    _meta: { securitySchemes },
+  };
+}
+
+export function buildServer(client: HomedataClient | null, profile: Profile = PROFILES.stdio): Server {
   const server = new Server(
     { name: "homedata", version: VERSION },
-    { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
+    { capabilities: { tools: {} }, instructions: profile.instructions },
   );
+  const exposed = profileTools(profile);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       ...(client
-        ? tools().map((spec) => ({
+        ? exposed.map((spec) => ({
             name: spec.name,
-            description: descriptionFor(spec.name),
+            description: profile.prices ? descriptionFor(spec.name) : withoutPrice(descriptionFor(spec.name)),
             inputSchema: inputSchema(spec, paramTextFor(spec.name)),
+            ...(profile.chatgptMetadata ? chatgptFields(spec) : {}),
           }))
         : []),
-      ...staticTools().map((spec) => ({
-        name: spec.name,
-        description: descriptionFor(spec.name),
-        inputSchema: HELPER_SCHEMAS[spec.name] ?? { type: "object", properties: {}, additionalProperties: false },
-      })),
+      ...(profile.signupHelpers
+        ? staticTools().map((spec) => ({
+            name: spec.name,
+            description: descriptionFor(spec.name),
+            inputSchema: HELPER_SCHEMAS[spec.name] ?? { type: "object", properties: {}, additionalProperties: false },
+          }))
+        : []),
     ],
   }));
 
@@ -85,10 +107,12 @@ export function buildServer(client: HomedataClient | null): Server {
     const name = request.params.name;
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
 
-    if (name === "start_homedata_signup") return jsonResult(startSignup(args["email"] as string | undefined));
-    if (name === "check_homedata_api_key") return jsonResult(checkApiKey(client !== null));
+    if (profile.signupHelpers) {
+      if (name === "start_homedata_signup") return jsonResult(startSignup(args["email"] as string | undefined));
+      if (name === "check_homedata_api_key") return jsonResult(checkApiKey(client !== null));
+    }
 
-    const spec = client ? tools().find((t) => t.name === name) : undefined;
+    const spec = client ? exposed.find((t) => t.name === name) : undefined;
     if (!spec) {
       return jsonResult({ error: "unknown_tool", detail: name }, true);
     }
