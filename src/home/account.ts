@@ -167,8 +167,24 @@ export function challengeHeader(resource: string, scope: string, error: { code: 
 
 export type AccountOutcome =
   | { kind: "result"; body: unknown; isError: boolean }
-  | { kind: "sign-in"; challenge: string; message: string }
+  /** refused: atlas turned down the token the caller sent, so the HTTP answer is a 401 too. */
+  | { kind: "sign-in"; challenge: string; message: string; refused: boolean }
   | { kind: "unavailable" };
+
+/**
+ * Whether atlas refused the token itself. atlas answers 401 for a token that is
+ * unknown, revoked, expired or bound to another resource; a 401 or 403 whose
+ * challenge says insufficient_scope is a missing permission. Anything else,
+ * including a 404 while atlas's Socket surface is off or a 403 with no
+ * challenge (such as a Cloudflare block), is an outage and never signs out.
+ */
+function refusedAs(response: Response): "invalid_token" | "insufficient_scope" | null {
+  const challenge = response.headers.get("www-authenticate") ?? "";
+  const code = /\berror="?([a-z_]+)"?/i.exec(challenge)?.[1]?.toLowerCase();
+  if (response.status === 401) return code === "insufficient_scope" ? "insufficient_scope" : "invalid_token";
+  if (response.status === 403 && (code === "insufficient_scope" || code === "invalid_token")) return code;
+  return null;
+}
 
 type JsonObject = Record<string, unknown>;
 const object = (value: unknown): JsonObject => value !== null && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : {};
@@ -182,8 +198,16 @@ export class AccountTools {
     this.logger = settings.logger ?? ((message, detail) => console.error(message, detail));
   }
 
-  private signIn(tool: AccountTool, code: "invalid_token" | "insufficient_scope", description: string, message: string): AccountOutcome {
-    return { kind: "sign-in", challenge: challengeHeader(this.settings.resource, tool.scope, { code, description }), message };
+  private signIn(tool: AccountTool, code: "invalid_token" | "insufficient_scope", description: string, message: string, refused = true): AccountOutcome {
+    return { kind: "sign-in", challenge: challengeHeader(this.settings.resource, tool.scope, { code, description }), message, refused };
+  }
+
+  private expired(tool: AccountTool): AccountOutcome {
+    return this.signIn(tool, "invalid_token", "Your home.co.uk connection has expired. Sign in again.", "Your home.co.uk connection has expired. Sign in again to use this tool.");
+  }
+
+  private missingScope(tool: AccountTool): AccountOutcome {
+    return this.signIn(tool, "insufficient_scope", `Allow ${tool.scope} on home.co.uk to continue.`, "This home.co.uk connection does not include that permission. Sign in again and allow it.");
   }
 
   /** Runs one account tool for the bearer token the caller sent, or asks them to sign in. */
@@ -191,7 +215,7 @@ export class AccountTools {
     const tool = BY_NAME.get(name);
     if (!tool) throw new Error(`not an account tool: ${name}`);
     if (token === null) {
-      return this.signIn(tool, "invalid_token", "Sign in to home.co.uk to continue.", "Sign in to your home.co.uk account to use this tool.");
+      return this.signIn(tool, "invalid_token", "Sign in to home.co.uk to continue.", "Sign in to your home.co.uk account to use this tool.", false);
     }
 
     let forwarded: Record<string, unknown> = args;
@@ -209,9 +233,9 @@ export class AccountTools {
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: forwarded } }),
         signal: AbortSignal.timeout(this.settings.timeoutMs ?? 15_000),
       });
-      if (response.status === 401) {
-        return this.signIn(tool, "invalid_token", "Your home.co.uk connection has expired. Sign in again.", "Your home.co.uk connection has expired. Sign in again to use this tool.");
-      }
+      const refusal = refusedAs(response);
+      if (refusal === "insufficient_scope") return this.missingScope(tool);
+      if (refusal === "invalid_token") return this.expired(tool);
       if (!response.ok) {
         this.logger(`Home account request failed: ${name}`, { statusCode: response.status });
         return { kind: "unavailable" };
@@ -233,9 +257,7 @@ export class AccountTools {
     let body: unknown;
     try { body = JSON.parse(text); } catch { body = { message: text }; }
     const isError = result["isError"] === true;
-    if (isError && object(body)["error"] === MISSING_SCOPE) {
-      return this.signIn(tool, "insufficient_scope", `Allow ${tool.scope} on home.co.uk to continue.`, "This home.co.uk connection does not include that permission. Sign in again and allow it.");
-    }
+    if (isError && object(body)["error"] === MISSING_SCOPE) return this.missingScope(tool);
     if (!isError && area !== undefined) body = { ...object(body), area };
     return { kind: "result", body, isError };
   }

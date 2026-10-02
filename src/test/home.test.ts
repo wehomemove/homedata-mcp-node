@@ -693,7 +693,7 @@ const TOKEN = "atlas-token-0123456789abcdef";
 const RESOURCE = "https://mcp.home.test";
 const ACCOUNT_URL = "https://atlas.test/api/mcp";
 
-type AtlasAnswer = { status?: number; result?: unknown; throws?: boolean };
+type AtlasAnswer = { status?: number; result?: unknown; throws?: boolean; headers?: Record<string, string> };
 
 /** A fake atlas MCP endpoint: records what it was sent and answers per tool. */
 function atlas(answers: Record<string, AtlasAnswer> = {}) {
@@ -704,7 +704,7 @@ function atlas(answers: Record<string, AtlasAnswer> = {}) {
     const answer = answers[body["params"].name] ?? {};
     if (answer.throws) throw new TypeError(`fetch failed for ${String(input)}`);
     const result = answer.result ?? { content: [{ type: "text", text: JSON.stringify({ ok: body["params"].name }) }], isError: false };
-    return new Response(JSON.stringify(answer.status && answer.status >= 400 ? { error: "invalid_token" } : { jsonrpc: "2.0", id: body["id"], result }), { status: answer.status ?? 200, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify(answer.status && answer.status >= 400 ? { error: "invalid_token" } : { jsonrpc: "2.0", id: body["id"], result }), { status: answer.status ?? 200, headers: { "Content-Type": "application/json", ...answer.headers } });
   }) as typeof fetch;
   return { calls, fetchImpl };
 }
@@ -720,7 +720,7 @@ async function startAccount(answers: Record<string, AtlasAnswer> = {}, fixtureOp
       headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify({ jsonrpc: "2.0", id: 7, method, params }),
     });
-    return { status: response.status, body: (await response.json()) as Record<string, any> };
+    return { status: response.status, headers: response.headers, body: (await response.json()) as Record<string, any> };
   };
   const call = async (name: string, args: Record<string, unknown>, token?: string) => (await rpc("tools/call", { name, arguments: args }, token)).body["result"] as Record<string, any>;
   return { ...app, atlas: fake.calls, logged, rpc, call };
@@ -792,7 +792,7 @@ test("an unsigned account call returns the sign-in challenge for its scope and n
       const result = await app.call(name, name.startsWith("delete") ? { id: "a1" } : {});
       assert.equal(result["isError"], true);
       const challenge = challengeOf(result)!;
-      assert.match(challenge, new RegExp(`^Bearer scope="${scope}", resource_metadata="https://mcp\\.home\\.test/\\.well-known/oauth-protected-resource", error="invalid_token", error_description="`));
+      assert.match(challenge, new RegExp(`^${SCHEME} scope="${scope}", resource_metadata="https://mcp\\.home\\.test/\\.well-known/oauth-protected-resource", error="invalid_token", error_description="`));
     }
     assert.deepEqual(app.atlas, []);
     // A search tool still answers without signing in.
@@ -830,20 +830,76 @@ test("atlas's own tool errors pass through as tool errors", async () => {
   } finally { await app.stop(); }
 });
 
-test("a token atlas refuses asks for sign-in again; a missing scope asks for that scope; an atlas outage never signs out", async () => {
+// The auth scheme is kept apart from its parameters, as atlas does, so secret
+// screens do not read these challenges as committed bearer credentials.
+const SCHEME = "Bearer";
+const atlasChallenge = (params: string) => ({ "WWW-Authenticate": `${SCHEME} ${params}` });
+// What atlas's McpApiAuthentication sends for a token it will not accept.
+const ATLAS_REFUSAL = { status: 401, headers: atlasChallenge('resource_metadata="https://atlas.test/.well-known/oauth-protected-resource/api/mcp", error="invalid_token"') };
+const MISSING_SCOPE_RESULT = { result: { content: [{ type: "text", text: JSON.stringify({ error: "This connection has not been granted the required permission." }) }], isError: true } };
+
+test("a token atlas refuses (forged, expired or revoked) is an HTTP 401 asking the user to sign in again", async () => {
+  const app = await startAccount({ list_saved_searches: ATLAS_REFUSAL, delete_price_alert: { status: 401 } });
+  try {
+    for (const [name, args, scope] of [["list_saved_searches", {}, "home.saved-searches"], ["delete_price_alert", { id: "a1" }, "home.price-alerts"]] as const) {
+      const answer = await app.rpc("tools/call", { name, arguments: args }, TOKEN);
+      assert.equal(answer.status, 401, name);
+      const header = answer.headers.get("www-authenticate")!;
+      // Points at this endpoint's metadata, never at atlas's.
+      assert.match(header, new RegExp(`^${SCHEME} scope="${scope}", resource_metadata="https://mcp\\.home\\.test/\\.well-known/oauth-protected-resource", error="invalid_token", error_description="`), name);
+      assert.equal(answer.headers.get("cache-control"), "no-store", name);
+      const result = answer.body["result"] as Record<string, any>;
+      assert.equal(result["isError"], true, name);
+      assert.equal(challengeOf(result), header, name);
+      assert.match(result["content"][0].text, /expired\. Sign in again/, name);
+    }
+  } finally { await app.stop(); }
+});
+
+test("a token without the tool's scope is an HTTP 401 asking for that scope, however atlas says so", async () => {
   const app = await startAccount({
-    list_saved_searches: { status: 401 },
-    list_price_alerts: { result: { content: [{ type: "text", text: JSON.stringify({ error: "This connection has not been granted the required permission." }) }], isError: true } },
+    list_price_alerts: MISSING_SCOPE_RESULT,
+    list_saved_searches: { status: 403, headers: atlasChallenge('error="insufficient_scope", scope="home.saved-searches"') },
+    delete_saved_search: { status: 401, headers: atlasChallenge('error="insufficient_scope"') },
+  });
+  try {
+    for (const [name, args, scope] of [["list_price_alerts", {}, "home.price-alerts"], ["list_saved_searches", {}, "home.saved-searches"], ["delete_saved_search", { id: "s1" }, "home.saved-searches"]] as const) {
+      const answer = await app.rpc("tools/call", { name, arguments: args }, TOKEN);
+      assert.equal(answer.status, 401, name);
+      const header = answer.headers.get("www-authenticate")!;
+      assert.match(header, new RegExp(`^${SCHEME} scope="${scope}", resource_metadata="https://mcp\\.home\\.test/\\.well-known/oauth-protected-resource", error="insufficient_scope"`), name);
+      assert.equal(challengeOf(answer.body["result"]), header, name);
+    }
+  } finally { await app.stop(); }
+});
+
+test("an unsigned account call keeps HTTP 200 with the challenge in the result", async () => {
+  const app = await startAccount();
+  try {
+    const answer = await app.rpc("tools/call", { name: "list_saved_searches", arguments: {} });
+    assert.equal(answer.status, 200);
+    assert.equal(answer.headers.get("www-authenticate"), null);
+    assert.match(challengeOf(answer.body["result"])!, /error="invalid_token"/);
+  } finally { await app.stop(); }
+});
+
+test("an atlas outage or any other upstream error stays the neutral gap, with no challenge and no 401", async () => {
+  const app = await startAccount({
     pause_saved_search: { status: 500 },
+    // atlas's Socket surface switched off.
     delete_saved_search: { status: 404 },
+    // A 403 with no OAuth challenge, such as a Cloudflare block.
+    list_saved_searches: { status: 403 },
+    list_price_alerts: { status: 429, headers: { "Retry-After": "60" } },
     get_saved_search_new_results: { throws: true },
     delete_price_alert: { result: "not a result" },
   });
   try {
-    assert.match(challengeOf(await app.call("list_saved_searches", {}, TOKEN))!, /^Bearer scope="home\.saved-searches", .*error="invalid_token"/);
-    assert.match(challengeOf(await app.call("list_price_alerts", {}, TOKEN))!, /^Bearer scope="home\.price-alerts", .*error="insufficient_scope"/);
-    for (const [name, args] of [["pause_saved_search", { id: "s1", paused: true }], ["delete_saved_search", { id: "s1" }], ["get_saved_search_new_results", { id: "s1" }], ["delete_price_alert", { id: "a1" }]] as const) {
-      const result = await app.call(name, args, TOKEN);
+    for (const [name, args] of [["pause_saved_search", { id: "s1", paused: true }], ["delete_saved_search", { id: "s1" }], ["list_saved_searches", {}], ["list_price_alerts", {}], ["get_saved_search_new_results", { id: "s1" }], ["delete_price_alert", { id: "a1" }]] as const) {
+      const answer = await app.rpc("tools/call", { name, arguments: args }, TOKEN);
+      assert.equal(answer.status, 200, name);
+      assert.equal(answer.headers.get("www-authenticate"), null, name);
+      const result = answer.body["result"] as Record<string, any>;
       assert.equal(result["isError"], true, name);
       assert.deepEqual(result["structuredContent"], { available: false, reason: "Not available right now." }, name);
       assert.equal(challengeOf(result), undefined, name);

@@ -135,6 +135,8 @@ export interface HomeAccount {
   tools: AccountTools;
   /** The caller's bearer token, passed to atlas only; null when they sent none. */
   token: string | null;
+  /** Told the challenge when atlas refuses that token, so the HTTP answer can be a 401 carrying it. */
+  onRefused?: (challenge: string) => void;
 }
 
 function accountTools() {
@@ -212,6 +214,7 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount): Serv
       if (account && isAccountTool(request.params.name)) {
         const outcome = await account.tools.call(request.params.name, args, account.token);
         if (outcome.kind === "sign-in") {
+          if (outcome.refused) account.onRefused?.(outcome.challenge);
           return { content: [{ type: "text", text: outcome.message }], isError: true, _meta: { "mcp/www_authenticate": [outcome.challenge] } };
         }
         if (outcome.kind === "unavailable") return result({ available: false, reason: "Not available right now." }, true);
