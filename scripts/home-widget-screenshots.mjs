@@ -19,7 +19,8 @@ import { pathToFileURL } from "node:url";
 
 import { chromium } from "playwright-core";
 
-import { HOME_WIDGET_ASSET_PREFIX, HOME_WIDGET_CSS, HOME_WIDGET_HTML, HOME_WIDGET_SCRIPT } from "../dist/home/widget.js";
+import { HOME_WIDGET_CSS, HOME_WIDGET_HTML, HOME_WIDGET_SCRIPT } from "../dist/home/widget.js";
+import { HOME_WIDGET_CSS_PATH, HOME_WIDGET_SCRIPT_PATH } from "../dist/home/widget-assets.js";
 
 const root = resolve(import.meta.dirname, "..");
 const out = (name) => resolve(root, "docs/home-chatgpt-app/screenshots", name);
@@ -67,8 +68,8 @@ const scriptUrl = pathToFileURL(join(temporaryDir, "widget.js")).href;
 const cssUrl = pathToFileURL(join(temporaryDir, "widget.css")).href;
 const html = HOME_WIDGET_HTML
   .replace("__HOME_MAPBOX_ASSETS__", assets)
-  .replace(`__HOME_ASSET_ORIGIN__${HOME_WIDGET_ASSET_PREFIX}/widget.css`, cssUrl)
-  .replace(`__HOME_ASSET_ORIGIN__${HOME_WIDGET_ASSET_PREFIX}/widget.js`, scriptUrl)
+  .replace("__HOME_ASSET_ORIGIN____HOME_CSS_PATH__", cssUrl)
+  .replace("__HOME_ASSET_ORIGIN____HOME_SCRIPT_PATH__", scriptUrl)
   .replace(/ integrity="__HOME_(?:CSS|SCRIPT)_INTEGRITY__"/g, "")
   .replaceAll("__HOME_CHECK_IN_ORIGIN__", "")
   .replaceAll("__HOME_CHECK_IN_HOST__", "")

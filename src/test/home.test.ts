@@ -20,14 +20,14 @@ import { ACCOUNT_TOOLS, SAVED_SEARCH_TYPES, type AccountSettings } from "../home
 import { accountFromEnv, createHomeHttpHandler, mapboxTokenFromEnv } from "../home/http.js";
 import { HOME_RULES } from "../home/plugin.js";
 import { MAPBOX_GL_ASSET_PREFIX } from "../home/mapbox-assets.js";
-import { HOME_WIDGET_ASSETS } from "../home/widget-assets.js";
+import { HOME_WIDGET_ASSET_PREFIX, HOME_WIDGET_ASSETS, HOME_WIDGET_CSS_PATH, HOME_WIDGET_SCRIPT_PATH } from "../home/widget-assets.js";
 import { buildHomeServer, HOME_ROUTE_TOOLS, HOME_TOOLS } from "../home/server.js";
 import { extraWords, insideArea, MapboxRoutes, metresToEdge, namesPlace } from "../home/routes.js";
 import { BATH_HOMES, BATH_ROUTE_SCENARIOS, routeFixtureKey } from "./home-routes-fixture.js";
 import { buildManifest, readSkills, secretsIn, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
 import { matchWishes, WISHES, type Wish } from "../home/wishes.js";
 import { HOME_ICONS } from "../home/icons.js";
-import { HOME_WIDGET_ASSET_PREFIX, HOME_WIDGET_CSS, HOME_WIDGET_HTML, HOME_WIDGET_SCRIPT, HOME_WIDGET_URI, HOME_WIDGET_VERSION, homeMapLayout, homeMapProject, homePinCollisions, homePinLabel, humaniseDaysListed } from "../home/widget.js";
+import { HOME_WIDGET_CSS, HOME_WIDGET_HTML, HOME_WIDGET_SCRIPT, HOME_WIDGET_URI, HOME_WIDGET_VERSION, homeMapLayout, homeMapProject, homePinCollisions, homePinLabel, humaniseDaysListed } from "../home/widget.js";
 
 const ID = "b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
 const ID2 = "c9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
@@ -594,8 +594,8 @@ test("Home publishes a v13 MCP Apps resource with only external script and style
     assert.doesNotMatch(content.text ?? "", /openstreetmap|tile\.openstreetmap/i);
     assert.doesNotMatch(content.text ?? "", /mapbox-gl-js/);
     assert.match(content.text ?? "", /data-mapbox-token=""/);
-    assert.match(content.text ?? "", new RegExp(`href="https://mcp\\.home\\.co\\.uk${HOME_WIDGET_ASSET_PREFIX}/widget\\.css"`));
-    assert.match(content.text ?? "", new RegExp(`src="https://mcp\\.home\\.co\\.uk${HOME_WIDGET_ASSET_PREFIX}/widget\\.js"`));
+    assert.match(content.text ?? "", new RegExp(`href="https://mcp\\.home\\.co\\.uk${HOME_WIDGET_CSS_PATH.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    assert.match(content.text ?? "", new RegExp(`src="https://mcp\\.home\\.co\\.uk${HOME_WIDGET_SCRIPT_PATH.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
   } finally { await stop(); }
 });
 
@@ -604,8 +604,9 @@ test("Home serves the integrity-pinned versioned widget JavaScript and CSS as im
   try {
     const resource = await mcp.readResource({ uri: HOME_WIDGET_URI });
     const html = (resource.contents[0] as { text?: string }).text ?? "";
-    for (const file of ["widget.js", "widget.css"]) {
-      const path = `${HOME_WIDGET_ASSET_PREFIX}/${file}`;
+    const contentHash = createHash("sha256").update(HOME_WIDGET_SCRIPT).update("\0").update(HOME_WIDGET_CSS).digest("hex").slice(0, 20);
+    assert.equal(HOME_WIDGET_ASSET_PREFIX, `/assets/home-widget/v${HOME_WIDGET_VERSION}/${contentHash}`);
+    for (const [file, path] of [["widget.js", HOME_WIDGET_SCRIPT_PATH], ["widget.css", HOME_WIDGET_CSS_PATH]]) {
       const expected = HOME_WIDGET_ASSETS.get(path)!;
       const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const tag = html.match(new RegExp(`(?:src|href)="https://mcp\\.home\\.co\\.uk${escapedPath}"[^>]*integrity="(sha384-[^"]+)"`));
@@ -625,6 +626,23 @@ test("Home serves the integrity-pinned versioned widget JavaScript and CSS as im
       assert.equal(refused.headers.get("allow"), "GET, HEAD");
     }
   } finally { await stop(); }
+});
+
+test("a directly embedded Home server still points widget assets and check-ins at mcp.home.co.uk", async () => {
+  const { client } = fixtures();
+  const server = buildHomeServer(client);
+  const [clientSide, serverSide] = (await import("@modelcontextprotocol/sdk/inMemory.js")).InMemoryTransport.createLinkedPair();
+  await server.connect(serverSide);
+  const mcp = new Client({ name: "test", version: "1" }, { capabilities: {} });
+  await mcp.connect(clientSide);
+  try {
+    const resource = await mcp.readResource({ uri: HOME_WIDGET_URI });
+    const content = resource.contents[0] as { text?: string; _meta?: Record<string, unknown> };
+    assert.match(content.text ?? "", new RegExp(`https://mcp\\.home\\.co\\.uk${HOME_WIDGET_SCRIPT_PATH.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.match(content.text ?? "", /https:\/\/mcp\.home\.co\.uk\/widget-check-in/);
+    const ui = content._meta?.["ui"] as { csp?: { resourceDomains?: string[] } };
+    assert.ok(ui.csp?.resourceDomains?.includes("https://mcp.home.co.uk"));
+  } finally { await mcp.close(); await server.close(); }
 });
 
 test("Home keeps every earlier listings-and-detail template address serving the current widget", async () => {
