@@ -84,6 +84,74 @@ function object(value: unknown): JsonObject {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : {};
 }
 
+function present(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== "";
+}
+
+function compactObject(entries: Array<[string, unknown]>): JsonObject {
+  return Object.fromEntries(entries.filter(([, value]) => present(value)));
+}
+
+/** Rebuild the broad core record from an allowlist; new fields stay private. */
+export function buyerPropertyFacts(value: unknown): JsonObject {
+  const core = object(value);
+  const nestedEpc = object(core["epc"]); const nestedTax = object(core["council_tax"]);
+  const first = (...values: unknown[]) => values.find(present);
+  const epc = compactObject([
+    ["current_rating", first(core["current_energy_rating"], nestedEpc["current_rating"], nestedEpc["rating"])],
+    ["potential_rating", first(core["potential_energy_rating"], nestedEpc["potential_rating"])],
+    ["assessment_date", first(core["last_epc_date"], nestedEpc["assessment_date"], nestedEpc["date"])],
+  ]);
+  const councilTax = compactObject([["band", first(core["council_tax_band"], nestedTax["band"])]]) ;
+  const safeRisk = (risk: unknown): unknown => {
+    if (Array.isArray(risk)) return risk.map(safeRisk).filter((item) => Object.keys(object(item)).length);
+    const item = object(risk);
+    if (!Object.keys(item).length) return typeof risk === "string" ? risk : undefined;
+    return compactObject([["type", first(item["risk_type"], item["type"])], ["level", first(item["label"], item["level"], item["rating"], item["risk"])]]) ;
+  };
+  const safeSchool = (value: unknown): JsonObject => {
+    const school = object(value); const ofsted = object(school["ofsted"]);
+    return compactObject([
+      ["name", first(school["name"], school["school_name"])], ["phase", school["phase"]],
+      ["distance_km", first(school["distance_km"], school["distance"])],
+      ["ofsted_rating", first(school["ofsted_rating"], ofsted["rating"])],
+      ["ofsted_inspection_date", first(school["ofsted_inspection_date"], ofsted["last_inspection"])],
+    ]);
+  };
+  const schoolBlock = object(core["schools"]);
+  const schools = (Array.isArray(core["schools"]) ? core["schools"] : Array.isArray(schoolBlock["schools"]) ? schoolBlock["schools"] : []).map(safeSchool);
+  const broadbandBlock = object(core["broadband"]);
+  const broadband = compactObject([
+    ["average_download_speed", first(core["avg_download_speed"], broadbandBlock["avg_download_speed"], broadbandBlock["average_download_speed"])],
+    ["maximum_download_speed", first(core["max_download_speed"], broadbandBlock["max_download_speed"], broadbandBlock["maximum_download_speed"])],
+    ["superfast_available_pct", first(core["superfast_available_pct"], broadbandBlock["superfast_available_pct"])],
+    ["gigabit_available_pct", first(core["gigabit_available_pct"], broadbandBlock["gigabit_available_pct"])],
+    ["full_fibre_available_pct", first(core["full_fibre_available_pct"], broadbandBlock["full_fibre_available_pct"])],
+  ]);
+  const crimeBlock = object(core["crime"]);
+  const crime = compactObject([
+    ["level", first(core["crime_level"], crimeBlock["level"], crimeBlock["rating"])],
+    ["total", first(crimeBlock["total_crimes"], crimeBlock["total"])], ["period", first(crimeBlock["latest_month"], crimeBlock["period"])],
+    ["categories", Array.isArray(crimeBlock["categories"]) ? crimeBlock["categories"].map((category) => {
+      const item = object(category); return compactObject([["name", first(item["label"], item["category"])], ["count", item["count"]]]);
+    }) : undefined],
+  ]);
+  const risks = compactObject([
+    ["flood", safeRisk(core["flood"])], ["radon", safeRisk(core["radon"])], ["noise", safeRisk(core["noise"])],
+    ["landfill", safeRisk(core["landfill"])], ["coal_mining", safeRisk(core["coal_mining"])],
+    ["air_quality", safeRisk(core["air_quality"])], ["other", safeRisk(core["risks"])],
+  ]);
+  const rooms = compactObject([["bedrooms", core["bedrooms"]], ["bathrooms", core["bathrooms"]], ["habitable", core["habitable_rooms"]], ["heated", core["heated_rooms"]]]);
+  return compactObject([
+    ["epc", Object.keys(epc).length ? epc : undefined], ["council_tax", Object.keys(councilTax).length ? councilTax : undefined],
+    ["risks", Object.keys(risks).length ? risks : undefined], ["broadband", Object.keys(broadband).length ? broadband : undefined],
+    ["schools", schools.length ? schools : undefined], ["crime", Object.keys(crime).length ? crime : undefined],
+    ["property_type", core["property_type"]], ["rooms", Object.keys(rooms).length ? rooms : undefined],
+    ["floor_area_sqm", first(core["epc_floor_area"], core["predicted_floor_area"], core["floor_area_sqm"])],
+    ["tenure", first(core["tenure"], core["ownership"], core["estate_interest"])],
+  ]);
+}
+
 function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -571,13 +639,15 @@ export class HomeClient {
   }
 
   private async propertyEnrichment(uprn: string, postcode: string | null, source: "listing_uprn" | "exact_address_match"): Promise<JsonObject> {
-    let core = this.cachedHomes.get(uprn);
-    if (core === undefined) {
-      core = await this.data(`/property/${encodeURIComponent(uprn)}/core/`, {});
+    let property = this.cachedHomes.get(uprn);
+    if (property === undefined) {
+      const core = await this.data(`/property/${encodeURIComponent(uprn)}/core/`, {});
       if (object(core)["available"] === false) return { ...UNAVAILABLE };
-      this.cachedHomes.set(uprn, structuredClone(core));
-    } else core = structuredClone(core);
-    return { available: true, scope: "home", source, uprn, postcode, property: core };
+      property = buyerPropertyFacts(core);
+      // Keep only the minimised projection in memory, not the private core record.
+      this.cachedHomes.set(uprn, structuredClone(property));
+    } else property = structuredClone(property);
+    return { available: true, scope: "home", source, property };
   }
 
   private async postcodeAt(latitude: unknown, longitude: unknown): Promise<string | null> {

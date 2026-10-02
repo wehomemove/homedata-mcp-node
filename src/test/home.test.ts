@@ -307,9 +307,10 @@ test("get_home uses the property-details UPRN before address matching", async ()
     assert.equal(body["description"], "Full description");
     assert.deepEqual(body["photos"], ["https://cdn.home.co.uk/full.jpg"]);
     const enrichment = body["enrichment"] as Record<string, unknown>;
-    assert.equal(enrichment["uprn"], "100012345678");
+    assert.equal("uprn" in enrichment, false);
     assert.equal(enrichment["scope"], "home");
     assert.equal(enrichment["source"], "listing_uprn");
+    assert.deepEqual(enrichment["property"], { epc: { current_rating: "C" }, council_tax: { band: "D" }, risks: { flood: { level: "low" } } });
     assert.deepEqual(requests.map((u) => u.pathname), [`/api/property-details/${ID}`, "/api/for-sale/BA2%208TJ/", "/property/100012345678/core/"]);
   } finally { await stop(); }
 });
@@ -321,8 +322,48 @@ test("get_home falls back to an exact address match when details have no UPRN", 
     const enrichment = (answer.structuredContent as Record<string, unknown>)["enrichment"] as Record<string, unknown>;
     assert.equal(enrichment["scope"], "home");
     assert.equal(enrichment["source"], "exact_address_match");
-    assert.equal(enrichment["uprn"], "100012345678");
+    assert.equal("uprn" in enrichment, false);
     assert.ok(requests.some((url) => url.pathname === "/address/find/"));
+  } finally { await stop(); }
+});
+
+test("get_home allowlists buyer facts and cannot reveal the matched core address or identifiers", async () => {
+  const core = {
+    uprn: "100012345678", udprn: 23456789, toid: "osgb100000000001", usrn: 987654,
+    title_no: "AV123456", full_address: "12 Heritage Close, Bath, BA2 8TJ", address: "12 Heritage Close",
+    building_number: "12", latitude: 51.35712345, longitude: -2.37012345, easting: 374000, northing: 165000,
+    current_energy_rating: "C", potential_energy_rating: "B", last_epc_date: "2025-04-03", epc_id: "secret-epc-id",
+    council_tax_band: "D", property_type: "Terraced", bedrooms: 3, bathrooms: 1, habitable_rooms: 5, heated_rooms: 5,
+    epc_floor_area: 91, estate_interest: "Freehold",
+    flood: [{ risk_type: "flood_rivers_sea", label: "Very low", score: 1, properties: { coordinates: [51.3, -2.3] } }],
+    broadband: { avg_download_speed: 72.9, max_download_speed: 1000, full_fibre_available_pct: 87, postcode: "BA2 8TJ" },
+    schools: { query: { uprn: "100012345678", lat: 51.3, lng: -2.3 }, schools: [{ name: "Heritage Primary", phase: "Primary", distance_km: 0.4, urn: 123456, latitude: 51.3, longitude: -2.3, ofsted: { rating: "Good", last_inspection: "2024-06-01" } }] },
+    crime: { total_crimes: 14, latest_month: "2026-08", categories: [{ category: "burglary", label: "Burglary", count: 2, sample_locations: [{ latitude: "51.3", longitude: "-2.3" }] }] },
+    valuation_estimate: 425000, title_boundary: { coordinates: [[[1, 2]]] },
+  };
+  const { mcp, stop } = await start({ responseBody: { "/property/100012345678/core/": core } });
+  try {
+    const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+    const body = answer.structuredContent as Record<string, unknown>;
+    const enrichment = body["enrichment"] as Record<string, unknown>;
+    assert.deepEqual(enrichment, {
+      available: true, scope: "home", source: "exact_address_match", property: {
+        epc: { current_rating: "C", potential_rating: "B", assessment_date: "2025-04-03" },
+        council_tax: { band: "D" }, risks: { flood: [{ type: "flood_rivers_sea", level: "Very low" }] },
+        broadband: { average_download_speed: 72.9, maximum_download_speed: 1000, full_fibre_available_pct: 87 },
+        schools: [{ name: "Heritage Primary", phase: "Primary", distance_km: 0.4, ofsted_rating: "Good", ofsted_inspection_date: "2024-06-01" }],
+        crime: { total: 14, period: "2026-08", categories: [{ name: "Burglary", count: 2 }] },
+        property_type: "Terraced", rooms: { bedrooms: 3, bathrooms: 1, habitable: 5, heated: 5 },
+        floor_area_sqm: 91, tenure: "Freehold",
+      },
+    });
+    const serialised = JSON.stringify(enrichment);
+    for (const secret of ["12 Heritage Close", "AV123456", "100012345678", "23456789", "osgb100000000001", "987654", "374000", "165000", "51.35712345", "-2.37012345", "secret-epc-id"]) {
+      assert.equal(serialised.includes(secret), false, `leaked ${secret}`);
+    }
+    for (const key of ["uprn", "udprn", "toid", "usrn", "title_no", "full_address", "latitude", "longitude", "easting", "northing"]) {
+      assert.equal(new RegExp(`\\\"${key}\\\"`).test(serialised), false, `leaked key ${key}`);
+    }
   } finally { await stop(); }
 });
 
