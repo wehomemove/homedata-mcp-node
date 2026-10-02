@@ -188,6 +188,12 @@ test("the generated dependency-free widget script is valid JavaScript", () => {
   assert.match(script, /callTool\('compare_homes'/);
   assert.match(script, /sendFollowUpMessage/);
   assert.match(script, /method:'ui\/message'/);
+  for (const stage of ["script_start", "handshake_sent", "host_answered", "data_received_openai_globals", "data_received_window_openai", "data_received_mcp_tool_input", "data_received_mcp_tool_result", "cards_drawn", "script_error", "security_policy_"]) {
+    assert.ok(HOME_WIDGET_HTML.includes(stage), stage);
+  }
+  assert.match(HOME_WIDGET_HTML, /stage=page_parsed&amp;host=__HOME_CHECK_IN_HOST__&amp;view=__HOME_VIEW_ID__/);
+  assert.doesNotMatch(script, /error\.message|error\.stack/);
+  assert.match(script, /widget-check-in\?stage='\+encodeURIComponent\(stage\)\+'&host='\+encodeURIComponent\(location\.hostname\)\+'&view='\+encodeURIComponent\(viewId\)/);
 });
 
 test("the widget uses home.co.uk's colours: no pastel pink tints, pink outlines or grey Mapbox styles", () => {
@@ -571,7 +577,10 @@ test("Home publishes a v12 MCP Apps resource without a map surface when the brow
     assert.match(content.text ?? "", /@media\(max-width:700px\)/);
     const ui = content._meta?.["ui"] as { csp?: { connectDomains?: string[]; resourceDomains?: string[] } };
     assert.deepEqual(ui.csp?.connectDomains, []);
-    assert.deepEqual(ui.csp?.resourceDomains, ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com"]);
+    assert.deepEqual(ui.csp?.resourceDomains, ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://mcp.home.co.uk"]);
+    const pageCheckIn = content.text?.match(/widget-check-in\?stage=page_parsed&amp;host=mcp\.home\.co\.uk&amp;view=([a-f0-9]{24})/);
+    assert.ok(pageCheckIn, "plain HTML check-in has an anonymous random view id");
+    assert.ok((content.text?.match(new RegExp(pageCheckIn[1], "g")) ?? []).length >= 2, "script and HTML share the view id");
     assert.doesNotMatch(content.text ?? "", /openstreetmap|tile\.openstreetmap/i);
     assert.doesNotMatch(content.text ?? "", /mapbox-gl-js/);
     assert.match(content.text ?? "", /mapboxToken=""/);
@@ -583,6 +592,7 @@ test("Home keeps every earlier listings-and-detail template address serving the 
   try {
     const current = await mcp.readResource({ uri: HOME_WIDGET_URI });
     const expected = current.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
+    const withoutViewId = (text: string | undefined) => text?.replaceAll(/view=[a-f0-9]{24}/g, "view=<random>").replaceAll(/viewId='[a-f0-9]{24}'/g, "viewId='<random>'");
 
     for (let version = 1; version <= HOME_WIDGET_VERSION; version += 1) {
       const uri = `ui://home/listings-and-detail-v${version}.html`;
@@ -590,7 +600,7 @@ test("Home keeps every earlier listings-and-detail template address serving the 
       const content = resource.contents[0] as { uri?: string; mimeType?: string; text?: string; _meta?: Record<string, unknown> };
       assert.equal(content.uri, uri);
       assert.equal(content.mimeType, expected.mimeType);
-      assert.equal(content.text, expected.text);
+      assert.equal(withoutViewId(content.text), withoutViewId(expected.text));
       assert.deepEqual(content._meta, expected._meta);
     }
   } finally { await stop(); }
@@ -1154,6 +1164,20 @@ test("health is open, non-POST MCP is refused and upstream outages are distinct"
     assert.equal((await fetch(base + "/mcp")).status, 405);
     const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
     assert.deepEqual(answer.structuredContent, { available: false, reason: "Not available right now." });
+  } finally { await stop(); }
+});
+
+test("widget stage check-ins return an empty no-store response", async () => {
+  const { base, stop } = await start();
+  try {
+    const response = await fetch(base + "/widget-check-in?stage=script_start&host=web-sandbox.example&view=0123456789abcdef01234567");
+    assert.equal(response.status, 204);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal(response.headers.get("access-control-allow-origin"), "*");
+    assert.equal((await response.arrayBuffer()).byteLength, 0);
+    const refused = await fetch(base + "/widget-check-in", { method: "POST" });
+    assert.equal(refused.status, 405);
+    assert.equal(refused.headers.get("cache-control"), "no-store");
   } finally { await stop(); }
 });
 
