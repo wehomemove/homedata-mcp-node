@@ -15,7 +15,8 @@ import golden from "../../docs/home-chatgpt-app/golden-prompts.json" with { type
 import { HomedataClient } from "../client.js";
 import { checkGoldenSet, type GoldenSet } from "../golden.js";
 import { HomeClient, HomeUpstreamError } from "../home/client.js";
-import { createHomeHttpHandler } from "../home/http.js";
+import { ACCOUNT_TOOLS, type AccountSettings } from "../home/account.js";
+import { accountFromEnv, createHomeHttpHandler } from "../home/http.js";
 import { HOME_RULES } from "../home/plugin.js";
 import { buildHomeServer, HOME_TOOLS } from "../home/server.js";
 import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
@@ -79,7 +80,7 @@ function fixtures(options: FixtureOptions = {}) {
   return { client: new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, logger: options.logger }), requests };
 }
 
-async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; clientIpHeader?: string; appsChallenge?: string } = {}) {
+async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; clientIpHeader?: string; appsChallenge?: string; account?: AccountSettings } = {}) {
   const { client, requests } = fixtures(fixtureOptions);
   const handler = createHomeHttpHandler({ client, callsPerMinute: 20, ...httpOptions });
   const http: HttpServer = createServer((req, res) => void handler(req, res));
@@ -90,8 +91,8 @@ async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPe
   return { base, mcp, requests, stop: async () => { await mcp.close(); http.closeAllConnections(); await new Promise((resolve) => http.close(resolve)); } };
 }
 
-test("Home lists its no-auth read-only data and render tools and its golden set holds", async () => {
-  const { mcp, stop } = await start();
+test("without account settings Home lists its no-auth read-only data and render tools and publishes no OAuth metadata", async () => {
+  const { base, mcp, stop } = await start();
   try {
     const tools = (await mcp.listTools()).tools;
     assert.deepEqual(tools.map((t) => t.name), HOME_TOOLS.map((t) => t.name));
@@ -105,7 +106,7 @@ test("Home lists its no-auth read-only data and render tools and its golden set 
       const uri = (tool._meta?.["ui"] as { resourceUri?: string } | undefined)?.resourceUri;
       assert.equal(Boolean(uri), renderNames.has(tool.name), `${tool.name} UI resource linkage`);
     }
-    assert.deepEqual(checkGoldenSet(golden as GoldenSet, tools), []);
+    assert.equal((await fetch(`${base}/.well-known/oauth-protected-resource`)).status, 404);
   } finally { await stop(); }
 });
 
@@ -684,4 +685,223 @@ test("Home listing rules allow homes for sale but not valuations, offers or comp
   const commerce = buildHome();
   commerce.extensions["com.openai"].review!["commerce_description"] = "Credits are bought outside ChatGPT.";
   assert.match(validatePackage(commerce, toolNames, [HOME_ICON], HOME_RULES).join("\n"), /commerce_description/);
+});
+
+// ---- Account tools: saved searches and price alerts, forwarded to atlas ----
+
+const TOKEN = "atlas-token-0123456789abcdef";
+const RESOURCE = "https://mcp.home.test";
+const ACCOUNT_URL = "https://atlas.test/api/mcp";
+
+type AtlasAnswer = { status?: number; result?: unknown; throws?: boolean };
+
+/** A fake atlas MCP endpoint: records what it was sent and answers per tool. */
+function atlas(answers: Record<string, AtlasAnswer> = {}) {
+  const calls: Array<{ url: string; authorization: string | null; body: Record<string, any> }> = [];
+  const fetchImpl = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as Record<string, any>;
+    calls.push({ url: String(input), authorization: new Headers(init?.headers).get("authorization"), body });
+    const answer = answers[body["params"].name] ?? {};
+    if (answer.throws) throw new TypeError(`fetch failed for ${String(input)}`);
+    const result = answer.result ?? { content: [{ type: "text", text: JSON.stringify({ ok: body["params"].name }) }], isError: false };
+    return new Response(JSON.stringify(answer.status && answer.status >= 400 ? { error: "invalid_token" } : { jsonrpc: "2.0", id: body["id"], result }), { status: answer.status ?? 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  return { calls, fetchImpl };
+}
+
+async function startAccount(answers: Record<string, AtlasAnswer> = {}, fixtureOptions: FixtureOptions = {}) {
+  const fake = atlas(answers);
+  const logged: string[] = [];
+  const logger = (message: string, detail: unknown) => logged.push(`${message} ${detail instanceof Error ? `${detail.name}: ${detail.message}` : JSON.stringify(detail)}`);
+  const app = await start({ ...fixtureOptions, logger }, { account: { resource: RESOURCE, issuer: "https://home.test", accountMcpUrl: ACCOUNT_URL, fetchImpl: fake.fetchImpl, logger } });
+  const rpc = async (method: string, params: unknown, token?: string) => {
+    const response = await fetch(`${app.base}/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 7, method, params }),
+    });
+    return { status: response.status, body: (await response.json()) as Record<string, any> };
+  };
+  const call = async (name: string, args: Record<string, unknown>, token?: string) => (await rpc("tools/call", { name, arguments: args }, token)).body["result"] as Record<string, any>;
+  return { ...app, atlas: fake.calls, logged, rpc, call };
+}
+
+const challengeOf = (result: Record<string, any>) => (result["_meta"]?.["mcp/www_authenticate"] as string[] | undefined)?.[0];
+
+test("with account settings the nine account tools are listed as oauth2 with their scope, search stays noauth, and the golden set holds", async () => {
+  const app = await startAccount();
+  try {
+    const tools = (await app.rpc("tools/list", {})).body["result"].tools as Array<Record<string, any>>;
+    assert.deepEqual(tools.map((t) => t.name), [...HOME_TOOLS, ...ACCOUNT_TOOLS].map((t) => t.name));
+    assert.deepEqual(ACCOUNT_TOOLS.map((t) => t.name), [
+      "list_saved_searches", "create_saved_search", "pause_saved_search", "delete_saved_search", "get_saved_search_new_results",
+      "list_price_alerts", "create_price_alert", "pause_price_alert", "delete_price_alert",
+    ]);
+    const scopes: Record<string, string> = {};
+    for (const tool of tools) {
+      const account = ACCOUNT_TOOLS.find((t) => t.name === tool["name"]);
+      if (!account) {
+        assert.deepEqual(tool["securitySchemes"], [{ type: "noauth" }], tool["name"]);
+        assert.deepEqual(tool["_meta"].securitySchemes, [{ type: "noauth" }], tool["name"]);
+        continue;
+      }
+      assert.deepEqual(tool["securitySchemes"], [{ type: "oauth2", scopes: [account.scope] }], tool["name"]);
+      assert.deepEqual(tool["_meta"].securitySchemes, [{ type: "oauth2", scopes: [account.scope] }], tool["name"]);
+      assert.equal("scope" in tool, false);
+      scopes[tool["name"]] = account.scope;
+    }
+    assert.deepEqual(new Set(Object.values(scopes)), new Set(["home.saved-searches", "home.price-alerts"]));
+    assert.ok(Object.entries(scopes).every(([name, scope]) => scope === (name.includes("saved_search") ? "home.saved-searches" : "home.price-alerts")));
+
+    // Write annotations: reads change nothing, deletes are destructive, none reach outside the user's account.
+    const hints = Object.fromEntries(tools.filter((t) => t["name"] in scopes).map((t) => [t["name"], t["annotations"]]));
+    for (const name of ["list_saved_searches", "get_saved_search_new_results", "list_price_alerts"]) assert.deepEqual(hints[name], { readOnlyHint: true, destructiveHint: false, openWorldHint: false }, name);
+    for (const name of ["create_saved_search", "create_price_alert"]) assert.deepEqual(hints[name], { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, name);
+    for (const name of ["pause_saved_search", "pause_price_alert"]) assert.deepEqual(hints[name], { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, name);
+    for (const name of ["delete_saved_search", "delete_price_alert"]) assert.deepEqual(hints[name], { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false }, name);
+
+    assert.deepEqual(checkGoldenSet(golden as GoldenSet, tools as never), []);
+    assert.deepEqual(app.atlas, [], "listing never calls atlas");
+  } finally { await app.stop(); }
+});
+
+test("protected-resource metadata names this origin, home.co.uk and both scopes, and is never cached", async () => {
+  const app = await startAccount();
+  try {
+    for (const path of ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"]) {
+      const response = await fetch(app.base + path);
+      assert.equal(response.status, 200, path);
+      assert.equal(response.headers.get("cache-control"), "no-store", path);
+      assert.deepEqual(await response.json(), {
+        resource: RESOURCE,
+        authorization_servers: ["https://home.test"],
+        scopes_supported: ["home.saved-searches", "home.price-alerts"],
+        bearer_methods_supported: ["header"],
+      });
+    }
+    const other = await fetch(app.base + "/.well-known/oauth-protected-resource/other");
+    assert.equal(other.status, 404);
+    assert.equal(other.headers.get("cache-control"), "no-store");
+  } finally { await app.stop(); }
+});
+
+test("an unsigned account call returns the sign-in challenge for its scope and never reaches atlas", async () => {
+  const app = await startAccount();
+  try {
+    for (const [name, scope] of [["list_saved_searches", "home.saved-searches"], ["delete_price_alert", "home.price-alerts"]] as const) {
+      const result = await app.call(name, name.startsWith("delete") ? { id: "a1" } : {});
+      assert.equal(result["isError"], true);
+      const challenge = challengeOf(result)!;
+      assert.match(challenge, new RegExp(`^Bearer scope="${scope}", resource_metadata="https://mcp\\.home\\.test/\\.well-known/oauth-protected-resource", error="invalid_token", error_description="`));
+    }
+    assert.deepEqual(app.atlas, []);
+    // A search tool still answers without signing in.
+    assert.notEqual((await app.call("calculate_stamp_duty", { price: 300000, buyer_type: "standard" }))["isError"], true);
+  } finally { await app.stop(); }
+});
+
+test("a signed-in account call is forwarded to atlas with the caller's bearer, and search calls never carry it", async () => {
+  const list = [{ id: "s1", name: "Bath", is_active: true, new_results_count: 2 }];
+  const app = await startAccount({ list_saved_searches: { result: { content: [{ type: "text", text: JSON.stringify(list) }], isError: false } } });
+  try {
+    const result = await app.call("list_saved_searches", {}, TOKEN);
+    assert.notEqual(result["isError"], true);
+    assert.deepEqual(result["structuredContent"], { data: list });
+    await app.call("pause_price_alert", { id: "a1", paused: true }, TOKEN);
+    assert.deepEqual(app.atlas.map((c) => [c.url, c.authorization, c.body["method"], c.body["params"]]), [
+      [ACCOUNT_URL, `Bearer ${TOKEN}`, "tools/call", { name: "list_saved_searches", arguments: {} }],
+      [ACCOUNT_URL, `Bearer ${TOKEN}`, "tools/call", { name: "pause_price_alert", arguments: { id: "a1", paused: true } }],
+    ]);
+
+    const before = app.requests.length;
+    await app.call("search_homes", { location: "Bath", listing_type: "sale" }, TOKEN);
+    assert.equal(app.requests.length, before + 1);
+    assert.equal(app.atlas.length, 2, "a search tool is never forwarded to atlas");
+  } finally { await app.stop(); }
+});
+
+test("atlas's own tool errors pass through as tool errors", async () => {
+  const app = await startAccount({ delete_saved_search: { result: { content: [{ type: "text", text: JSON.stringify({ error: "Not found." }) }], isError: true } } });
+  try {
+    const result = await app.call("delete_saved_search", { id: "missing" }, TOKEN);
+    assert.equal(result["isError"], true);
+    assert.deepEqual(result["structuredContent"], { error: "Not found." });
+    assert.equal(challengeOf(result), undefined);
+  } finally { await app.stop(); }
+});
+
+test("a token atlas refuses asks for sign-in again; a missing scope asks for that scope; an atlas outage never signs out", async () => {
+  const app = await startAccount({
+    list_saved_searches: { status: 401 },
+    list_price_alerts: { result: { content: [{ type: "text", text: JSON.stringify({ error: "This connection has not been granted the required permission." }) }], isError: true } },
+    pause_saved_search: { status: 500 },
+    delete_saved_search: { status: 404 },
+    get_saved_search_new_results: { throws: true },
+    delete_price_alert: { result: "not a result" },
+  });
+  try {
+    assert.match(challengeOf(await app.call("list_saved_searches", {}, TOKEN))!, /^Bearer scope="home\.saved-searches", .*error="invalid_token"/);
+    assert.match(challengeOf(await app.call("list_price_alerts", {}, TOKEN))!, /^Bearer scope="home\.price-alerts", .*error="insufficient_scope"/);
+    for (const [name, args] of [["pause_saved_search", { id: "s1", paused: true }], ["delete_saved_search", { id: "s1" }], ["get_saved_search_new_results", { id: "s1" }], ["delete_price_alert", { id: "a1" }]] as const) {
+      const result = await app.call(name, args, TOKEN);
+      assert.equal(result["isError"], true, name);
+      assert.deepEqual(result["structuredContent"], { available: false, reason: "Not available right now." }, name);
+      assert.equal(challengeOf(result), undefined, name);
+    }
+  } finally { await app.stop(); }
+});
+
+test("create_saved_search resolves the location to where atlas's runner looks, keeping only known criteria", async () => {
+  const forSale = { displayLocation: "Bath and North East Somerset", hasBoundarySearch: true, isRadiusSearch: false, centerLat: 51.356, centerLng: -2.487, radiusMiles: 1, properties: [] };
+  const postcode = { displayLocation: "BA1 1LZ", hasBoundarySearch: false, isRadiusSearch: true, centerLat: 51.393, centerLng: -2.36, radiusMiles: 3, properties: [] };
+  const app = await startAccount({}, { responseBody: { "/api/for-sale/Bath/": forSale, "/api/to-rent/BA1%201LZ/": postcode } });
+  try {
+    const result = await app.call("create_saved_search", {
+      name: "3-bed houses in Bath", search_type: "for_sale", notification_frequency: "weekly",
+      search_criteria: { location: "Bath", min_beds: 3, max_price: 500000, property_type: ["semi_detached"], status: "sold" },
+    }, TOKEN);
+    assert.notEqual(result["isError"], true);
+    assert.equal(result["structuredContent"]["area"], "Bath and North East Somerset");
+    assert.deepEqual(app.atlas[0]!.body["params"].arguments, {
+      name: "3-bed houses in Bath", search_type: "for_sale", notification_frequency: "weekly",
+      search_criteria: { max_price: 500000, min_beds: 3, property_type: ["semi_detached"], location: "Bath", location_slug: "bath", lat: 51.356, lng: -2.487, radius: 3 },
+    });
+    assert.equal(app.requests.at(-1)!.searchParams.get("per_page"), "1");
+
+    await app.call("create_saved_search", { name: "Rent near work", search_type: "to_rent", search_criteria: { location: "BA1 1LZ" } }, TOKEN);
+    assert.deepEqual(app.atlas[1]!.body["params"].arguments["search_criteria"], { location: "BA1 1LZ", lat: 51.393, lng: -2.36, radius: 3 });
+
+    // An unsigned create asks for sign-in before looking anything up.
+    const requests = app.requests.length;
+    assert.ok(challengeOf(await app.call("create_saved_search", { name: "x", search_criteria: { location: "Bath" } })));
+    assert.equal(app.requests.length, requests);
+  } finally { await app.stop(); }
+});
+
+test("the caller's token never reaches a log, a result or home.co.uk", async () => {
+  const printed: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => { printed.push(args.map((a) => a instanceof Error ? `${a.message} ${a.stack}` : JSON.stringify(a)).join(" ")); };
+  const app = await startAccount({ list_saved_searches: { throws: true }, pause_saved_search: { status: 500 }, list_price_alerts: { status: 401 } });
+  try {
+    const results = [
+      await app.call("list_saved_searches", {}, TOKEN),
+      await app.call("pause_saved_search", { id: "s1", paused: true }, TOKEN),
+      await app.call("list_price_alerts", {}, TOKEN),
+      await app.call("search_homes", { location: "Bath", listing_type: "sale" }, TOKEN),
+    ];
+    assert.ok(app.logged.length >= 2, "failures are logged");
+    for (const line of [...app.logged, ...printed, ...results.map((r) => JSON.stringify(r))]) assert.doesNotMatch(line, new RegExp(TOKEN));
+    for (const url of app.requests) assert.doesNotMatch(url.toString(), new RegExp(TOKEN));
+  } finally { console.error = original; await app.stop(); }
+});
+
+test("account settings come from the environment with home.co.uk defaults and can be switched off", () => {
+  assert.deepEqual(accountFromEnv({}), { resource: "https://mcp.home.co.uk", issuer: "https://home.co.uk", accountMcpUrl: "https://home.co.uk/api/mcp" });
+  assert.deepEqual(accountFromEnv({ HOME_MCP_RESOURCE: "https://mcp.home.test/", HOME_OAUTH_ISSUER: "https://home.test/", HOME_ACCOUNT_MCP_URL: "http://127.0.0.1:8000/api/mcp" }),
+    { resource: "https://mcp.home.test", issuer: "https://home.test", accountMcpUrl: "http://127.0.0.1:8000/api/mcp" });
+  assert.equal(accountFromEnv({ HOME_ACCOUNTS: "off" }), undefined);
+  assert.throws(() => accountFromEnv({ HOME_ACCOUNTS: "maybe" }), /HOME_ACCOUNTS/);
+  assert.throws(() => accountFromEnv({ HOME_MCP_RESOURCE: "https://mcp.home.co.uk/mcp" }), /origin/);
+  assert.throws(() => accountFromEnv({ HOME_ACCOUNT_MCP_URL: "http://atlas.example/api/mcp" }), /https/);
 });

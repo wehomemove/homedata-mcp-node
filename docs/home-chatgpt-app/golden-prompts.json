@@ -93,6 +93,51 @@
       "expect": { "calls": [{ "tool": "typical_rents", "args": { "location": "BA1" } }], "outcome": "Gives median and typical two-bedroom asking rents per month and describes them as asking rents." }
     },
     {
+      "id": "account-save-search", "kind": "direct", "review": false,
+      "prompt": "Save a search for three-bedroom houses for sale in Bath under £500,000 and email me new ones weekly.",
+      "expect": {"calls": [{"tool": "create_saved_search", "args": {"search_type": "for_sale", "notification_frequency": "weekly"}}], "allowed": [{"tool": "search_homes", "args": {}}], "outcome": "Confirms the area and filters, then calls create_saved_search with location Bath, min_beds 3, max_price 500000 in search_criteria. Signed out, it shows the home.co.uk sign-in instead of claiming the search was saved."}
+    },
+    {
+      "id": "account-list-searches", "kind": "direct", "review": false,
+      "prompt": "What saved searches do I have on home.co.uk?",
+      "expect": {"calls": [{"tool": "list_saved_searches", "args": {}}], "outcome": "Lists each saved search by name with its frequency, whether it is paused and its new results count."}
+    },
+    {
+      "id": "account-new-results", "kind": "followup", "review": false,
+      "prompt": "(after account-list-searches) What's new on the Bath one?",
+      "expect": {"calls": [{"tool": "get_saved_search_new_results", "args": {}}], "outcome": "Passes the Bath search's id from the list and reports the new homes it returns."}
+    },
+    {
+      "id": "account-pause-search", "kind": "followup", "review": false,
+      "prompt": "(after account-list-searches) Pause the Bath search while I'm away.",
+      "expect": {"calls": [{"tool": "pause_saved_search", "args": {"paused": true}}], "outcome": "Pauses the Bath search by its id and says it will send no emails until resumed."}
+    },
+    {
+      "id": "account-delete-search", "kind": "followup", "review": false,
+      "prompt": "(after account-list-searches) Delete the Bath search, we've found somewhere.",
+      "expect": {"calls": [{"tool": "delete_saved_search", "args": {}}], "outcome": "Deletes only the Bath search, by its id, after the user has clearly asked for deletion."}
+    },
+    {
+      "id": "account-watch-home", "kind": "followup", "review": false,
+      "prompt": "(after search-family-home) Let me know if the first one drops in price.",
+      "expect": {"calls": [{"tool": "create_price_alert", "args": {"alert_type": "price_drop"}}], "outcome": "Creates an alert for the first result with its listing id, address and current asking price in whole pounds."}
+    },
+    {
+      "id": "account-list-alerts", "kind": "direct", "review": false,
+      "prompt": "Which homes am I watching for price changes?",
+      "expect": {"calls": [{"tool": "list_price_alerts", "args": {}}], "outcome": "Lists each watched home with its starting and current asking price and alert type."}
+    },
+    {
+      "id": "account-pause-alert", "kind": "followup", "review": false,
+      "prompt": "(after account-list-alerts) Stop the alerts on the first one for a while, but keep it.",
+      "expect": {"calls": [{"tool": "pause_price_alert", "args": {"paused": true}}], "outcome": "Pauses that alert by its id rather than deleting it."}
+    },
+    {
+      "id": "account-delete-alert", "kind": "followup", "review": false,
+      "prompt": "(after account-list-alerts) Remove the alert on the first one for good.",
+      "expect": {"calls": [{"tool": "delete_price_alert", "args": {}}], "outcome": "Deletes that one alert by its id."}
+    },
+    {
       "id": "boundary-home-value-today", "kind": "boundary", "review": false,
       "prompt": "What is my house at BA2 3PL worth today?",
       "expect": { "calls": [], "allowed": [{ "tool": "sold_prices", "args": { "postcode": "BA2 3PL" } }, { "tool": "area_insights", "args": { "postcode": "BA2 3PL" } }], "outcome": "Does not give a figure for the user's house. It may show recent nearby sales as evidence, labelled as past sales of other homes." },
@@ -101,7 +146,7 @@
     {
       "id": "negative-sell-home", "kind": "negative", "review": true,
       "prompt": "List my home for sale and contact agents for me.",
-      "expect": { "calls": [], "outcome": "Explains that the app is read-only and cannot list a home or contact agents; it may offer to show local agents instead." },
+      "expect": { "calls": [], "outcome": "Explains that the app cannot list a home or contact agents; it may offer to show local agents instead." },
       "why": "The Home app cannot create listings or contact anyone."
     },
     {

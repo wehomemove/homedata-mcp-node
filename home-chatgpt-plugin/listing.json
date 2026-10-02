@@ -54,7 +54,7 @@
       "interface": {
         "displayName": "Home",
         "shortDescription": "UK homes for sale and to rent",
-        "longDescription": "Home finds homes for sale and to rent across the United Kingdom from home.co.uk, right in the conversation. Describe what you want in your own words: a town, city or postcode, buying or renting, your budget, how many bedrooms, a house or a flat, new build or not, newest or lowest price first. Home shows the matching houses and flats with asking price or rent, photos, bedrooms, tenure, the date each one was added, how long it has been on the market, and whether it has been reduced or gone under offer.\n\nOpen any result for the full picture in chat: every photo, the complete description, the agent, key facts and, where the published address can be matched to a property, checks from Homedata such as the EPC energy rating, council tax band, flood and other environmental risks, broadband, nearby schools and recorded crime. Compare two to four homes side by side, ask what an area is like for schools, broadband, recorded crime, deprivation and local house price growth, and estimate stamp duty or monthly mortgage repayments from your own figures.\n\nHome also brings three workflows: prepare for a viewing, with a checklist and questions for the agent built from the home's own details; shortlist and compare, ranking homes against what matters to you; and buying costs, setting out stamp duty, deposit, loan and monthly repayments together.\n\nIt is for anyone house hunting: first-time buyers, movers, renters and families comparing places to live. No account is needed.\n\nLimitations: Home is read-only. It does not value homes or forecast prices, list a home, contact agents for you, or decide mortgage eligibility. Calculator results are estimates, not tax or financial advice, and stamp duty covers England and Northern Ireland. Availability and status are snapshots from the time of the search.",
+        "longDescription": "Home finds homes for sale and to rent across the United Kingdom from home.co.uk, right in the conversation. Describe what you want in your own words: a town, city or postcode, buying or renting, your budget, how many bedrooms, a house or a flat, new build or not, newest or lowest price first. Home shows the matching houses and flats with asking price or rent, photos, bedrooms, tenure, the date each one was added, how long it has been on the market, and whether it has been reduced or gone under offer.\n\nOpen any result for the full picture in chat: every photo, the complete description, the agent, key facts and, where the published address can be matched to a property, checks from Homedata such as the EPC energy rating, council tax band, flood and other environmental risks, broadband, nearby schools and recorded crime. Compare two to four homes side by side, ask what an area is like for schools, broadband, recorded crime, deprivation and local house price growth, and estimate stamp duty or monthly mortgage repayments from your own figures.\n\nHome also brings three workflows: prepare for a viewing, with a checklist and questions for the agent built from the home's own details; shortlist and compare, ranking homes against what matters to you; and buying costs, setting out stamp duty, deposit, loan and monthly repayments together.\n\nSign in with your home.co.uk account to save a search and get emails about new matching homes, or to watch a home and hear when its asking price or status changes; you can list, pause and delete both from the conversation.\n\nIt is for anyone house hunting: first-time buyers, movers, renters and families comparing places to live. Searching needs no account.\n\nLimitations: Home does not value homes or forecast prices, list a home, contact agents for you, or decide mortgage eligibility. Calculator results are estimates, not tax or financial advice, and stamp duty covers England and Northern Ireland. Availability and status are snapshots from the time of the search.",
         "developerName": "Home",
         "category": "Lifestyle",
         "capabilities": [
@@ -63,7 +63,8 @@
           "Time on market, price reductions and under-offer dates",
           "Compare two to four homes side by side",
           "Area checks: schools, broadband, crime, price growth",
-          "Stamp duty and mortgage repayment estimates"
+          "Stamp duty and mortgage repayment estimates",
+          "Saved searches and alerts on homes you are watching"
         ],
         "websiteURL": "https://home.co.uk/chatgpt/",
         "supportURL": "https://home.co.uk/contact/",
@@ -81,7 +82,7 @@
       },
       "review": {
         "commerce": false,
-        "commerce_description": "Home is read-only and needs no account. It takes no payments and sells nothing in ChatGPT."
+        "commerce_description": "Home takes no payments and sells nothing in ChatGPT. Searching needs no account; saved searches and alerts use the user's own home.co.uk account."
       },
       "publication": {
         "countries": [],

@@ -8,6 +8,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { VERSION } from "../index.js";
+import { ACCOUNT_TOOLS, isAccountTool, type AccountTools } from "./account.js";
 import { HomeClient, HomeError, HomeUpstreamError, type SearchArgs, type SoldArgs } from "./client.js";
 import { HOME_WIDGET_HTML, HOME_WIDGET_URI } from "./widget.js";
 
@@ -28,6 +29,9 @@ export const HOME_INSTRUCTIONS = [
   "For sellers and landlords: sold_prices shows what nearby homes actually sold for and when, find_agents ranks local agents by the homes they are selling or letting in the area, and typical_rents gives current asking rents. Sold prices are evidence about other homes, never a valuation of the user's home.",
   "Never invent availability, safety, mortgage eligibility or future prices. Dates and status are snapshots and should be described as such.",
 ].join(" ");
+
+/** Added to the instructions only when the account tools are listed. */
+export const HOME_ACCOUNT_INSTRUCTIONS = "Signed-in users can keep saved searches (list_saved_searches, create_saved_search, pause_saved_search, delete_saved_search, get_saved_search_new_results) and price alerts on single homes (list_price_alerts, create_price_alert, pause_price_alert, delete_price_alert) on their own home.co.uk account. Confirm the details before creating anything and before deleting, which cannot be undone; use the ids the list tools return.";
 
 export const HOME_TOOLS: readonly Tool[] = [
   {
@@ -126,6 +130,20 @@ const metadata = {
   _meta: { securitySchemes: [{ type: "noauth" }] },
 };
 
+/** The account tools atlas runs, when this endpoint is set up to forward them. */
+export interface HomeAccount {
+  tools: AccountTools;
+  /** The caller's bearer token, passed to atlas only; null when they sent none. */
+  token: string | null;
+}
+
+function accountTools() {
+  return ACCOUNT_TOOLS.map(({ scope, annotations, ...tool }) => {
+    const securitySchemes = [{ type: "oauth2", scopes: [scope] }];
+    return { ...tool, outputSchema: { type: "object", additionalProperties: true }, annotations, securitySchemes, _meta: { securitySchemes } };
+  });
+}
+
 function result(body: unknown, isError = false): CallToolResult {
   const structuredContent = body !== null && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : { data: body };
   return { content: [{ type: "text", text: JSON.stringify(body, null, 2) }], structuredContent, ...(isError ? { isError: true } : {}) };
@@ -157,8 +175,8 @@ function positive(args: Record<string, unknown>, name: string, allowZero = false
   return value;
 }
 
-export function buildHomeServer(client: HomeClient): Server {
-  const server = new Server({ name: "home", version: VERSION }, { capabilities: { tools: {}, resources: {} }, instructions: HOME_INSTRUCTIONS });
+export function buildHomeServer(client: HomeClient, account?: HomeAccount): Server {
+  const server = new Server({ name: "home", version: VERSION }, { capabilities: { tools: {}, resources: {} }, instructions: account ? `${HOME_INSTRUCTIONS} ${HOME_ACCOUNT_INSTRUCTIONS}` : HOME_INSTRUCTIONS });
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
     resources: [{ uri: HOME_WIDGET_URI, name: "Home listings and detail", description: "Responsive listing carousel, map and home gallery.", mimeType: "text/html;profile=mcp-app" }],
   }));
@@ -183,11 +201,22 @@ export function buildHomeServer(client: HomeClient): Server {
     }] };
   });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: HOME_TOOLS.map((tool) => ({ ...tool, outputSchema: tool.outputSchema ?? { type: "object", additionalProperties: true }, ...metadata, _meta: { ...metadata._meta, ...tool._meta } })),
+    tools: [
+      ...HOME_TOOLS.map((tool) => ({ ...tool, outputSchema: tool.outputSchema ?? { type: "object", additionalProperties: true }, ...metadata, _meta: { ...metadata._meta, ...tool._meta } })),
+      ...(account ? accountTools() : []),
+    ],
   }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
     try {
+      if (account && isAccountTool(request.params.name)) {
+        const outcome = await account.tools.call(request.params.name, args, account.token);
+        if (outcome.kind === "sign-in") {
+          return { content: [{ type: "text", text: outcome.message }], isError: true, _meta: { "mcp/www_authenticate": [outcome.challenge] } };
+        }
+        if (outcome.kind === "unavailable") return result({ available: false, reason: "Not available right now." }, true);
+        return result(outcome.body, outcome.isError);
+      }
       switch (request.params.name) {
         case "search_homes": return result(await client.search(args as SearchArgs));
         case "get_home": return result(await client.home(String(args["listing_id"] ?? "")));

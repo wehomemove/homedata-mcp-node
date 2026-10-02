@@ -18,6 +18,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { HOME_RULES } from '../dist/home/plugin.js';
+import { ACCOUNT_TOOLS } from '../dist/home/account.js';
 import { HOME_TOOLS } from '../dist/home/server.js';
 import { buildManifest, HOMEDATA_RULES, readSkills, validatePackage, validateSkills } from '../dist/plugin-package.js';
 import { PROFILES } from '../dist/profile.js';
@@ -26,7 +27,7 @@ import { profileTools } from '../dist/server.js';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PLUGINS = {
   homedata: { src: 'chatgpt-plugin', golden: 'docs/chatgpt-app/golden-prompts.json', tools: () => profileTools(PROFILES.chatgpt), rules: HOMEDATA_RULES },
-  home: { src: 'home-chatgpt-plugin', golden: 'docs/home-chatgpt-app/golden-prompts.json', tools: () => HOME_TOOLS, rules: HOME_RULES },
+  home: { src: 'home-chatgpt-plugin', golden: 'docs/home-chatgpt-app/golden-prompts.json', tools: () => [...HOME_TOOLS, ...ACCOUNT_TOOLS], rules: HOME_RULES },
 };
 
 const which = process.argv[2] ?? 'homedata';

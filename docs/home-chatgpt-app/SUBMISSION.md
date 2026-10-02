@@ -62,14 +62,20 @@ npm run build && node scripts/package-chatgpt-plugin.mjs home
 | Submit under the Home Group OpenAI org (identity verification) | submitter | pending |
 | Confirm `category`: `Lifestyle` stands in until the dashboard's list is seen | at upload | pending |
 | Signed-in developer-mode run of the golden set, plus the demo video | us + a ChatGPT login | pending |
+| atlas issues tokens for `https://mcp.home.co.uk` (`OAUTH_MCP_RESOURCE`) and serves `/api/mcp` with the Socket surface on | atlas deploy | check before upload |
+| A home.co.uk reviewer account (verified email, not a guest) for the saved-search and price-alert tools | us | pending |
 
-No reviewer account is needed: every Home tool is no-auth.
+Search, detail, area and calculator tools are no-auth. The nine account tools
+(saved searches and price alerts) need a home.co.uk sign-in, so the reviewer
+needs the account above; the search review cases do not.
 
 ## In the portal
 
 1. Upload `home-chatgpt-plugin.zip` under the Home Group developer identity.
    Fix any metadata or skill findings in `home-chatgpt-plugin/` and upload again.
-2. **MCPs → Connect**: `https://mcp.home.co.uk/mcp`, no authentication.
+2. **MCPs → Connect**: `https://mcp.home.co.uk/mcp`, OAuth (mixed: search
+   tools stay no-auth). ChatGPT discovers home.co.uk as the authorization
+   server from `https://mcp.home.co.uk/.well-known/oauth-protected-resource`.
 3. **Domain verification**: put the token in the box's
    `/home/forge/mcp.home.co.uk/.env` as `OPENAI_APPS_CHALLENGE=<token>`, restart
    `home-mcp`, and check that
