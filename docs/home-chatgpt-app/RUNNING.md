@@ -74,7 +74,7 @@ CHROME_PATH="/path/to/Chrome" \
 node scripts/home-widget-screenshots.mjs
 ```
 
-Instead of `HOME_MAPBOX_TOKEN`, `HOME_MAPBOX_CREDENTIALS` may name a JSON file containing a `token` field. The script writes both `docs/home-chatgpt-app/screenshots/routes-light.jpg` and `routes-dark.jpg` from live listings, commute and viewing-route data; it contains no demo listing fixtures.
+Instead of `HOME_MAPBOX_TOKEN`, `HOME_MAPBOX_CREDENTIALS` may name a JSON file containing a `token` field. The script refreshes `docs/home-chatgpt-app/screenshots/listings-light.jpg` and `listings-dark.jpg` with live listings, commute and viewing-route data; it contains no demo listing fixtures.
 
 ## Searching by wishes
 

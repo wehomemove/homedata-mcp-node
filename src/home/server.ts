@@ -159,6 +159,7 @@ export const HOME_ROUTE_TOOLS: readonly Tool[] = [
       start: string("Where the day starts, if the user said: an address, station or full UK postcode with its town. Leave out to let the route start at whichever home is best."),
       start_kind: placeKind("What the start is, when known."),
     }, ["listing_ids"]),
+    _meta: { "openai/widgetAccessible": true, ui: { visibility: ["model", "app"] } },
   },
 ] as const;
 

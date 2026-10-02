@@ -66,7 +66,7 @@ try {
     }, { theme, homes, commute, route });
     await page.goto(pathToFileURL(temporary).href);
     await page.waitForTimeout(9_000);
-    await page.screenshot({ path: resolve(root, `docs/home-chatgpt-app/screenshots/routes-${theme}.jpg`), type: "jpeg", quality: 92 });
+    await page.screenshot({ path: resolve(root, `docs/home-chatgpt-app/screenshots/listings-${theme}.jpg`), type: "jpeg", quality: 92 });
     await page.close();
   }
 } finally {
