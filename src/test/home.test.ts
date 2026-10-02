@@ -80,7 +80,7 @@ function fixtures(options: FixtureOptions = {}) {
   return { client: new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, logger: options.logger }), requests };
 }
 
-async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; clientIpHeader?: string; appsChallenge?: string; account?: AccountSettings; mapboxToken?: string; fetchImpl?: typeof fetch } = {}) {
+async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; mapsPerMinute?: number; clientIpHeader?: string; appsChallenge?: string; account?: AccountSettings; mapboxToken?: string; mapOrigin?: string; fetchImpl?: typeof fetch } = {}) {
   const { client, requests } = fixtures(fixtureOptions);
   const handler = createHomeHttpHandler({ client, callsPerMinute: 20, ...httpOptions });
   const http: HttpServer = createServer((req, res) => void handler(req, res));
@@ -201,25 +201,48 @@ test("Home publishes a v3 MCP Apps resource without any map surface when the ser
 
 test("Home proxies and caches Mapbox static images without exposing its server token", async () => {
   const upstream: URL[] = [];
-  const mapFetch = (async (input: Parameters<typeof fetch>[0]) => {
+  const signals: Array<AbortSignal | null | undefined> = [];
+  const mapFetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     upstream.push(new URL(String(input)));
+    signals.push(init?.signal);
     return new Response(Uint8Array.from([137, 80, 78, 71]), { headers: { "Content-Type": "image/png" } });
   }) as typeof fetch;
-  const { base, mcp, stop } = await start({}, { mapboxToken: "sk.server-secret", fetchImpl: mapFetch });
+  const { base, mcp, stop } = await start({}, { mapboxToken: "sk.server-secret", mapOrigin: "https://staging-mcp.home.co.uk", fetchImpl: mapFetch });
   try {
     const resource = await mcp.readResource({ uri: HOME_WIDGET_URI });
     const content = resource.contents[0] as { text?: string; _meta?: Record<string, unknown> };
     assert.match(content.text ?? "", /mapsEnabled=true/);
     assert.doesNotMatch(content.text ?? "", /sk\.server-secret/);
     const ui = content._meta?.["ui"] as { csp?: { resourceDomains?: string[] } };
-    assert.ok(ui.csp?.resourceDomains?.includes("https://mcp.home.co.uk"));
+    assert.ok(ui.csp?.resourceDomains?.includes("https://staging-mcp.home.co.uk"));
+    assert.match(content.text ?? "", /mapOrigin="https:\/\/staging-mcp\.home\.co\.uk"/);
     const path = "/maps/static?theme=light&points=51.38%2C-2.36%3B51.39%2C-2.35";
     const first = await fetch(base + path); const second = await fetch(base + path);
     assert.equal(first.status, 200); assert.equal(first.headers.get("content-type"), "image/png");
     assert.equal(second.status, 200); assert.equal(upstream.length, 1);
     assert.equal(upstream[0]!.hostname, "api.mapbox.com");
     assert.equal(upstream[0]!.searchParams.get("access_token"), "sk.server-secret");
+    assert.ok(signals[0] instanceof AbortSignal);
     assert.equal((await fetch(base + "/maps/static?points=bad")).status, 400);
+  } finally { await stop(); }
+});
+
+test("Home limits distinct uncached maps per caller but serves cache hits without spending the allowance", async () => {
+  let upstreamCalls = 0;
+  const mapFetch = (async () => {
+    upstreamCalls++;
+    return new Response(Uint8Array.from([137, 80, 78, 71]), { headers: { "Content-Type": "image/png" } });
+  }) as typeof fetch;
+  const { base, stop } = await start({}, { mapboxToken: "sk.rate-limit", mapsPerMinute: 2, fetchImpl: mapFetch });
+  try {
+    const first = "/maps/static?points=50.001%2C-1.001";
+    assert.equal((await fetch(base + first)).status, 200);
+    assert.equal((await fetch(base + first)).status, 200);
+    assert.equal((await fetch(base + "/maps/static?points=50.002%2C-1.002")).status, 200);
+    const refused = await fetch(base + "/maps/static?points=50.003%2C-1.003");
+    assert.equal(refused.status, 429);
+    assert.equal(refused.headers.get("retry-after"), "60");
+    assert.equal(upstreamCalls, 2);
   } finally { await stop(); }
 });
 

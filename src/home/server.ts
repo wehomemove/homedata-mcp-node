@@ -177,21 +177,24 @@ function positive(args: Record<string, unknown>, name: string, allowZero = false
   return value;
 }
 
-export function buildHomeServer(client: HomeClient, account?: HomeAccount, options: { mapsEnabled?: boolean } = {}): Server {
+export function buildHomeServer(client: HomeClient, account?: HomeAccount, options: { mapsEnabled?: boolean; mapOrigin?: string } = {}): Server {
   const server = new Server({ name: "home", version: VERSION }, { capabilities: { tools: {}, resources: {} }, instructions: account ? `${HOME_INSTRUCTIONS} ${HOME_ACCOUNT_INSTRUCTIONS}` : HOME_INSTRUCTIONS });
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
     resources: [{ uri: HOME_WIDGET_URI, name: "Home listings and detail", description: "Responsive listing carousel, map and home gallery.", mimeType: "text/html;profile=mcp-app" }],
   }));
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     if (request.params.uri !== HOME_WIDGET_URI) throw new Error("Unknown Home UI resource");
+    const mapOrigin = options.mapOrigin ?? "https://mcp.home.co.uk";
     const csp = {
       connectDomains: [],
-      resourceDomains: ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", ...(options.mapsEnabled ? ["https://mcp.home.co.uk"] : [])],
+      resourceDomains: ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", ...(options.mapsEnabled ? [mapOrigin] : [])],
     };
     return { contents: [{
       uri: HOME_WIDGET_URI,
       mimeType: "text/html;profile=mcp-app",
-      text: HOME_WIDGET_HTML.replace("__HOME_MAPS_ENABLED__", options.mapsEnabled ? "true" : "false"),
+      text: HOME_WIDGET_HTML
+        .replace("__HOME_MAPS_ENABLED__", options.mapsEnabled ? "true" : "false")
+        .replace("__HOME_MAP_ORIGIN__", JSON.stringify(mapOrigin)),
       _meta: {
         ui: { prefersBorder: false, domain: "https://mcp.home.co.uk", csp },
         "openai/widgetDescription": "A responsive carousel and map for chosen homes, or a photo gallery and facts for one home.",

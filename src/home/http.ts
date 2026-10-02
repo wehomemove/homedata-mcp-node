@@ -29,6 +29,8 @@ export interface HomeHttpOptions {
   account?: AccountSettings;
   /** Server-only Mapbox token. When absent the widget and HTTP surface expose no map. */
   mapboxToken?: string;
+  mapsPerMinute?: number;
+  mapOrigin?: string;
   fetchImpl?: typeof fetch;
   now?: () => number;
 }
@@ -102,10 +104,6 @@ function challengeOnRefusal(res: ServerResponse, challenge: () => string | undef
   }) as typeof res.writeHead;
 }
 
-/**
- * The same stateless Streamable HTTP shape as the Homedata app. Search tools
- * are no-auth; the account tools need a home.co.uk sign-in, which atlas checks.
- */
 const mapCache = new Map<string, { body: Uint8Array; contentType: string }>();
 
 function mapboxRequest(requestUrl: URL, token: string): URL | null {
@@ -127,12 +125,17 @@ function mapboxRequest(requestUrl: URL, token: string): URL | null {
   return mapbox;
 }
 
+/**
+ * The same stateless Streamable HTTP shape as the Homedata app. Search tools
+ * are no-auth; the account tools need a home.co.uk sign-in, which atlas checks.
+ */
 export function createHomeHttpHandler(options: HomeHttpOptions) {
   const path = options.mcpPath ?? "/mcp";
   if (!path.startsWith("/")) throw new Error("HOME_MCP_PATH must start with /");
   const now = options.now ?? Date.now;
   const callLimits = new CallerLimits(options.callsPerMinute ?? 30, now);
   const enrichmentLimits = new CallerLimits(options.enrichmentsPerMinute ?? 4, now);
+  const mapLimits = new CallerLimits(options.mapsPerMinute ?? 20, now);
   const account = options.account ? new AccountTools(options.account, options.client) : undefined;
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     noStoreOnErrors(res);
@@ -145,7 +148,12 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
       const key = upstream.pathname + upstream.searchParams.get("padding");
       let image = mapCache.get(key);
       if (!image) {
-        const response = await (options.fetchImpl ?? fetch)(upstream, { headers: { Accept: "image/avif,image/webp,image/png" } });
+        const caller = callerAddress(req, options.clientIpHeader);
+        if (!mapLimits.take(caller, 1)) return void send(res, 429, { error: "too_many_map_requests" }, { "Retry-After": "60" });
+        const response = await (options.fetchImpl ?? fetch)(upstream, {
+          headers: { Accept: "image/avif,image/webp,image/png" },
+          signal: AbortSignal.timeout(5_000),
+        });
         if (!response.ok) return void send(res, 502, { error: "map_unavailable" }, { "Cache-Control": "no-store" });
         image = { body: new Uint8Array(await response.arrayBuffer()), contentType: response.headers.get("content-type") ?? "image/png" };
         if (mapCache.size >= 200) mapCache.delete(mapCache.keys().next().value!);
@@ -185,7 +193,7 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
     const server = buildHomeServer(
       options.client,
       account ? { tools: account, token: bearerToken(req), onRefused: (challenge) => { refused ??= challenge; } } : undefined,
-      { mapsEnabled: Boolean(options.mapboxToken) },
+      { mapsEnabled: Boolean(options.mapboxToken), mapOrigin: options.mapOrigin },
     );
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });
@@ -229,10 +237,12 @@ async function main(): Promise<void> {
     mcpPath: process.env["HOME_MCP_PATH"] || "/mcp",
     callsPerMinute: checkCallsPerMinute(process.env["MCP_CALLS_PER_MINUTE"]),
     enrichmentsPerMinute: checkCallsPerMinute(process.env["HOME_ENRICHMENTS_PER_MINUTE"] || "4"),
+    mapsPerMinute: checkCallsPerMinute(process.env["HOME_MAPS_PER_MINUTE"] || "20"),
     clientIpHeader: (process.env["HOME_CLIENT_IP_HEADER"] ?? "").trim() || undefined,
     appsChallenge: checkAppsChallenge(process.env["OPENAI_APPS_CHALLENGE"]),
     account: accountFromEnv(process.env),
     mapboxToken: (process.env["MAPBOX_SECRET_TOKEN"] ?? "").trim() || undefined,
+    mapOrigin: checkUrl("HOME_MCP_RESOURCE", (process.env["HOME_MCP_RESOURCE"] ?? "").trim() || DEFAULT_RESOURCE, true),
   });
   const port = Number(process.env["PORT"] || 4177); const host = process.env["HOST"] || "127.0.0.1";
   createServer((req, res) => void handler(req, res).catch((error) => { console.error("[home-mcp-http] request failed:", error); if (!res.headersSent) send(res, 500, { error: "internal_error" }); })).listen(port, host, () => console.error(`home-mcp-http ${VERSION} listening on http://${host}:${port}`));
