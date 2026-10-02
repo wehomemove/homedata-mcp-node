@@ -1597,7 +1597,7 @@ const ROUTE_FIXTURE = JSON.parse(readFileSync(join(ROOT, "src/test/fixtures/home
 const MAPBOX_TOKEN = "pk.test-route-token";
 type RouteOverride = [(url: URL) => boolean, { status: number; body: unknown } | "network"];
 
-async function routeApp(overrides: RouteOverride[] = []) {
+async function routeApp(overrides: RouteOverride[] = [], searchFirst = true) {
   const requests: Array<{ url: URL; headers: Record<string, string> }> = []; const logged: string[] = [];
   const fetchImpl = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = new URL(String(input)); requests.push({ url, headers: (init?.headers ?? {}) as Record<string, string> });
@@ -1628,7 +1628,7 @@ async function routeApp(overrides: RouteOverride[] = []) {
   }) as typeof fetch;
   const logger = (message: string, detail: unknown) => logged.push(`${message} ${JSON.stringify(detail)}`);
   const client = new HomeClient({ homedata: new HomedataClient({ apiKey: "test", baseUrl: "https://data.test", fetchImpl }), fetchImpl, logger });
-  const searched = await client.search({ location: "Bath", listing_type: "sale" });
+  const searched = searchFirst ? await client.search({ location: "Bath", listing_type: "sale" }) : null;
   const routes = new MapboxRoutes({ token: MAPBOX_TOKEN, fetchImpl, logger, referer: "https://mcp.home.co.uk/" });
   const server = buildHomeServer(client, undefined, { routes });
   const [clientSide, serverSide] = (await import("@modelcontextprotocol/sdk/inMemory.js")).InMemoryTransport.createLinkedPair();
@@ -1749,7 +1749,7 @@ test("plan_viewings without a start opens the quickest loop at its longest leg",
 test("commute_filter and plan_viewings return exactly search_homes' public address and postcode for every home", async () => {
   const app = await routeApp();
   try {
-    const searched = new Map((app.searched["homes"] as Array<Record<string, unknown>>).map((home) => [home["id"], home]));
+    const searched = new Map((app.searched!["homes"] as Array<Record<string, unknown>>).map((home) => [home["id"], home]));
     const commute = await app.call("commute_filter", scenario("walk-bath-spa"));
     const viewings = await app.call("plan_viewings", scenario("viewings-from-postcode"));
     assert.equal(commute.isError, false, commute.text);
@@ -1761,6 +1761,26 @@ test("commute_filter and plan_viewings return exactly search_homes' public addre
       assert.equal(home.address, publicHome["address"], `${home.listing_id} address`);
       assert.equal(home.postcode, publicHome["postcode"], `${home.listing_id} postcode`);
     }
+  } finally { await app.stop(); }
+});
+
+test("route tools tell the agent to search again when a valid listing has no remembered public address", async () => {
+  const app = await routeApp([], false);
+  try {
+    const commute = await app.call("commute_filter", {
+      place: "Bath Spa station", place_kind: "station", minutes: 15, mode: "walk", listing_ids: [BATH_HOMES.paragon],
+    });
+    const viewings = await app.call("plan_viewings", { listing_ids: [BATH_HOMES.paragon, BATH_HOMES.peasedown] });
+    assert.equal(commute.isError, false, commute.text);
+    assert.equal(viewings.isError, true, viewings.text);
+    for (const answer of [commute, viewings]) {
+      assert.match(answer.text, /Run search_homes again before using route tools/);
+      assert.doesNotMatch(answer.text, /not found|26 The Paragon|12 Heritage Close/i);
+    }
+    assert.deepEqual(commute.body["homes_not_checked"], [{
+      listing_id: BATH_HOMES.paragon,
+      reason: `Home ${BATH_HOMES.paragon} has no remembered public display address. Run search_homes again before using route tools.`,
+    }]);
   } finally { await app.stop(); }
 });
 

@@ -7,6 +7,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
 
 export class HomeError extends Error {}
+export class HomeSearchRequiredError extends HomeError {}
 export class HomeUpstreamError extends Error {
   constructor(message: string, readonly status?: number, readonly notJson = false) { super(message); }
 }
@@ -488,6 +489,7 @@ export class HomeClient {
     if (postcode) {
       const search = object(await this.homeGet(`/api/${transaction}/${encodeURIComponent(postcode)}/`, { per_page: "120" }));
       listing = object((Array.isArray(search["properties"]) ? search["properties"] : []).find((p) => String(object(p)["listing_id"] ?? object(p)["id"]) === listingId));
+      if (Object.keys(listing).length) this.rememberPublicListingIdentities([listing]);
     }
     const card = { ...detail, ...listing, listing_id: listingId };
     const address = [detail["building_name"], detail["building_number"], detail["street_name"], detail["locality"], detail["town_name"], postcode]
@@ -522,7 +524,7 @@ export class HomeClient {
   async locate(listingId: string): Promise<HomeLocation> {
     if (!UUID.test(listingId)) throw new HomeError(`${listingId} is not a listing UUID returned by search_homes`);
     const publicIdentity = this.publicListingIdentities.peek(listingId);
-    if (!publicIdentity) throw new HomeError(`Home ${listingId} has no public display address from search_homes; search for it again before using route tools`);
+    if (!publicIdentity) throw new HomeSearchRequiredError(`Home ${listingId} has no remembered public display address. Run search_homes again before using route tools.`);
     const known = this.listingLocations.peek(listingId);
     if (known) return { ...known, ...publicIdentity };
     const detail = object(await this.homeGet(`/api/property-details/${listingId}`));
