@@ -198,3 +198,5 @@ npm test
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
+
+The Home widget's icons are [Phosphor Icons](https://phosphoricons.com), MIT licence, Copyright (c) 2023 Phosphor Icons. They are copied unchanged from the `@phosphor-icons/core` package at build time by `scripts/home-icons.mjs`.

@@ -23,6 +23,7 @@ import { MAPBOX_GL_ASSET_PREFIX } from "../home/mapbox-assets.js";
 import { buildHomeServer, HOME_TOOLS } from "../home/server.js";
 import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
 import { matchWishes, WISHES, type Wish } from "../home/wishes.js";
+import { HOME_ICONS } from "../home/icons.js";
 import { HOME_WIDGET_HTML, HOME_WIDGET_URI, homeMapLayout, homeMapProject, homePinCollisions, homePinLabel, humaniseDaysListed } from "../home/widget.js";
 
 const ID = "b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
@@ -190,6 +191,33 @@ test("the widget uses home.co.uk's colours: no pastel pink tints, pink outlines 
   assert.match(css, /linear-gradient\(to right,rgba\(236,72,153,\.5\),rgba\(244,63,94,\.5\),rgba\(249,115,22,\.5\)\)/);
 });
 
+test("every widget icon is the exact Phosphor SVG from @phosphor-icons/core, credited, never a hand-drawn path", () => {
+  const phosphor = fileURLToPath(new URL("../../node_modules/@phosphor-icons/core/", import.meta.url));
+  assert.equal(HOME_ICONS.package, "@phosphor-icons/core");
+  assert.equal(HOME_ICONS.license, "MIT");
+  assert.equal(HOME_ICONS.version, JSON.parse(readFileSync(join(phosphor, "package.json"), "utf8")).version);
+  for (const [key, asset] of Object.entries(HOME_ICONS.assets)) {
+    assert.equal(HOME_ICONS.icons[key], readFileSync(join(phosphor, "assets", `${asset}.svg`), "utf8").trim(), key);
+  }
+  // The icons Louis named, by role: regular on cards and chips, duotone on the detail key facts.
+  assert.deepEqual(Object.fromEntries(["prev", "next", "view", "bed", "bath", "type", "key", "flood", "crime", "school"].map((key) => [key, HOME_ICONS.assets[key]])), {
+    prev: "regular/caret-left", next: "regular/caret-right", view: "regular/arrow-up-right", bed: "regular/bed", bath: "regular/bathtub",
+    type: "regular/house", key: "regular/key", flood: "regular/drop", crime: "regular/shield", school: "regular/graduation-cap",
+  });
+  assert.match(HOME_ICONS.assets.heart!, /^fill\/heart/);
+  for (const fact of ["bed", "bath", "type", "area", "key", "calendar", "energy"]) assert.match(HOME_ICONS.assets[`fact-${fact}`]!, /^duotone\//, fact);
+  assert.equal(HOME_ICONS.assets["fact-area"], "duotone/ruler-duotone");
+  assert.equal(HOME_ICONS.assets["fact-calendar"], "duotone/calendar-duotone");
+  assert.equal(HOME_ICONS.assets["fact-energy"], "duotone/lightning-duotone");
+  // Nothing in the widget source draws its own shape, and the licence is credited in the served HTML.
+  const source = readFileSync(fileURLToPath(new URL("../../src/home/widget.ts", import.meta.url)), "utf8");
+  assert.doesNotMatch(source, /<path|<circle|<rect|<polyline|<line /);
+  assert.match(HOME_WIDGET_HTML, /Phosphor Icons, https:\/\/phosphoricons\.com, MIT licence/);
+  const script = HOME_WIDGET_HTML.match(/<script>([\s\S]*)<\/script>/)?.[1] ?? "";
+  for (const key of Object.keys(HOME_ICONS.icons)) assert.ok(script.includes(JSON.stringify(key) + ":"), `icon ${key} reaches the widget`);
+  assert.doesNotMatch(script, /<\/script/i);
+});
+
 test("map price pills become hearts only when their labels collide", () => {
   assert.deepEqual(homePinCollisions([
     { x: 40, y: 40, width: 80, height: 34 },
@@ -275,7 +303,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
 
   // home.co.uk's map: price pills remain visible at town zoom and only colliding labels become hearts.
   assert.ok(!chatgpt.mapClasses.has("far"));
-  assert.match(chatgpt.pins[0]!.innerHTML, /url\(#heart-default\)/);
+  assert.match(chatgpt.pins[0]!.innerHTML, /^<svg class="heart" aria-hidden="true"[^>]*viewBox="0 0 256 256"/);
   assert.match(chatgpt.pins[0]!.innerHTML, /<span class="bubble">£325k<\/span>/);
   chatgpt.mapEvents.get("style.load")?.();
   assert.deepEqual(chatgpt.layers.map((layer) => layer.id), ["home-buildings"]);
@@ -349,11 +377,11 @@ test("render tools reuse supplied homes without another search and keep text fal
   } finally { await stop(); }
 });
 
-test("Home publishes a v6 MCP Apps resource without a map surface when the browser token is absent", async () => {
+test("Home publishes a v7 MCP Apps resource without a map surface when the browser token is absent", async () => {
   const { mcp, stop } = await start();
   try {
     const resources = await mcp.listResources();
-    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v6.html"]);
+    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v7.html"]);
     const resource = await mcp.readResource({ uri: resources.resources[0]!.uri });
     const content = resource.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
     assert.equal(content.mimeType, "text/html;profile=mcp-app");
