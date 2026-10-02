@@ -1,5 +1,6 @@
 import { HOME_ICONS_SCRIPT } from "./icons.js";
-export const HOME_WIDGET_URI = "ui://home/listings-and-detail-v12.html";
+export const HOME_WIDGET_VERSION = 12;
+export const HOME_WIDGET_URI = `ui://home/listings-and-detail-v${HOME_WIDGET_VERSION}.html`;
 export type HomeMapPoint = { latitude: number; longitude: number };
 
 export function homeMapProject(latitude: number, longitude: number, zoom: number): { x: number; y: number } {

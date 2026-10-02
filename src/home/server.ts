@@ -10,7 +10,7 @@ import {
 import { VERSION } from "../index.js";
 import { ACCOUNT_TOOLS, isAccountTool, type AccountTools } from "./account.js";
 import { HomeClient, HomeError, HomeUpstreamError, type SearchArgs, type SoldArgs } from "./client.js";
-import { HOME_WIDGET_HTML, HOME_WIDGET_URI } from "./widget.js";
+import { HOME_WIDGET_HTML, HOME_WIDGET_URI, HOME_WIDGET_VERSION } from "./widget.js";
 import { mapboxAssetTags } from "./mapbox-assets.js";
 import { PLACE_KINDS, TRAVEL_MODES, type MapboxRoutes } from "./routes.js";
 import { WISHES } from "./wishes.js";
@@ -225,7 +225,8 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
     resources: [{ uri: HOME_WIDGET_URI, name: "Home listings and detail", description: "Responsive listing carousel, shortlist, refinement controls, map and home gallery.", mimeType: "text/html;profile=mcp-app" }],
   }));
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-    if (request.params.uri !== HOME_WIDGET_URI) throw new Error("Unknown Home UI resource");
+    const requestedVersion = request.params.uri.match(/^ui:\/\/home\/listings-and-detail-v([1-9]\d*)\.html$/)?.[1];
+    if (!requestedVersion || Number(requestedVersion) > HOME_WIDGET_VERSION) throw new Error("Unknown Home UI resource");
     const mapboxDomains = options.mapboxToken ? ["https://api.mapbox.com", "https://events.mapbox.com"] : [];
     const assetDomains = options.mapboxToken && options.assetOrigin ? [options.assetOrigin] : [];
     const csp = {
@@ -233,7 +234,7 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
       resourceDomains: ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", ...assetDomains, ...mapboxDomains],
     };
     return { contents: [{
-      uri: HOME_WIDGET_URI,
+      uri: request.params.uri,
       mimeType: "text/html;profile=mcp-app",
       text: HOME_WIDGET_HTML
         .replace("__HOME_MAPBOX_ASSETS__", options.mapboxToken && options.assetOrigin ? mapboxAssetTags(options.assetOrigin) : "")
