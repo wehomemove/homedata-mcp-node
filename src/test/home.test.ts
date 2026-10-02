@@ -14,7 +14,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import golden from "../../docs/home-chatgpt-app/golden-prompts.json" with { type: "json" };
 import { HomedataClient } from "../client.js";
 import { checkGoldenSet, type GoldenSet } from "../golden.js";
-import { HomeClient, HomeUpstreamError } from "../home/client.js";
+import { TtlCache } from "../home/cache.js";
+import { HomeClient, HomeUpstreamError, type HomeClientOptions } from "../home/client.js";
 import { ACCOUNT_TOOLS, SAVED_SEARCH_TYPES, type AccountSettings } from "../home/account.js";
 import { accountFromEnv, createHomeHttpHandler } from "../home/http.js";
 import { HOME_RULES } from "../home/plugin.js";
@@ -34,6 +35,7 @@ type FixtureOptions = {
   status?: Record<string, number>;
   responseBody?: Record<string, unknown>;
   logger?: (message: string, detail: unknown) => void;
+  client?: Pick<HomeClientOptions, "now" | "enrichmentTtlMs" | "cachedHomes" | "cachedAreas">;
 };
 
 function fixtures(options: FixtureOptions = {}) {
@@ -77,7 +79,7 @@ function fixtures(options: FixtureOptions = {}) {
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
   }) as typeof fetch;
   const homedata = new HomedataClient({ apiKey: "test", baseUrl: "https://data.test", fetchImpl });
-  return { client: new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, logger: options.logger }), requests };
+  return { client: new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, logger: options.logger, ...options.client }), requests };
 }
 
 async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; mapsPerMinute?: number; clientIpHeader?: string; appsChallenge?: string; account?: AccountSettings; mapboxToken?: string; mapOrigin?: string; fetchImpl?: typeof fetch } = {}) {
@@ -533,7 +535,8 @@ test("billing and upstream details never reach enrichment, search or calculator 
 test("health is open, non-POST MCP is refused and upstream outages are distinct", async () => {
   const { base, mcp, stop } = await start({ status: { [`/api/property-details/${ID}`]: 503 } });
   try {
-    assert.deepEqual(await (await fetch(base + "/healthz")).json(), { ok: true, service: "home", version: "1.0.0" });
+    const empty = { hits: 0, misses: 0, entries: 0 };
+    assert.deepEqual(await (await fetch(base + "/healthz")).json(), { ok: true, service: "home", version: "1.0.0", enrichment_cache: { homes: empty, areas: empty } });
     assert.equal((await fetch(base + "/mcp")).status, 405);
     const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
     assert.deepEqual(answer.structuredContent, { available: false, reason: "Not available right now." });
@@ -573,6 +576,84 @@ test("limits are per caller, count every batch call and cap enrichment units sep
     assert.equal((await post(rpc(4, "search_homes", { location: "Bath", listing_type: "sale" }), "192.0.2.2")).status, 429);
     // Comparison consumes one enrichment unit per home, not one per tool call.
     assert.equal((await post(rpc(5, "compare_homes", { listing_ids: [ID, ID2] }), "192.0.2.3")).status, 429);
+  } finally { await stop(); }
+});
+
+test("the enrichment cache is bounded, least recently read goes first, and a read never extends the day", () => {
+  let clock = 0;
+  const cache = new TtlCache<string>(2, 1_000, () => clock);
+  cache.set("a", "A"); cache.set("b", "B");
+  assert.equal(cache.get("a"), "A");
+  cache.set("c", "C");
+  assert.equal(cache.peek("b"), undefined, "b was least recently read");
+  assert.equal(cache.size, 2);
+  clock = 999;
+  assert.equal(cache.get("a"), "A");
+  clock = 1_000;
+  assert.equal(cache.get("a"), undefined, "expiry counts from the upstream answer, not the last read");
+  assert.deepEqual(cache.stats(), { hits: 2, misses: 1, entries: 1 });
+  assert.throws(() => new TtlCache(0, 1, () => 0));
+});
+
+test("a repeat view of a home spends no Homedata lookup for a day, and health counts hits and misses", async () => {
+  let clock = Date.parse("2026-10-02T09:00:00Z");
+  const { base, mcp, requests, stop } = await start({ client: { now: () => new Date(clock) } });
+  const lookups = (path: string) => requests.filter((url) => url.pathname === path).length;
+  try {
+    const first = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+    const second = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+    assert.deepEqual((second.structuredContent as Record<string, unknown>)["enrichment"], (first.structuredContent as Record<string, unknown>)["enrichment"]);
+    assert.equal(((second.structuredContent as Record<string, unknown>)["enrichment"] as Record<string, unknown>)["source"], "exact_address_match");
+    assert.equal(lookups("/property/100012345678/core/"), 1);
+    assert.equal(lookups("/address/find/"), 1, "the listing's resolved UPRN is remembered too");
+    // Another listing of the same home shares the UPRN's facts.
+    await mcp.callTool({ name: "get_home", arguments: { listing_id: ID2 } });
+    assert.equal(lookups("/property/100012345678/core/"), 1);
+    const health = await (await fetch(base + "/healthz")).json() as { enrichment_cache: { homes: unknown } };
+    assert.deepEqual(health.enrichment_cache.homes, { hits: 2, misses: 1, entries: 1 });
+    clock += 24 * 60 * 60 * 1000;
+    await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+    assert.equal(lookups("/property/100012345678/core/"), 2, "a day later the home is looked up again");
+  } finally { await stop(); }
+});
+
+test("a failed Homedata lookup is never cached", async () => {
+  const { mcp, requests, stop } = await start({ detail: { property_uprn: "100012345678" }, status: { "/property/100012345678/core/": 503, "/crime/": 503 }, logger: () => {} });
+  try {
+    for (let i = 0; i < 2; i++) {
+      const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+      assert.deepEqual((answer.structuredContent as Record<string, unknown>)["enrichment"], { available: false, reason: "Not available right now." });
+      await mcp.callTool({ name: "area_insights", arguments: { postcode: "BA1 1LZ" } });
+    }
+    assert.equal(requests.filter((url) => url.pathname === "/property/100012345678/core/").length, 2);
+    assert.equal(requests.filter((url) => url.pathname === "/schools/nearby").length, 2, "a partly failed area answer is asked again");
+  } finally { await stop(); }
+});
+
+test("area facts are cached per postcode, whichever tool asked first", async () => {
+  const { base, mcp, requests, stop } = await start({ detail: { building_number: null, building_name: null } });
+  try {
+    await mcp.callTool({ name: "area_insights", arguments: { postcode: "ba28tj" } });
+    const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+    const enrichment = (answer.structuredContent as Record<string, unknown>)["enrichment"] as Record<string, unknown>;
+    assert.equal(enrichment["scope"], "area");
+    assert.match(String(enrichment["notice"]), /not facts about this home/i);
+    assert.equal(requests.filter((url) => url.pathname === "/schools/nearby").length, 1);
+    const health = await (await fetch(base + "/healthz")).json() as { enrichment_cache: { areas: unknown } };
+    assert.deepEqual(health.enrichment_cache.areas, { hits: 1, misses: 1, entries: 1 });
+  } finally { await stop(); }
+});
+
+test("cached homes do not count towards the per-caller enrichment cap", async () => {
+  const { base, stop } = await start({}, { enrichmentsPerMinute: 1 });
+  const rpc = (id: number, name: string, args: Record<string, unknown>) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
+  const post = (body: unknown) => fetch(base + "/mcp", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body: JSON.stringify(body) });
+  try {
+    assert.equal((await post(rpc(1, "get_home", { listing_id: ID }))).status, 200);
+    assert.equal((await post(rpc(2, "get_home", { listing_id: ID }))).status, 200, "a cached home is free");
+    assert.equal((await post(rpc(3, "get_home", { listing_id: ID2 }))).status, 429, "an uncached home still needs a unit");
+    // A comparison is charged only for its uncached homes.
+    assert.equal((await post(rpc(4, "compare_homes", { listing_ids: [ID, ID2] }))).status, 429);
   } finally { await stop(); }
 });
 

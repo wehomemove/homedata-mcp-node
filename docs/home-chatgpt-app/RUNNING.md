@@ -19,11 +19,13 @@ renders no map.
 
 `MCP_CALLS_PER_MINUTE` defaults to 30 per caller. `HOME_ENRICHMENTS_PER_MINUTE` separately defaults to four homes per caller because those lookups use the server-held Homedata key; a four-home comparison consumes all four units. A home with a UPRN uses one Homedata request, an exact address match uses two, and the postcode fallback uses five (or six after an unsuccessful address match). The default therefore caps the worst case at 24 Homedata requests per caller per minute. Coordinate-to-postcode recovery uses Home's reverse-geocode endpoint and does not use the Homedata key. Set `HOME_CLIENT_IP_HEADER=cf-connecting-ip` only behind the trusted proxy configuration that removes caller-supplied copies of that header. Without it, limits use the direct socket address. Invalid limit values prevent startup rather than silently removing the cap.
 
+Successful Homedata answers are cached in memory for 24 hours: each home's core lookup by UPRN (up to 2,000 homes), area facts by postcode (up to 2,000), and how each listing resolved to one of those, so a repeat view also skips the address match. A repeat view of a cached home spends no Homedata tokens and does not count towards `HOME_ENRICHMENTS_PER_MINUTE`. Failed or partly failed answers are never cached. The cache is per process and is emptied by a restart or deploy. `/healthz` reports `enrichment_cache.homes` and `enrichment_cache.areas`, each with `hits`, `misses` and `entries`, counted since the process started; a home hit is one 25-token core lookup saved.
+
 `HOME_MAPS_PER_MINUTE` defaults to 20 uncached static maps per caller. Cached
 images do not consume that allowance. Mapbox requests time out after five
 seconds, and a caller over the limit receives HTTP 429 with `Retry-After: 60`.
 
-The endpoint answers MCP at `HOME_MCP_PATH` and health checks at `/healthz`. Set `OPENAI_APPS_CHALLENGE` to the plugin portal's domain token to serve it at `/.well-known/openai-apps-challenge`; unset, that path answers 404. It is stateless: each POST creates a fresh MCP server and no search, shortlist or user preference is retained.
+The endpoint answers MCP at `HOME_MCP_PATH` and health checks at `/healthz`. Set `OPENAI_APPS_CHALLENGE` to the plugin portal's domain token to serve it at `/.well-known/openai-apps-challenge`; unset, that path answers 404. It is stateless: each POST creates a fresh MCP server and no search, shortlist or user preference is retained. Only the property and area enrichment cache described above outlives a request.
 
 `4177` is the local default port. Production Home listens on `8192`.
 
