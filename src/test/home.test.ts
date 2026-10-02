@@ -26,6 +26,8 @@ type FixtureOptions = {
   address?: unknown;
   reverseGeocode?: unknown;
   status?: Record<string, number>;
+  responseBody?: Record<string, unknown>;
+  logger?: (message: string, detail: unknown) => void;
 };
 
 function fixtures(options: FixtureOptions = {}) {
@@ -39,11 +41,12 @@ function fixtures(options: FixtureOptions = {}) {
     else if (url.pathname === "/address/find/") body = options.address ?? { results: [{ uprn: "100012345678", postcode: "BA2 8TJ", building_number: "12", full_address: "12 Heritage Close, Bath, BA2 8TJ" }] };
     else if (url.pathname === "/property/100012345678/core/") body = { epc: { rating: "C" }, council_tax: { band: "D" }, flood: { risk: "low" } };
     else body = { source: url.pathname };
+    body = options.responseBody?.[url.pathname] ?? body;
     const status = options.status?.[url.pathname] ?? 200;
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
   }) as typeof fetch;
   const homedata = new HomedataClient({ apiKey: "test", baseUrl: "https://data.test", fetchImpl });
-  return { client: new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl }), requests };
+  return { client: new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, logger: options.logger }), requests };
 }
 
 async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; clientIpHeader?: string } = {}) {
@@ -253,13 +256,13 @@ test("compare_homes gets two homes and rejects counts outside two to four", asyn
   } finally { await stop(); }
 });
 
-test("area_insights normalises the postcode, uses its outcode and wraps an upstream failure", async () => {
+test("area_insights normalises the postcode, uses its outcode and marks an upstream failure", async () => {
   const { mcp, requests, stop } = await start({ status: { "/crime/": 503 } });
   try {
     const answer = await mcp.callTool({ name: "area_insights", arguments: { postcode: "ba11lz" } });
     const body = answer.structuredContent as Record<string, unknown>;
     assert.equal(body["postcode"], "BA1 1LZ");
-    assert.equal((body["crime"] as Record<string, unknown>)["status_code"], 503);
+    assert.deepEqual(body["crime"], { available: false, reason: "Not available right now." });
     assert.ok(requests.some((url) => url.pathname === "/price-growth/BA1/"));
     assert.ok(requests.filter((url) => url.hostname === "data.test").every((url) => url.searchParams.get("postcode") === "BA1 1LZ" || url.pathname === "/price-growth/BA1/"));
     const invalid = await mcp.callTool({ name: "area_insights", arguments: { postcode: "find BA1 1LZ please" } });
@@ -279,13 +282,44 @@ test("both affordability calculators send validated arguments", async () => {
   } finally { await stop(); }
 });
 
+test("billing and upstream details never reach enrichment, search or calculator results", async () => {
+  const billing = { error: { code: "insufficient_tokens", message: "£12.34 required; balance £0.00", topup_url: "https://homedata.co.uk/subscription" } };
+  const logs: Array<[string, unknown]> = [];
+  const failures = {
+    detail: { uprn: "100012345678" },
+    status: { "/property/100012345678/core/": 402, "/crime/": 402, "/calculators/stamp-duty/": 402, "/api/for-sale/Bath/": 502 },
+    responseBody: { "/property/100012345678/core/": billing, "/crime/": billing, "/calculators/stamp-duty/": billing, "/api/for-sale/Bath/": billing },
+    logger: (message: string, detail: unknown) => logs.push([message, detail]),
+  };
+  const { mcp, stop } = await start(failures);
+  try {
+    const answers = [
+      await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } }),
+      await mcp.callTool({ name: "area_insights", arguments: { postcode: "BA1 1LZ" } }),
+      await mcp.callTool({ name: "search_homes", arguments: { location: "Bath", listing_type: "sale" } }),
+      await mcp.callTool({ name: "calculate_stamp_duty", arguments: { price: 450000, buyer_type: "first_time" } }),
+    ];
+    assert.deepEqual((answers[0]!.structuredContent as Record<string, unknown>)["enrichment"], { available: false, reason: "Not available right now." });
+    assert.deepEqual((answers[1]!.structuredContent as Record<string, unknown>)["crime"], { available: false, reason: "Not available right now." });
+    assert.deepEqual(answers[2]!.structuredContent, { available: false, reason: "Not available right now." });
+    assert.deepEqual(answers[3]!.structuredContent, { available: false, reason: "Not available right now." });
+    for (const answer of answers) {
+      const wire = JSON.stringify(answer);
+      assert.doesNotMatch(wire, /homedata\.co\.uk|subscription|insufficient_tokens|12\.34|0\.00|status_code|402|502/i);
+      assert.match(wire, /Not available right now/);
+    }
+    assert.equal(logs.length, 4);
+    assert.ok(logs.every(([, detail]) => JSON.stringify(detail).includes("insufficient_tokens")));
+  } finally { await stop(); }
+});
+
 test("health is open, non-POST MCP is refused and upstream outages are distinct", async () => {
   const { base, mcp, stop } = await start({ status: { [`/api/property-details/${ID}`]: 503 } });
   try {
     assert.deepEqual(await (await fetch(base + "/healthz")).json(), { ok: true, service: "home", version: "1.0.0" });
     assert.equal((await fetch(base + "/mcp")).status, 405);
     const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
-    assert.equal((answer.structuredContent as Record<string, unknown>)["error"], "upstream_unavailable");
+    assert.deepEqual(answer.structuredContent, { available: false, reason: "Not available right now." });
   } finally { await stop(); }
 });
 

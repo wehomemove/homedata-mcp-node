@@ -7,12 +7,15 @@ const POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
 export class HomeError extends Error {}
 export class HomeUpstreamError extends Error {}
 
+const UNAVAILABLE = Object.freeze({ available: false, reason: "Not available right now." });
+
 export interface HomeClientOptions {
   homeBaseUrl?: string;
   homedata: HomedataClient;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   now?: () => Date;
+  logger?: (message: string, detail: unknown) => void;
 }
 
 export type SearchArgs = {
@@ -85,12 +88,14 @@ export class HomeClient {
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
   private readonly now: () => Date;
+  private readonly logger: (message: string, detail: unknown) => void;
 
   constructor(private readonly options: HomeClientOptions) {
     this.homeBaseUrl = (options.homeBaseUrl ?? DEFAULT_HOME_URL).replace(/\/+$/, "");
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 30_000;
     this.now = options.now ?? (() => new Date());
+    this.logger = options.logger ?? ((message, detail) => console.error(message, detail));
   }
 
   async search(args: SearchArgs): Promise<JsonObject> {
@@ -308,6 +313,7 @@ export class HomeClient {
 
   private async propertyEnrichment(uprn: string, postcode: string | null, source: "listing_uprn" | "exact_address_match"): Promise<JsonObject> {
     const core = await this.data(`/property/${encodeURIComponent(uprn)}/core/`, {});
+    if (object(core)["available"] === false) return { ...UNAVAILABLE };
     return { available: true, scope: "home", source, uprn, postcode, property: core };
   }
 
@@ -347,7 +353,10 @@ export class HomeClient {
 
   private async data(path: string, query: Record<string, string>): Promise<unknown> {
     const response: ApiResponse = await this.options.homedata.send("GET", path, query);
-    if (response.statusCode >= 400) return { unavailable: true, status_code: response.statusCode, detail: response.body };
+    if (response.statusCode >= 400) {
+      this.logger(`Home Homedata request failed: GET ${path}`, { statusCode: response.statusCode, body: response.body });
+      return { ...UNAVAILABLE };
+    }
     return response.body;
   }
 
@@ -358,9 +367,22 @@ export class HomeClient {
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const response = await this.fetchImpl(url, { headers: { Accept: "application/json", "User-Agent": "home-chatgpt-app/1.0" }, signal: controller.signal });
-      const value = await response.json().catch(() => null);
-      if (!response.ok) throw new HomeUpstreamError(`home.co.uk returned HTTP ${response.status}`);
+      const raw = await response.text().catch(() => "");
+      let value: unknown;
+      try { value = raw === "" ? null : JSON.parse(raw); }
+      catch {
+        this.logger(`Home upstream request returned invalid JSON: GET ${url.pathname}`, { statusCode: response.status, body: raw });
+        throw new HomeUpstreamError("Not available right now.");
+      }
+      if (!response.ok) {
+        this.logger(`Home upstream request failed: GET ${url.pathname}`, { statusCode: response.status, body: value });
+        throw new HomeUpstreamError("Not available right now.");
+      }
       return value;
+    } catch (error) {
+      if (error instanceof HomeUpstreamError) throw error;
+      this.logger(`Home upstream request failed: GET ${url.pathname}`, error);
+      throw new HomeUpstreamError("Not available right now.");
     } finally { clearTimeout(timer); }
   }
 }
