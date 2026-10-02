@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -10,6 +10,7 @@ import {
   buildManifest,
   contrast,
   outOfScopeClaims,
+  secretsIn,
   validatePackage,
   type Asset,
   type Manifest,
@@ -154,4 +155,27 @@ test("keywords are required and held to the listing rules, and valuations or hom
 test("contrast matches the WCAG formula", () => {
   assert.equal(contrast("#FFFFFF", "#000000").toFixed(1), "21.0");
   assert.ok(contrast("#0A1628", "#FFFFFF") > 15);
+});
+
+test("the secrets scan refuses keys, tokens and secrets files, and passes the real packages", () => {
+  const file = (path: string, text: string) => ({ path, bytes: Buffer.from(text) });
+  assert.deepEqual(secretsIn([file("plugin.json", '{"name":"home","keywords":["mortgage calculator"]}'), file("skills/a/SKILL.md", "Use `search_homes`. Never put a token in the answer.")]), []);
+  const caught = (text: string) => secretsIn([file("mcp.json", text)]).join("\n");
+  // Every fixture is assembled at runtime so no key-shaped literal sits in the source.
+  const fake = "x".repeat(32);
+  const mapboxShaped = ["pk", "eyJ" + fake].join(".");
+  assert.match(caught(`"token": "${mapboxShaped}.abc"`), /a Mapbox token/);
+  assert.match(caught(["sk", fake].join("-")), /an API secret key/);
+  assert.match(caught(["gh" + "p", fake].join("_")), /a GitHub token/);
+  assert.match(caught(`Authorization: ${"Bear" + "er"} ${fake}`), /a bearer token/);
+  assert.match(caught(["SERVICE_API_KEY", "synthetic"].join("=")), /an environment secret/);
+  assert.match(caught(["-----BEGIN RSA PRIVATE", "KEY-----"].join(" ")), /a private key/);
+  assert.match(secretsIn([file("skills/a/.env", "")]).join("\n"), /a secrets file must never be packaged/);
+  assert.deepEqual(secretsIn([{ path: "assets/logo.png", bytes: Buffer.from(mapboxShaped) }]), []);
+
+  for (const dir of ["chatgpt-plugin", "home-chatgpt-plugin"]) {
+    const walk = (at: string, prefix = ""): Array<{ path: string; bytes: Buffer }> => readdirSync(at, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(join(at, e.name), `${prefix}${e.name}/`) : [{ path: `${prefix}${e.name}`, bytes: readFileSync(join(at, e.name)) }]);
+    assert.deepEqual(secretsIn(walk(join(ROOT, dir))), [], dir);
+  }
 });
