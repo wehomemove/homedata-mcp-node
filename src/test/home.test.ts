@@ -196,6 +196,9 @@ test("the widget uses home.co.uk's colours: no pastel pink tints, pink outlines 
   assert.doesNotMatch(css, /(border|outline)[^;{}]*(#ec4899|#f43f5e|236,72,153)/);
   assert.match(css, /\.card\{[^}]*border:1px solid var\(--line\)/);
   assert.match(css, /linear-gradient\(to right,rgba\(236,72,153,\.5\),rgba\(244,63,94,\.5\),rgba\(249,115,22,\.5\)\)/);
+  assert.match(css, /\.save\{[^}]*background:transparent/);
+  assert.doesNotMatch(css, /\.save\{[^}]*(border-radius:50%|rgba\(0,0,0,\.45\))/);
+  assert.match(css, /\.save\.saved\{color:#f43f5e\}/);
 });
 
 test("every widget icon is the exact Phosphor SVG from @phosphor-icons/core, credited, never a hand-drawn path", () => {
@@ -211,7 +214,8 @@ test("every widget icon is the exact Phosphor SVG from @phosphor-icons/core, cre
     prev: "regular/caret-left", next: "regular/caret-right", view: "regular/arrow-up-right", bed: "regular/bed", bath: "regular/bathtub",
     type: "regular/house", key: "regular/key", flood: "regular/drop", crime: "regular/shield", school: "regular/graduation-cap",
   });
-  assert.match(HOME_ICONS.assets.heart!, /^fill\/heart/);
+  assert.equal(HOME_ICONS.assets.heart, "regular/heart");
+  assert.equal(HOME_ICONS.assets["heart-saved"], "fill/heart-fill");
   for (const fact of ["bed", "bath", "type", "area", "key", "calendar", "energy"]) assert.match(HOME_ICONS.assets[`fact-${fact}`]!, /^duotone\//, fact);
   assert.equal(HOME_ICONS.assets["fact-area"], "duotone/ruler-duotone");
   assert.equal(HOME_ICONS.assets["fact-calendar"], "duotone/calendar-duotone");
@@ -349,13 +353,31 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   ] } } } });
   assert.match(creative.root.innerHTML, /Shortlist · 2/);
   assert.match(creative.root.innerHTML, /aria-label="Remove from shortlist" aria-pressed="true"/);
-  assert.match(creative.root.innerHTML, /<b>Added<\/b>12 Aug/);
-  assert.match(creative.root.innerHTML, /<b>Reduced<\/b>/);
-  assert.match(creative.root.innerHTML, /<b>Under offer<\/b>1 Oct/);
-  assert.match(creative.root.innerHTML, /✓ Garden<\/b> · <q>A private walled garden opens from the kitchen<\/q>/);
+  assert.match(creative.root.innerHTML, /<b>Added<\/b><span>12 Aug<\/span>/);
+  assert.match(creative.root.innerHTML, /<b>Reduced<\/b><span>/);
+  assert.match(creative.root.innerHTML, /<b>Under offer<\/b><span>1 Oct<\/span>/);
+  assert.match(creative.root.innerHTML, /✓ Garden<\/b><span>·<\/span><q[^>]*>A private walled garden opens from the kitchen<\/q>/);
   assert.match(creative.root.innerHTML, />Up to £300k<\/button>/);
   assert.match(creative.root.innerHTML, />Reduced recently<\/button>/);
   assert.match(creative.root.innerHTML, />With a garden<\/button>/);
+
+  const wishes = harness();
+  wishes.dispatch("message", { source: wishes.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [
+    { id: "wish-a", price: 1, wishes_matched: [{ wish: "off_road_parking", evidence: "A private driveway provides off road parking for several vehicles beside the house" }] },
+  ] } } } });
+  assert.match(wishes.root.innerHTML, /✓ Off-road parking<\/b>/);
+  assert.match(wishes.root.innerHTML, /<q aria-hidden="true"[^>]*>A private driveway provides off road parking for several…<\/q>/);
+  assert.match(wishes.root.innerHTML, /class="sr-only">“A private driveway provides off road parking for several vehicles beside the house”<\/span>/);
+  assert.doesNotMatch(wishes.root.innerHTML, /class="refine"/, "a refinement that keeps every result is not offered");
+
+  const detailFacts = harness();
+  detailFacts.dispatch("message", { source: detailFacts.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "detail", home: {
+    bedrooms: 4, bathrooms: 2, reception_rooms: 3, property_type: "detached", floor_area_sqm: 180, tenure: "freehold",
+  } } } } });
+  assert.equal((detailFacts.root.innerHTML.match(/class="fact"/g) ?? []).length, 4);
+  assert.match(detailFacts.root.innerHTML, /Floor area/);
+  assert.match(detailFacts.root.innerHTML, /Tenure/);
+  assert.doesNotMatch(detailFacts.root.innerHTML, /Receptions/);
 
   const calls: Array<[string, Record<string, unknown>]> = [];
   const compare = harness(false, {
@@ -437,11 +459,11 @@ test("render tools reuse supplied homes without another search and keep text fal
   } finally { await stop(); }
 });
 
-test("Home publishes a v7 MCP Apps resource without a map surface when the browser token is absent", async () => {
+test("Home publishes a v9 MCP Apps resource without a map surface when the browser token is absent", async () => {
   const { mcp, stop } = await start();
   try {
     const resources = await mcp.listResources();
-    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v7.html"]);
+    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v9.html"]);
     const resource = await mcp.readResource({ uri: resources.resources[0]!.uri });
     const content = resource.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
     assert.equal(content.mimeType, "text/html;profile=mcp-app");

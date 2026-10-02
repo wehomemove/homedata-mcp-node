@@ -15,7 +15,8 @@ const PACKAGE = join(ROOT, 'node_modules/@phosphor-icons/core');
 export const HOME_ICONS = {
   prev: 'regular/caret-left',
   next: 'regular/caret-right',
-  heart: 'fill/heart-fill',
+  heart: 'regular/heart',
+  'heart-saved': 'fill/heart-fill',
   view: 'regular/arrow-up-right',
   bed: 'regular/bed',
   bath: 'regular/bathtub',
