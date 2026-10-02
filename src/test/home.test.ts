@@ -1601,6 +1601,22 @@ async function routeApp(overrides: RouteOverride[] = []) {
   const requests: Array<{ url: URL; headers: Record<string, string> }> = []; const logged: string[] = [];
   const fetchImpl = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = new URL(String(input)); requests.push({ url, headers: (init?.headers ?? {}) as Record<string, string> });
+    if (url.pathname === "/api/for-sale/Bath/") {
+      const publicAddresses: Record<string, string> = {
+        [BATH_HOMES.paragon]: "The Paragon, Walcot, Bath",
+        [BATH_HOMES.hallFloor]: "Bathwick, Bath",
+        [BATH_HOMES.oldfieldPark]: "Lower Oldfield Park, Bath",
+        [BATH_HOMES.twerton]: "Cameley Green, Twerton, Bath",
+        [BATH_HOMES.upperWeston]: "Manor Road, Upper Weston, Bath",
+        [BATH_HOMES.peasedown]: "Heritage Close, Peasedown St John, Bath",
+        [BATH_HOMES.kensingtonPlace]: "Kensington Place, Bath",
+        [BATH_HOMES.avondaleRoad]: "Avondale Road, Bath",
+      };
+      const properties = Object.entries(publicAddresses).map(([listing_id, display_address]) => ({
+        listing_id, display_address, postcode: null,
+      }));
+      return new Response(JSON.stringify({ displayLocation: "Bath", total: properties.length, pagination: { current_page: 1, last_page: 1 }, properties }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
     const override = overrides.find(([match]) => match(url))?.[1];
     if (override === "network") throw new TypeError("fetch failed");
     // Proximity follows the homes found, so a test that hides a home still replays its place search.
@@ -1612,6 +1628,7 @@ async function routeApp(overrides: RouteOverride[] = []) {
   }) as typeof fetch;
   const logger = (message: string, detail: unknown) => logged.push(`${message} ${JSON.stringify(detail)}`);
   const client = new HomeClient({ homedata: new HomedataClient({ apiKey: "test", baseUrl: "https://data.test", fetchImpl }), fetchImpl, logger });
+  const searched = await client.search({ location: "Bath", listing_type: "sale" });
   const routes = new MapboxRoutes({ token: MAPBOX_TOKEN, fetchImpl, logger, referer: "https://mcp.home.co.uk/" });
   const server = buildHomeServer(client, undefined, { routes });
   const [clientSide, serverSide] = (await import("@modelcontextprotocol/sdk/inMemory.js")).InMemoryTransport.createLinkedPair();
@@ -1622,7 +1639,7 @@ async function routeApp(overrides: RouteOverride[] = []) {
     return { isError: answer.isError === true, body: answer.structuredContent as Record<string, any>, text: JSON.stringify(answer) };
   };
   const mapbox = (path: string) => requests.filter((r) => r.url.host === "api.mapbox.com" && r.url.pathname.startsWith(path));
-  return { mcp, call, requests, mapbox, logged, stop: async () => { await mcp.close(); await server.close(); } };
+  return { mcp, call, requests, mapbox, logged, searched, stop: async () => { await mcp.close(); await server.close(); } };
 }
 const scenario = (id: string) => BATH_ROUTE_SCENARIOS.find((s) => s.id === id)!.args as unknown as Record<string, unknown>;
 
@@ -1658,7 +1675,7 @@ test("commute_filter walks 15 minutes from Bath Spa station and splits the homes
     assert.deepEqual(body["homes_inside"].map((h: any) => h.listing_id), [BATH_HOMES.hallFloor]);
     assert.deepEqual(body["homes_outside"].map((h: any) => h.listing_id), [BATH_HOMES.paragon, BATH_HOMES.oldfieldPark, BATH_HOMES.twerton, BATH_HOMES.upperWeston, BATH_HOMES.peasedown]);
     assert.equal(body["homes_outside"].find((h: any) => h.listing_id === BATH_HOMES.oldfieldPark).near_edge, true, "a home within the simplification margin is borderline");
-    assert.equal(body["homes_outside"].find((h: any) => h.listing_id === BATH_HOMES.paragon).address, "26 The Paragon, Walcot, Bath");
+    assert.equal(body["homes_outside"].find((h: any) => h.listing_id === BATH_HOMES.paragon).address, "The Paragon, Walcot, Bath");
     assert.equal(body["reachable_area"].geometry.type, "Polygon");
     assert.ok(body["reachable_area"].geometry.coordinates[0].length < 500);
     assert.match(body["note"], /not a timetable/);
@@ -1726,6 +1743,24 @@ test("plan_viewings without a start opens the quickest loop at its longest leg",
     const trips = app.mapbox("/optimized-trips/");
     assert.deepEqual(trips.map((r) => r.url.searchParams.get("roundtrip")), ["true", "false"]);
     assert.equal(app.mapbox("/search/").length, 0, "no start, no place search");
+  } finally { await app.stop(); }
+});
+
+test("commute_filter and plan_viewings return exactly search_homes' public address and postcode for every home", async () => {
+  const app = await routeApp();
+  try {
+    const searched = new Map((app.searched["homes"] as Array<Record<string, unknown>>).map((home) => [home["id"], home]));
+    const commute = await app.call("commute_filter", scenario("walk-bath-spa"));
+    const viewings = await app.call("plan_viewings", scenario("viewings-from-postcode"));
+    assert.equal(commute.isError, false, commute.text);
+    assert.equal(viewings.isError, false, viewings.text);
+    const returned = [...commute.body["homes_inside"], ...commute.body["homes_outside"], ...viewings.body["stops"]];
+    for (const home of returned) {
+      const publicHome = searched.get(home.listing_id)!;
+      assert.ok(home.address, `${home.listing_id} has a non-empty public address`);
+      assert.equal(home.address, publicHome["address"], `${home.listing_id} address`);
+      assert.equal(home.postcode, publicHome["postcode"], `${home.listing_id} postcode`);
+    }
   } finally { await app.stop(); }
 });
 

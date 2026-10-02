@@ -36,6 +36,10 @@ export class TtlCache<V> {
     this.entries.set(key, { value, expires: this.now() + this.ttlMs });
   }
 
+  delete(key: string): void {
+    this.entries.delete(key);
+  }
+
   get size(): number { return this.entries.size; }
 
   stats(): { hits: number; misses: number; entries: number } {
