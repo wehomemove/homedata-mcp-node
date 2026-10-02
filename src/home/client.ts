@@ -7,6 +7,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
 
 export class HomeError extends Error {}
+export class HomeSearchRequiredError extends HomeError {}
 export class HomeUpstreamError extends Error {
   constructor(message: string, readonly status?: number, readonly notJson = false) { super(message); }
 }
@@ -83,6 +84,8 @@ export type HomeLocation = {
   url: string | null;
   coordinates: { latitude: number; longitude: number } | null;
 };
+
+type PublicListingIdentity = Pick<HomeLocation, "address" | "postcode" | "url"> & { address: string };
 
 const MIN_SECTOR_SALES = 10;
 /** Listing descriptions read at once for a wish search; home.co.uk answers each in about 0.2 s. */
@@ -275,6 +278,7 @@ export class HomeClient {
   private readonly listingRoutes: TtlCache<EnrichmentRoute>;
   private readonly listingTexts: TtlCache<string | null>;
   private readonly listingLocations: TtlCache<HomeLocation>;
+  private readonly publicListingIdentities: TtlCache<PublicListingIdentity>;
 
   constructor(private readonly options: HomeClientOptions) {
     this.homeBaseUrl = (options.homeBaseUrl ?? DEFAULT_HOME_URL).replace(/\/+$/, "");
@@ -289,6 +293,7 @@ export class HomeClient {
     this.listingRoutes = new TtlCache(4 * (options.cachedHomes ?? 2_000), ttl, clock);
     this.listingTexts = new TtlCache(2_000, LISTING_TEXT_TTL_MS, clock);
     this.listingLocations = new TtlCache(2_000, LISTING_TEXT_TTL_MS, clock);
+    this.publicListingIdentities = new TtlCache(2_000, LISTING_TEXT_TTL_MS, clock);
   }
 
   /** Hit and miss counts for health. A home hit is one Homedata core lookup not spent. */
@@ -345,6 +350,7 @@ export class HomeClient {
     // them. Keep sending the new contract, but never trust an unfiltered response.
     const signalFilters = args.reduced_within_days !== undefined || args.on_market_at_least_days !== undefined || args.new_within_days !== undefined;
     const properties = signalFilters ? sourceProperties.filter((property) => this.matchesMarketSignals(property, query)) : sourceProperties;
+    this.rememberPublicListingIdentities(properties);
     const currentPage = Number(pagination["current_page"] ?? args.page ?? 1);
     const lastPage = Number(pagination["last_page"]);
     const hasMore = signalFilters && sourceProperties.length > 0 && (!Number.isInteger(lastPage) || currentPage < lastPage);
@@ -483,6 +489,7 @@ export class HomeClient {
     if (postcode) {
       const search = object(await this.homeGet(`/api/${transaction}/${encodeURIComponent(postcode)}/`, { per_page: "120" }));
       listing = object((Array.isArray(search["properties"]) ? search["properties"] : []).find((p) => String(object(p)["listing_id"] ?? object(p)["id"]) === listingId));
+      if (Object.keys(listing).length) this.rememberPublicListingIdentities([listing]);
     }
     const card = { ...detail, ...listing, listing_id: listingId };
     const address = [detail["building_name"], detail["building_number"], detail["street_name"], detail["locality"], detail["town_name"], postcode]
@@ -516,22 +523,42 @@ export class HomeClient {
    */
   async locate(listingId: string): Promise<HomeLocation> {
     if (!UUID.test(listingId)) throw new HomeError(`${listingId} is not a listing UUID returned by search_homes`);
+    const publicIdentity = this.publicListingIdentities.peek(listingId);
+    if (!publicIdentity) throw new HomeSearchRequiredError(`Home ${listingId} has no remembered public display address. Run search_homes again before using route tools.`);
     const known = this.listingLocations.peek(listingId);
-    if (known) return { ...known };
+    if (known) return { ...known, ...publicIdentity };
     const detail = object(await this.homeGet(`/api/property-details/${listingId}`));
     if (!Object.keys(detail).length) throw new HomeError(`Home ${listingId} was not found`);
     const lat = Number(detail["latitude"]); const lng = Number(detail["longitude"]);
     const located = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
     const location: HomeLocation = {
       listing_id: listingId,
-      address: [text(detail["building_name"]), [text(detail["building_number"]), text(detail["street_name"])].filter(Boolean).join(" "), text(detail["locality"]), text(detail["town_name"])]
-        .filter(Boolean).join(", ") || null,
-      postcode: text(detail["postcode"]),
-      url: absoluteHomeUrl(`/property/${listingId}`),
+      address: publicIdentity.address,
+      postcode: publicIdentity.postcode,
+      url: publicIdentity.url,
       coordinates: located ? { latitude: lat, longitude: lng } : null,
     };
     this.listingLocations.set(listingId, location);
     return { ...location };
+  }
+
+  /** Route answers may repeat only the public identity search_homes exposed. */
+  private rememberPublicListingIdentities(properties: JsonObject[]): void {
+    for (const property of properties) {
+      const card = trimCard(property);
+      const listingId = card["id"];
+      const address = card["address"];
+      if (typeof listingId !== "string" || !UUID.test(listingId)) continue;
+      if (typeof address !== "string" || !address.trim()) {
+        this.publicListingIdentities.delete(listingId);
+        continue;
+      }
+      this.publicListingIdentities.set(listingId, {
+        address,
+        postcode: typeof card["postcode"] === "string" ? card["postcode"] : null,
+        url: typeof card["url"] === "string" ? card["url"] : null,
+      });
+    }
   }
 
   async area(postcode: string): Promise<JsonObject> {

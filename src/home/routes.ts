@@ -1,4 +1,4 @@
-import { HomeError, HomeUpstreamError, parsePostcode, type HomeClient, type HomeLocation } from "./client.js";
+import { HomeError, HomeSearchRequiredError, HomeUpstreamError, parsePostcode, type HomeClient, type HomeLocation } from "./client.js";
 
 /**
  * Commute and viewing-day answers from Mapbox, server side only. The token is
@@ -314,7 +314,8 @@ export class MapboxRoutes {
       for (let i = next++; i < ids.length; i = next++) {
         try { found[i] = await client.locate(ids[i]!); }
         catch (error) {
-          if (error instanceof HomeError) found[i] = { listing_id: ids[i]!, reason: "This home was not found on home.co.uk." };
+          if (error instanceof HomeSearchRequiredError) found[i] = { listing_id: ids[i]!, reason: error.message };
+          else if (error instanceof HomeError) found[i] = { listing_id: ids[i]!, reason: "This home was not found on home.co.uk." };
           else if (error instanceof HomeUpstreamError) found[i] = { listing_id: ids[i]!, reason: "Not available right now." };
           else throw error;
         }
