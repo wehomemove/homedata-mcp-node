@@ -213,6 +213,26 @@ test("health is open, non-POST MCP is refused and upstream outages are distinct"
   } finally { await stop(); }
 });
 
+test("every Home error answer is no-store, so Cloudflare never caches it", async () => {
+  const { base, stop } = await start({}, { callsPerMinute: 1 });
+  const post = (body: string, accept = "application/json, text/event-stream") => fetch(base + "/mcp", { method: "POST", headers: { "Content-Type": "application/json", Accept: accept }, body });
+  const call = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "search_homes", arguments: { location: "Bath", listing_type: "sale" } } });
+  try {
+    const answers: Array<[string, Response, number]> = [
+      ["unknown path", await fetch(base + "/.well-known/openai-apps-challenge"), 404],
+      ["GET on MCP", await fetch(base + "/mcp"), 405],
+      ["bad JSON", await post("not json"), 400],
+      ["no Accept", await post(call, "text/plain"), 406],
+    ];
+    await post(call);
+    answers.push(["over the cap", await post(call), 429]);
+    for (const [name, response, status] of answers) {
+      assert.equal(response.status, status, name);
+      assert.equal(response.headers.get("cache-control"), "no-store", name);
+    }
+  } finally { await stop(); }
+});
+
 test("limits are per caller, count every batch call and cap enrichment units separately", async () => {
   const { base, stop } = await start({}, { callsPerMinute: 1, enrichmentsPerMinute: 1, clientIpHeader: "x-test-client-ip" });
   const rpc = (id: number, name: string, args: Record<string, unknown> = {}) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });

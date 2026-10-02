@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 
 import { HomedataClient } from "../client.js";
 import { isMain } from "../entry.js";
-import { checkCallsPerMinute } from "../http.js";
+import { checkCallsPerMinute, noStoreOnErrors } from "../http.js";
 import { VERSION } from "../index.js";
 import { MinuteLimiter } from "../limiter.js";
 import { HomeClient } from "./client.js";
@@ -78,6 +78,7 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
   const callLimits = new CallerLimits(options.callsPerMinute ?? 30, now);
   const enrichmentLimits = new CallerLimits(options.enrichmentsPerMinute ?? 4, now);
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    noStoreOnErrors(res);
     const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
     if (requestPath === "/healthz") return void send(res, 200, { ok: true, service: "home", version: VERSION });
     if (requestPath !== path) return void send(res, 404, { error: "not_found" });

@@ -92,6 +92,8 @@ test("protected-resource metadata points ChatGPT at thor", async () => {
   for (const path of ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"]) {
     const response = await fetch(base + path);
     assert.equal(response.status, 200, path);
+    // Not cached, so a change to the OAuth metadata takes effect at once.
+    assert.equal(response.headers.get("cache-control"), "no-store", path);
     assert.deepEqual(await response.json(), {
       resource: SETTINGS.resource,
       authorization_servers: [SETTINGS.issuer],
@@ -101,6 +103,19 @@ test("protected-resource metadata points ChatGPT at thor", async () => {
     });
   }
   await stop();
+});
+
+test("discovery off its two paths is a 404 that is never cached", async () => {
+  const { base, stop } = await start();
+  try {
+    for (const path of ["/.well-known/oauth-protected-resource/other", "/.well-known/oauth-authorization-server"]) {
+      const response = await fetch(base + path);
+      assert.equal(response.status, 404, path);
+      assert.equal(response.headers.get("cache-control"), "no-store", path);
+    }
+  } finally {
+    await stop();
+  }
 });
 
 test("tools are listed without signing in and declare oauth2", async () => {
@@ -151,6 +166,7 @@ test("a token thor will not vouch for gets a 401 challenge and never reaches the
   for (const token of Object.keys(answers)) {
     const { status, headers } = await call(token);
     assert.equal(status, 401, token);
+    assert.equal(headers.get("cache-control"), "no-store", token);
     assert.match(headers.get("www-authenticate") ?? "", /resource_metadata=".*oauth-protected-resource".*error="invalid_token"/, token);
   }
   assert.deepEqual(apiCalls, []);
@@ -161,6 +177,7 @@ test("thor being unreachable is a 503, never a sign-out", async () => {
   const { call, apiCalls, stop } = await start({ answers: { down: "down" } });
   const { status, headers } = await call("down");
   assert.equal(status, 503);
+  assert.equal(headers.get("cache-control"), "no-store");
   assert.equal(headers.get("www-authenticate"), null);
   assert.deepEqual(apiCalls, []);
   await stop();

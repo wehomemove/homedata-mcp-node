@@ -209,6 +209,28 @@ class CallerLimits {
   }
 }
 
+/**
+ * Makes every error answer on this response `Cache-Control: no-store`,
+ * whoever writes it: our own replies, the MCP SDK's transport, or the 500
+ * fallback. Cloudflare caches a 404 by default, and a cached 404 on the
+ * domain-verification path hid a newly set token until the URL was purged.
+ */
+export function noStoreOnErrors(res: ServerResponse): void {
+  const writeHead = res.writeHead.bind(res) as (status: number, ...rest: unknown[]) => ServerResponse;
+  // Node's implicit headers (res.statusCode + res.end) also go through this.writeHead.
+  res.writeHead = ((status: number, ...rest: unknown[]) => {
+    if (status >= 400) {
+      res.setHeader("Cache-Control", "no-store");
+      rest = rest.map((arg) =>
+        arg && typeof arg === "object" && !Array.isArray(arg)
+          ? Object.fromEntries(Object.entries(arg).filter(([key]) => key.toLowerCase() !== "cache-control"))
+          : arg,
+      );
+    }
+    return writeHead(status, ...rest);
+  }) as typeof res.writeHead;
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
   res.writeHead(status, { "Content-Type": "application/json", ...headers }).end(JSON.stringify(body));
 }
@@ -246,11 +268,13 @@ export function createHttpHandler(opts: HttpOptions) {
   const limits = new CallerLimits(opts.callsPerMinute ?? 30, opts.now ?? Date.now);
 
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    noStoreOnErrors(res);
     const path = new URL(req.url ?? "/", "http://localhost").pathname;
 
     if (path === "/healthz") return sendJson(res, 200, { ok: true, version: VERSION });
 
     if (path === "/.well-known/openai-apps-challenge") {
+      // Never cached, whatever the answer: a new token must show at once.
       if (!opts.appsChallenge) return sendJson(res, 404, { error: "not_found" });
       // Exactly the token: OpenAI rejects JSON, a list or a trailing newline.
       res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" }).end(opts.appsChallenge);
@@ -258,10 +282,11 @@ export function createHttpHandler(opts: HttpOptions) {
     }
 
     // RFC 9728: at the root, and with the MCP path appended for clients that
-    // derive the metadata URL from the endpoint URL.
+    // derive the metadata URL from the endpoint URL. Not cached, so a change to
+    // the OAuth settings takes effect at once.
     if (auth.mode === "oauth" && req.method === "GET" &&
         (path === "/.well-known/oauth-protected-resource" || path === `/.well-known/oauth-protected-resource${mcpPath}`)) {
-      return sendJson(res, 200, protectedResourceMetadata(auth.settings), { "Cache-Control": "public, max-age=300" });
+      return sendJson(res, 200, protectedResourceMetadata(auth.settings), { "Cache-Control": "no-store" });
     }
 
     if (path !== mcpPath) return sendJson(res, 404, { error: "not_found" });
