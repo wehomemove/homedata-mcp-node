@@ -2,9 +2,10 @@ import { HomedataClient, type ApiResponse } from "../client.js";
 
 const DEFAULT_HOME_URL = "https://home.co.uk";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const POSTCODE = /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i;
+const POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
 
 export class HomeError extends Error {}
+export class HomeUpstreamError extends Error {}
 
 export interface HomeClientOptions {
   homeBaseUrl?: string;
@@ -128,11 +129,11 @@ export class HomeClient {
       const search = object(await this.homeGet(`/api/${transaction}/${encodeURIComponent(postcode)}/`, { per_page: "120" }));
       listing = object((Array.isArray(search["properties"]) ? search["properties"] : []).find((p) => String(object(p)["listing_id"] ?? object(p)["id"]) === listingId));
     }
-    const combined = { ...listing, ...detail, listing_id: listingId };
+    const card = { ...detail, ...listing, listing_id: listingId };
     const address = [detail["building_name"], detail["building_number"], detail["street_name"], detail["locality"], detail["town_name"], detail["postcode"]]
       .filter((v) => typeof v === "string" && v.trim()).join(", ");
     return {
-      ...trimCard(combined),
+      ...trimCard(card),
       description: detail["description"] ?? null,
       reception_rooms: detail["reception_rooms"] ?? null,
       floor_area_sqm: detail["epc_floor_area"] ?? detail["predicted_floor_area"] ?? null,
@@ -145,7 +146,7 @@ export class HomeClient {
         branch: detail["branch_name"] ?? listing["branch_name"] ?? null,
         logo: absoluteHomeUrl(detail["brand_logo"] ?? listing["agent_logo"]),
       },
-      enrichment: await this.enrich(address, postcode),
+      enrichment: await this.enrich(address, postcode, text(detail["building_number"]), text(detail["building_name"])),
     };
   }
 
@@ -173,18 +174,45 @@ export class HomeClient {
     return this.data(`/calculators/${kind === "stamp_duty" ? "stamp-duty" : "mortgage"}/`, query);
   }
 
-  private async enrich(address: string, postcode: string | null): Promise<JsonObject> {
+  private async enrich(
+    address: string,
+    postcode: string | null,
+    buildingNumber: string | null,
+    buildingName: string | null,
+  ): Promise<JsonObject> {
     if (!address) return { available: false, reason: "This listing does not publish an address that can be matched." };
+    if (!postcode || (!buildingNumber && !buildingName)) {
+      return { available: false, reason: "The published address is not precise enough to match a property safely." };
+    }
     const found = await this.data("/address/find/", { q: address });
     const body = object(found);
     const candidates = Array.isArray(body["results"]) ? body["results"] : Array.isArray(found) ? found : [];
-    const first = object(candidates[0]);
-    const uprn = first["uprn"];
+    const match = candidates.map(object).find((candidate) => this.sameAddress(candidate, postcode, buildingNumber, buildingName));
+    const uprn = match?.["uprn"];
     if ((typeof uprn !== "string" && typeof uprn !== "number") || !/^\d+$/.test(String(uprn))) {
       return { available: false, reason: "No exact UPRN match was found for the published address." };
     }
     const core = await this.data(`/property/${encodeURIComponent(String(uprn))}/core/`, {});
     return { available: true, uprn: String(uprn), postcode, property: core };
+  }
+
+  private sameAddress(candidate: JsonObject, postcode: string, buildingNumber: string | null, buildingName: string | null): boolean {
+    const full = text(candidate["full_address"] ?? candidate["display_address"] ?? candidate["address"]) ?? "";
+    const candidatePostcode = text(candidate["postcode"]) ?? full.match(/[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\s*$/i)?.[0] ?? null;
+    const compact = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!candidatePostcode || compact(candidatePostcode) !== compact(postcode)) return false;
+    const sameIdentifier = (expected: string, field: unknown): boolean => {
+      const direct = text(field);
+      if (direct && compact(direct) === compact(expected)) return true;
+      // Address find commonly returns one formatted address rather than split
+      // building fields. The first comma-delimited line is the building.
+      const building = full.split(",", 1)[0]?.trim() ?? "";
+      const escaped = expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(`^${escaped}(?:\\s|,|$)`, "i").test(building);
+    };
+    return buildingNumber
+      ? sameIdentifier(buildingNumber, candidate["building_number"])
+      : buildingName !== null && sameIdentifier(buildingName, candidate["building_name"]);
   }
 
   private async data(path: string, query: Record<string, string>): Promise<unknown> {
@@ -201,7 +229,7 @@ export class HomeClient {
     try {
       const response = await this.fetchImpl(url, { headers: { Accept: "application/json", "User-Agent": "home-chatgpt-app/1.0" }, signal: controller.signal });
       const value = await response.json().catch(() => null);
-      if (!response.ok) throw new HomeError(`home.co.uk returned HTTP ${response.status}`);
+      if (!response.ok) throw new HomeUpstreamError(`home.co.uk returned HTTP ${response.status}`);
       return value;
     } finally { clearTimeout(timer); }
   }

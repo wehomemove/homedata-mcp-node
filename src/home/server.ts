@@ -2,7 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 import { VERSION } from "../index.js";
-import { HomeClient, HomeError, type SearchArgs } from "./client.js";
+import { HomeClient, HomeError, HomeUpstreamError, type SearchArgs } from "./client.js";
 
 type Schema = Record<string, unknown>;
 type Tool = { name: string; title: string; description: string; inputSchema: Schema };
@@ -114,6 +114,7 @@ export function buildHomeServer(client: HomeClient): Server {
       }
     } catch (error) {
       if (error instanceof HomeError) return result({ error: "invalid_request", detail: error.message }, true);
+      if (error instanceof HomeUpstreamError) return result({ error: "upstream_unavailable", detail: error.message }, true);
       throw error;
     }
   });
