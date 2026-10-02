@@ -21,7 +21,7 @@ import { accountFromEnv, createHomeHttpHandler } from "../home/http.js";
 import { HOME_RULES } from "../home/plugin.js";
 import { buildHomeServer, HOME_TOOLS } from "../home/server.js";
 import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
-import { HOME_WIDGET_HTML, HOME_WIDGET_URI, homeMapLayout, homeMapProject, homePinLabel } from "../home/widget.js";
+import { HOME_WIDGET_HTML, HOME_WIDGET_URI, homeMapLayout, homeMapProject, homePinLabel, humaniseDaysListed } from "../home/widget.js";
 
 const ID = "b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
 const ID2 = "c9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
@@ -156,6 +156,14 @@ test("rental map pins show exact prices rather than rounded thousands", () => {
   assert.equal(homePinLabel(325000, null), "£325k");
 });
 
+test("listing ages are rounded into human time without exposing raw source floats", () => {
+  assert.equal(humaniseDaysListed(0.4), "Listed today");
+  assert.equal(humaniseDaysListed(1.483834589386574), "1 day");
+  assert.equal(humaniseDaysListed(3.2), "3 days");
+  assert.equal(humaniseDaysListed(42.1), "6 weeks");
+  assert.equal(humaniseDaysListed(undefined), null);
+});
+
 test("the generated dependency-free widget script is valid JavaScript", () => {
   const script = HOME_WIDGET_HTML.match(/<script>([\s\S]*)<\/script>/)?.[1];
   assert.ok(script);
@@ -187,7 +195,7 @@ test("render tools reuse supplied homes without another search and keep text fal
   } finally { await stop(); }
 });
 
-test("Home publishes a v3 MCP Apps resource without any map surface when the server token is absent", async () => {
+test("Home publishes a v3 MCP Apps resource without a map surface when the browser token is absent", async () => {
   const { mcp, stop } = await start();
   try {
     const resources = await mcp.listResources();
@@ -203,11 +211,12 @@ test("Home publishes a v3 MCP Apps resource without any map surface when the ser
     assert.deepEqual(ui.csp?.connectDomains, []);
     assert.deepEqual(ui.csp?.resourceDomains, ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com"]);
     assert.doesNotMatch(content.text ?? "", /openstreetmap|tile\.openstreetmap/i);
-    assert.match(content.text ?? "", /mapsEnabled=false/);
+    assert.doesNotMatch(content.text ?? "", /mapbox-gl-js/);
+    assert.match(content.text ?? "", /mapboxToken=""/);
   } finally { await stop(); }
 });
 
-test("Home proxies and caches Mapbox static images without exposing its server token", async () => {
+test("Home publishes the interactive Mapbox client and CSP domains when configured", async () => {
   const upstream: URL[] = [];
   const signals: Array<AbortSignal | null | undefined> = [];
   const mapFetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
@@ -215,21 +224,24 @@ test("Home proxies and caches Mapbox static images without exposing its server t
     signals.push(init?.signal);
     return new Response(Uint8Array.from([137, 80, 78, 71]), { headers: { "Content-Type": "image/png" } });
   }) as typeof fetch;
-  const { base, mcp, stop } = await start({}, { mapboxToken: "sk.server-secret", mapOrigin: "https://staging-mcp.home.co.uk", fetchImpl: mapFetch });
+  const { base, mcp, stop } = await start({}, { mapboxToken: "pk.browser-token", fetchImpl: mapFetch });
   try {
     const resource = await mcp.readResource({ uri: HOME_WIDGET_URI });
     const content = resource.contents[0] as { text?: string; _meta?: Record<string, unknown> };
-    assert.match(content.text ?? "", /mapsEnabled=true/);
-    assert.doesNotMatch(content.text ?? "", /sk\.server-secret/);
-    const ui = content._meta?.["ui"] as { csp?: { resourceDomains?: string[] } };
-    assert.ok(ui.csp?.resourceDomains?.includes("https://staging-mcp.home.co.uk"));
-    assert.match(content.text ?? "", /mapOrigin="https:\/\/staging-mcp\.home\.co\.uk"/);
+    assert.match(content.text ?? "", /mapbox-gl-js\/v3\.15\.0/);
+    assert.match(content.text ?? "", /mapboxToken="pk\.browser-token"/);
+    assert.match(content.text ?? "", /new mapboxgl\.Map/);
+    assert.match(content.text ?? "", /NavigationControl/);
+    const ui = content._meta?.["ui"] as { csp?: { connectDomains?: string[]; resourceDomains?: string[] } };
+    assert.deepEqual(ui.csp?.connectDomains, ["https://api.mapbox.com", "https://events.mapbox.com"]);
+    assert.ok(ui.csp?.resourceDomains?.includes("https://api.mapbox.com"));
+    assert.ok(ui.csp?.resourceDomains?.includes("https://events.mapbox.com"));
     const path = "/maps/static?theme=light&points=51.38%2C-2.36%3B51.39%2C-2.35";
     const first = await fetch(base + path); const second = await fetch(base + path);
     assert.equal(first.status, 200); assert.equal(first.headers.get("content-type"), "image/png");
     assert.equal(second.status, 200); assert.equal(upstream.length, 1);
     assert.equal(upstream[0]!.hostname, "api.mapbox.com");
-    assert.equal(upstream[0]!.searchParams.get("access_token"), "sk.server-secret");
+    assert.equal(upstream[0]!.searchParams.get("access_token"), "pk.browser-token");
     assert.ok(signals[0] instanceof AbortSignal);
     assert.equal((await fetch(base + "/maps/static?points=bad")).status, 400);
   } finally { await stop(); }

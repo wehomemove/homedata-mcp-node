@@ -7,23 +7,21 @@ Home is a separate, public MCP surface: search and detail tools are read-only an
 ```sh
 npm ci
 npm run build
-HOMEDATA_API_KEY=... MAPBOX_SECRET_TOKEN=... HOME_MCP_PATH=/mcp PORT=4177 npm run home:http
+HOMEDATA_API_KEY=... MAPBOX_PUBLIC_TOKEN=... HOME_MCP_PATH=/mcp PORT=4177 npm run home:http
 ```
 
 The Homedata key is held only by the server and enriches listing details. `HOME_MCP_LISTING_VIEW_SECRET` must match atlas's setting of the same name so property-detail requests use the trusted listing lane; it is a separate secret from `HOME_MCP_API_KEY`. ChatGPT and other callers use the search, detail, area and calculator tools without authentication; the account tools are described under [Saved searches and price alerts](#saved-searches-and-price-alerts). `HOME_BASE_URL` and `HOMEDATA_BASE_URL` exist for staging and tests; production should leave both unset.
 
-`MAPBOX_SECRET_TOKEN` is held only by the server. The browser receives cached,
-same-origin static images from `/maps/static`; it never receives the token or
-calls Mapbox. When the token is absent, that route is a 404 and the widget
-renders no map.
+`MAPBOX_PUBLIC_TOKEN` is a URL-restricted Mapbox `pk.` browser token. The
+widget uses it for interactive light and dark maps. Never put a Mapbox `sk.`
+secret token in this variable. When it is absent, the widget omits the map and
+its Mapbox assets and CSP domains. Deployments that already put a `pk.` token
+in the older `MAPBOX_SECRET_TOKEN` setting continue to work while they migrate;
+an actual `sk.` token is never sent to the widget.
 
 `MCP_CALLS_PER_MINUTE` defaults to 30 per caller. `HOME_ENRICHMENTS_PER_MINUTE` separately defaults to four homes per caller because those lookups use the server-held Homedata key; a four-home comparison consumes all four units. A home with a UPRN uses one Homedata request, an exact address match uses two, and the postcode fallback uses five (or six after an unsuccessful address match). The default therefore caps the worst case at 24 Homedata requests per caller per minute. Coordinate-to-postcode recovery uses Home's reverse-geocode endpoint and does not use the Homedata key. Set `HOME_CLIENT_IP_HEADER=cf-connecting-ip` only behind the trusted proxy configuration that removes caller-supplied copies of that header. Without it, limits use the direct socket address. Invalid limit values prevent startup rather than silently removing the cap.
 
 Successful Homedata answers are cached in memory for 24 hours: each home's core lookup by UPRN (up to 2,000 homes), area facts by postcode (up to 2,000), and how each listing resolved to one of those, so a repeat view also skips the address match. A repeat view of a cached home spends no Homedata tokens and does not count towards `HOME_ENRICHMENTS_PER_MINUTE`. Failed or partly failed answers are never cached. The cache is per process and is emptied by a restart or deploy. `/healthz` reports `enrichment_cache.homes` and `enrichment_cache.areas`, each with `hits`, `misses` and `entries`, counted since the process started; a home hit is one 25-token core lookup saved.
-
-`HOME_MAPS_PER_MINUTE` defaults to 20 uncached static maps per caller. Cached
-images do not consume that allowance. Mapbox requests time out after five
-seconds, and a caller over the limit receives HTTP 429 with `Retry-After: 60`.
 
 The endpoint answers MCP at `HOME_MCP_PATH` and health checks at `/healthz`. Set `OPENAI_APPS_CHALLENGE` to the plugin portal's domain token to serve it at `/.well-known/openai-apps-challenge`; unset, that path answers 404. It is stateless: each POST creates a fresh MCP server and no search, shortlist or user preference is retained. Only the property and area enrichment cache described above outlives a request.
 
@@ -75,7 +73,7 @@ These three tools read home.co.uk's JSON only. They do not use the Homedata key 
 
 Search reads home.co.uk's public JSON. Search responses deliberately omit HTML cards, boundaries, pre-rendered map pins and all other page payload. They retain only each home's coordinates so the separate `render_home_listings` tool can show the selected cards on a map. The search and detail tools stay text-first; only `render_home_listings` and `render_home_detail` link to the MCP Apps resource, so the model can refine an earlier result set and re-render it without another search. Clients without UI still receive the same JSON as text and structured content.
 
-The inline component has no third-party JavaScript. Its resource policy permits listing images from `home.co.uk` and `cdn.home.co.uk`, Plus Jakarta Sans from Google's font CDN, and same-origin map images only when Mapbox is configured; it permits no network connections. The component supports inline and fullscreen presentation, redraws its price pins when the host resizes it, and is responsive down to 320px. OpenStreetMap is not used anywhere.
+The inline component's resource policy permits listing images from `home.co.uk` and `cdn.home.co.uk`, Plus Jakarta Sans from Google's font CDN, and Mapbox GL assets and connections only when Mapbox is configured. The component supports inline and fullscreen presentation, interactive pan and zoom with price pins, and is responsive down to 320px. OpenStreetMap is not used anywhere.
 
 One-home and comparison responses first use `property_uprn` from property details, then try an exact address match. Exact matches receive `scope: "home"`; listings that cannot be matched receive `scope: "area"` with explicitly labelled postcode facts. When details omit a postcode, published coordinates are reverse-geocoded first. Only a listing with no usable UPRN, postcode or coordinates is reported as unavailable.
 

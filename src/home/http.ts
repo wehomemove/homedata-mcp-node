@@ -200,7 +200,7 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
     const server = buildHomeServer(
       options.client,
       account ? { tools: account, token: bearerToken(req), onRefused: (challenge) => { refused ??= challenge; } } : undefined,
-      { mapsEnabled: Boolean(options.mapboxToken), mapOrigin: options.mapOrigin },
+      { mapboxToken: options.mapboxToken },
     );
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });
@@ -234,6 +234,10 @@ export function accountFromEnv(env: NodeJS.ProcessEnv): AccountSettings | undefi
 async function main(): Promise<void> {
   const apiKey = (process.env["HOMEDATA_API_KEY"] ?? "").trim();
   if (!apiKey) throw new Error("HOMEDATA_API_KEY is required for Home listing enrichment");
+  const configuredMapboxToken = (process.env["MAPBOX_PUBLIC_TOKEN"] ?? "").trim();
+  const legacyMapboxToken = (process.env["MAPBOX_SECRET_TOKEN"] ?? "").trim();
+  const mapboxToken = configuredMapboxToken || (legacyMapboxToken.startsWith("pk.") ? legacyMapboxToken : "");
+  if (mapboxToken && !mapboxToken.startsWith("pk.")) throw new Error("MAPBOX_PUBLIC_TOKEN must be a Mapbox pk. browser token");
   const client = new HomeClient({
     homeBaseUrl: (process.env["HOME_BASE_URL"] ?? "").trim() || undefined,
     listingViewSecret: (process.env["HOME_MCP_LISTING_VIEW_SECRET"] ?? "").trim() || undefined,
@@ -248,7 +252,7 @@ async function main(): Promise<void> {
     clientIpHeader: (process.env["HOME_CLIENT_IP_HEADER"] ?? "").trim() || undefined,
     appsChallenge: checkAppsChallenge(process.env["OPENAI_APPS_CHALLENGE"]),
     account: accountFromEnv(process.env),
-    mapboxToken: (process.env["MAPBOX_SECRET_TOKEN"] ?? "").trim() || undefined,
+    mapboxToken: mapboxToken || undefined,
     mapOrigin: checkUrl("HOME_MCP_RESOURCE", (process.env["HOME_MCP_RESOURCE"] ?? "").trim() || DEFAULT_RESOURCE, true),
   });
   const port = Number(process.env["PORT"] || 4177); const host = process.env["HOST"] || "127.0.0.1";
