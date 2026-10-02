@@ -22,7 +22,7 @@ import { HOME_RULES } from "../home/plugin.js";
 import { MAPBOX_GL_ASSET_PREFIX } from "../home/mapbox-assets.js";
 import { buildHomeServer, HOME_TOOLS } from "../home/server.js";
 import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
-import { HOME_WIDGET_HTML, HOME_WIDGET_URI, homeAreaRing, homeMapLayout, homeMapProject, homePinLabel, humaniseDaysListed } from "../home/widget.js";
+import { HOME_WIDGET_HTML, HOME_WIDGET_URI, homeMapLayout, homeMapProject, homePinCollisions, homePinLabel, humaniseDaysListed } from "../home/widget.js";
 
 const ID = "b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
 const ID2 = "c9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
@@ -183,20 +183,19 @@ test("the widget uses home.co.uk's colours: no pastel pink tints, pink outlines 
     assert.ok(!HOME_WIDGET_HTML.toLowerCase().includes(banned), `banned tint ${banned}`);
   }
   assert.doesNotMatch(HOME_WIDGET_HTML, /light-v11|dark-v11/);
-  // Pink appears only in the gradients, the glass pill's shadow, the selected pin and the map wash: never as a border or outline.
+  // Pink appears only in gradients, the glass pill's shadow and the selected pin: never as a border or outline.
   assert.doesNotMatch(css, /(border|outline)[^;{}]*(#ec4899|#f43f5e|236,72,153)/);
   assert.match(css, /\.card\{[^}]*border:1px solid var\(--line\)/);
   assert.match(css, /linear-gradient\(to right,rgba\(236,72,153,\.5\),rgba\(244,63,94,\.5\),rgba\(249,115,22,\.5\)\)/);
 });
 
-test("the area wash hull pads every home by 400 m and closes", () => {
-  const ring = homeAreaRing([{ latitude: 52.63, longitude: 1.29 }, { latitude: 52.64, longitude: 1.31 }]);
-  assert.deepEqual(ring[0], ring.at(-1));
-  const lats = ring.map(([, lat]) => lat), lngs = ring.map(([lng]) => lng);
-  assert.ok(Math.abs(Math.min(...lats) - (52.63 - 400 / 111320)) < 1e-6);
-  assert.ok(Math.abs(Math.max(...lats) - (52.64 + 400 / 111320)) < 1e-6);
-  assert.ok(Math.min(...lngs) < 1.29 && Math.max(...lngs) > 1.31);
-  assert.deepEqual(homeAreaRing([]), []);
+test("map price pills become hearts only when their labels collide", () => {
+  assert.deepEqual(homePinCollisions([
+    { x: 40, y: 40, width: 80, height: 34 },
+    { x: 200, y: 40, width: 80, height: 34 },
+    { x: 230, y: 42, width: 80, height: 34 },
+  ]), [false, false, true]);
+  assert.deepEqual(homePinCollisions([]), []);
 });
 
 test("listing descriptions become clean plain-text paragraphs", () => {
@@ -273,14 +272,13 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   assert.ok(chatgpt.classes.has("light"));
   assert.equal(chatgpt.styles.at(-1), "mapbox://styles/mapbox/streets-v12");
 
-  // home.co.uk's map: status-coloured speech bubbles that become gradient hearts when zoomed out, 3D buildings and the faint pink area wash.
-  assert.ok(chatgpt.mapClasses.has("far"));
+  // home.co.uk's map: price pills remain visible at town zoom and only colliding labels become hearts.
+  assert.ok(!chatgpt.mapClasses.has("far"));
   assert.match(chatgpt.pins[0]!.innerHTML, /url\(#heart-default\)/);
   assert.match(chatgpt.pins[0]!.innerHTML, /<span class="bubble">£325k<\/span>/);
   chatgpt.mapEvents.get("style.load")?.();
-  assert.deepEqual(chatgpt.layers.map((layer) => layer.id), ["home-buildings", "home-area", "home-area-fill", "home-area-line"]);
+  assert.deepEqual(chatgpt.layers.map((layer) => layer.id), ["home-buildings"]);
   assert.deepEqual(chatgpt.layers[0]!.paint["fill-extrusion-color"], "#d4d0c8");
-  assert.deepEqual(chatgpt.layers[2]!.paint, { "fill-color": "#ec4899", "fill-opacity": 0.06 });
 
   const statuses = harness();
   statuses.dispatch("message", { source: statuses.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [
@@ -319,10 +317,12 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
 
   const detail = harness();
   detail.dispatch("message", { source: detail.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
-    view: "detail", home: { enrichment: { scope: "area", area: { broadband: { max_download_speed: 1000 }, crime: { level: "14 recorded crimes" }, schools: [{ name: "Area Primary" }] } } },
+    view: "detail", home: { enrichment: { scope: "area", area: { broadband: { max_download_speed: 1000 }, crime: { level: "14 RECORDED CRIMES" }, schools: [{ name: "Area Primary", distance_km: 1.1, ofsted_rating: "Good" }] } } },
   } } } });
   assert.match(detail.root.innerHTML, /Know before you view/);
   assert.equal((detail.root.innerHTML.match(/for the area/g) ?? []).length, 3);
+  assert.match(detail.root.innerHTML, /<span class="ofsted">Good<\/span><span class="distance">0\.7 mi<\/span>/);
+  assert.match(detail.root.innerHTML, /Crime: 14 recorded crimes/);
   detail.dispatch("message", { source: detail.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
     view: "detail", home: { enrichment: { available: false } },
   } } } });
@@ -348,11 +348,11 @@ test("render tools reuse supplied homes without another search and keep text fal
   } finally { await stop(); }
 });
 
-test("Home publishes a v5 MCP Apps resource without a map surface when the browser token is absent", async () => {
+test("Home publishes a v6 MCP Apps resource without a map surface when the browser token is absent", async () => {
   const { mcp, stop } = await start();
   try {
     const resources = await mcp.listResources();
-    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v5.html"]);
+    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v6.html"]);
     const resource = await mcp.readResource({ uri: resources.resources[0]!.uri });
     const content = resource.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
     assert.equal(content.mimeType, "text/html;profile=mcp-app");
