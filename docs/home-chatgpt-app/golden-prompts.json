@@ -1,11 +1,26 @@
 {
   "about": "Golden prompts for the separate home.co.uk Home ChatGPT app. Run these after changing tool names, descriptions, schemas or instructions. Review cases are five positive and three negative examples.",
-  "version": "2026-10-02",
+  "version": "2026-10-02-market-signals",
   "cases": [
     {
       "id": "search-family-home", "kind": "indirect", "review": true,
       "prompt": "Find me three-bedroom houses for sale in Bath up to £500,000, newest first.",
       "expect": { "calls": [{ "tool": "search_homes", "args": { "location": "Bath", "listing_type": "sale", "min_beds": 3, "max_price": 500000, "sort": "newest" } }], "outcome": "Shows matching Home listings with asking prices, photos, dates, status and links." }
+    },
+    {
+      "id": "search-recently-reduced", "kind": "indirect", "review": false,
+      "prompt": "Show me homes for sale in Bristol reduced in the last 14 days.",
+      "expect": { "calls": [{ "tool": "search_homes", "args": { "location": "Bristol", "listing_type": "sale", "reduced_within_days": 14 } }], "outcome": "Returns only homes with a recorded reduction in that period and notes if not every source result was checked." }
+    },
+    {
+      "id": "search-long-listed", "kind": "indirect", "review": false,
+      "prompt": "Find flats to buy in Leeds that have been on the market at least 90 days.",
+      "expect": { "calls": [{ "tool": "search_homes", "args": { "location": "Leeds", "listing_type": "sale", "property_type": "flat", "on_market_at_least_days": 90 } }], "outcome": "Returns long-listed flats across the checked pages with any coverage limit stated." }
+    },
+    {
+      "id": "search-new-rentals", "kind": "indirect", "review": false,
+      "prompt": "What rentals were newly listed in Manchester in the last 3 days?",
+      "expect": { "calls": [{ "tool": "search_homes", "args": { "location": "Manchester", "listing_type": "rent", "new_within_days": 3 } }], "outcome": "Returns rentals whose recorded added date is within the requested period." }
     },
     {
       "id": "open-result", "kind": "followup", "review": true,

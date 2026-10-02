@@ -89,6 +89,48 @@ test("search translates filters and strips the multi-megabyte response to card f
   } finally { await stop(); }
 });
 
+test("search applies market signals across at most three pages and reports incomplete coverage", async () => {
+  const requests: URL[] = [];
+  const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
+    const url = new URL(String(input)); requests.push(url);
+    const page = Number(url.searchParams.get("page"));
+    const properties = [
+      { listing_id: `${page}9f9c51d-987e-41f6-88cb-ffe1d8f2e01b`, days_listed: 100, reduced_date: "2026-09-25T00:00:00Z", added_date: "2026-06-01T00:00:00Z" },
+      { listing_id: `${page}8f9c51d-987e-41f6-88cb-ffe1d8f2e01b`, days_listed: 10, reduced_date: "2026-09-01T00:00:00Z", added_date: "2026-09-30T00:00:00Z" },
+    ];
+    return new Response(JSON.stringify({ displayLocation: "Bath", total: 10, pagination: { current_page: page, last_page: 5 }, properties }), { headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  const homedata = new HomedataClient({ apiKey: "test", baseUrl: "https://data.test", fetchImpl });
+  const client = new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, now: () => new Date("2026-10-02T00:00:00Z") });
+  const body = await client.search({ location: "Bath", listing_type: "sale", reduced_within_days: 14, on_market_at_least_days: 90 });
+  assert.equal((body["homes"] as unknown[]).length, 3);
+  assert.equal(body["total"], 10);
+  assert.equal(body["matching_homes_returned"], 3);
+  assert.equal(body["pages_scanned"], 3);
+  assert.equal(body["results_limited"], true);
+  assert.match(String(body["note"]), /more source results were not checked/i);
+  assert.deepEqual(requests.map((url) => url.searchParams.get("page")), ["1", "2", "3"]);
+  assert.ok(requests.every((url) => !url.searchParams.has("reduced_within_days") && !url.searchParams.has("on_market_at_least_days")));
+});
+
+test("new-listing market signal stops at the last source page and validates day counts", async () => {
+  const requests: URL[] = [];
+  const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
+    const url = new URL(String(input)); requests.push(url);
+    const page = Number(url.searchParams.get("page"));
+    return new Response(JSON.stringify({ total: 2, pagination: { current_page: page, last_page: 2 }, properties: [
+      { listing_id: page === 1 ? ID : ID2, added_date: page === 1 ? "2026-10-01T00:00:00Z" : "2026-09-01T00:00:00Z" },
+    ] }), { headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  const homedata = new HomedataClient({ apiKey: "test", baseUrl: "https://data.test", fetchImpl });
+  const client = new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, now: () => new Date("2026-10-02T00:00:00Z") });
+  const body = await client.search({ location: "Bath", listing_type: "sale", new_within_days: 3 });
+  assert.equal((body["homes"] as unknown[]).length, 1);
+  assert.equal(body["results_limited"], false);
+  assert.equal("note" in body, false);
+  await assert.rejects(() => client.search({ location: "Bath", listing_type: "sale", new_within_days: 0 }), /starting at 1/);
+});
+
 test("get_home uses the property-details UPRN before address matching", async () => {
   const { mcp, requests, stop } = await start({ detail: { uprn: "100012345678" } });
   try {
