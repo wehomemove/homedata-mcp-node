@@ -16,6 +16,7 @@ export const HOME_INSTRUCTIONS = [
   "Home searches homes for sale and to rent across the United Kingdom using home.co.uk.",
   "Start with search_homes. Keep the listing IDs it returns: get_home gives every photo, the full description, agent and Homedata checks; compare_homes gives the same depth side by side.",
   "Use area_insights for schools, broadband, recorded crime, deprivation and local price growth. Use the two calculators only when the user supplies their assumptions.",
+  "Property enrichment is labelled with scope home. When no UPRN can be found, enrichment labelled with scope area contains postcode-level facts only: never present those as facts about the home.",
   "Never invent availability, safety, mortgage eligibility or future prices. Dates and status are snapshots and should be described as such.",
 ].join(" ");
 

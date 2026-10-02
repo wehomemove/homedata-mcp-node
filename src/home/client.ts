@@ -146,7 +146,7 @@ export class HomeClient {
         branch: detail["branch_name"] ?? listing["branch_name"] ?? null,
         logo: absoluteHomeUrl(detail["brand_logo"] ?? listing["agent_logo"]),
       },
-      enrichment: await this.enrich(address, postcode, text(detail["building_number"]), text(detail["building_name"])),
+      enrichment: await this.enrich(detail["uprn"], address, postcode, text(detail["building_number"]), text(detail["building_name"])),
     };
   }
 
@@ -175,25 +175,48 @@ export class HomeClient {
   }
 
   private async enrich(
+    publishedUprn: unknown,
     address: string,
     postcode: string | null,
     buildingNumber: string | null,
     buildingName: string | null,
   ): Promise<JsonObject> {
-    if (!address) return { available: false, reason: "This listing does not publish an address that can be matched." };
-    if (!postcode || (!buildingNumber && !buildingName)) {
-      return { available: false, reason: "The published address is not precise enough to match a property safely." };
+    const directUprn = (typeof publishedUprn === "string" || typeof publishedUprn === "number") && /^\d+$/.test(String(publishedUprn))
+      ? String(publishedUprn)
+      : null;
+    if (directUprn) return this.propertyEnrichment(directUprn, postcode, "listing_uprn");
+
+    if (address && postcode && (buildingNumber || buildingName)) {
+      const found = await this.data("/address/find/", { q: address });
+      const body = object(found);
+      const candidates = Array.isArray(body["results"]) ? body["results"] : Array.isArray(found) ? found : [];
+      const match = candidates.map(object).find((candidate) => this.sameAddress(candidate, postcode, buildingNumber, buildingName));
+      const matchedUprn = match?.["uprn"];
+      if ((typeof matchedUprn === "string" || typeof matchedUprn === "number") && /^\d+$/.test(String(matchedUprn))) {
+        return this.propertyEnrichment(String(matchedUprn), postcode, "exact_address_match");
+      }
     }
-    const found = await this.data("/address/find/", { q: address });
-    const body = object(found);
-    const candidates = Array.isArray(body["results"]) ? body["results"] : Array.isArray(found) ? found : [];
-    const match = candidates.map(object).find((candidate) => this.sameAddress(candidate, postcode, buildingNumber, buildingName));
-    const uprn = match?.["uprn"];
-    if ((typeof uprn !== "string" && typeof uprn !== "number") || !/^\d+$/.test(String(uprn))) {
-      return { available: false, reason: "No exact UPRN match was found for the published address." };
+
+    if (postcode) {
+      try {
+        const area = await this.area(postcode);
+        return {
+          available: true,
+          scope: "area",
+          postcode: area["postcode"],
+          notice: "These are postcode-level area facts. They are not facts about this home.",
+          area,
+        };
+      } catch (error) {
+        if (!(error instanceof HomeError)) throw error;
+      }
     }
-    const core = await this.data(`/property/${encodeURIComponent(String(uprn))}/core/`, {});
-    return { available: true, uprn: String(uprn), postcode, property: core };
+    return { available: false, reason: "No UPRN or valid full postcode was published for enrichment." };
+  }
+
+  private async propertyEnrichment(uprn: string, postcode: string | null, source: "listing_uprn" | "exact_address_match"): Promise<JsonObject> {
+    const core = await this.data(`/property/${encodeURIComponent(uprn)}/core/`, {});
+    return { available: true, scope: "home", source, uprn, postcode, property: core };
   }
 
   private sameAddress(candidate: JsonObject, postcode: string, buildingNumber: string | null, buildingName: string | null): boolean {

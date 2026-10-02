@@ -87,33 +87,57 @@ test("search translates filters and strips the multi-megabyte response to card f
   } finally { await stop(); }
 });
 
-test("get_home returns full listing content and matches it to Homedata enrichment", async () => {
-  const { mcp, requests, stop } = await start();
+test("get_home uses the property-details UPRN before address matching", async () => {
+  const { mcp, requests, stop } = await start({ detail: { uprn: "100012345678" } });
   try {
     const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
     const body = answer.structuredContent as Record<string, unknown>;
     assert.equal(body["description"], "Full description");
     assert.deepEqual(body["photos"], ["https://cdn.home.co.uk/full.jpg"]);
-    assert.equal((body["enrichment"] as Record<string, unknown>)["uprn"], "100012345678");
-    assert.deepEqual(requests.map((u) => u.pathname), [`/api/property-details/${ID}`, "/api/for-sale/BA2%208TJ/", "/address/find/", "/property/100012345678/core/"]);
+    const enrichment = body["enrichment"] as Record<string, unknown>;
+    assert.equal(enrichment["uprn"], "100012345678");
+    assert.equal(enrichment["scope"], "home");
+    assert.equal(enrichment["source"], "listing_uprn");
+    assert.deepEqual(requests.map((u) => u.pathname), [`/api/property-details/${ID}`, "/api/for-sale/BA2%208TJ/", "/property/100012345678/core/"]);
   } finally { await stop(); }
 });
 
-test("get_home refuses fuzzy address candidates and never enriches an imprecise listing", async () => {
-  for (const options of [
-    { detail: { building_number: null, building_name: null, street_name: null, town_name: null, postcode: null } },
-    { detail: { building_number: null, building_name: null } },
-    { address: { results: [{ uprn: "100012345678", postcode: "BA2 8TJ", building_number: "14", full_address: "14 Heritage Close, Bath, BA2 8TJ" }] } },
-    { address: { results: [{ postcode: "BA2 8TJ", building_number: "12", full_address: "12 Heritage Close, Bath, BA2 8TJ" }] } },
-  ]) {
-    const { mcp, requests, stop } = await start(options);
-    try {
-      const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
-      assert.equal(((answer.structuredContent as Record<string, unknown>)["enrichment"] as Record<string, unknown>)["available"], false);
-      assert.equal(requests.some((url) => url.pathname.includes("/core/")), false);
-      if (options.detail) assert.equal(requests.some((url) => url.pathname === "/address/find/"), false);
-    } finally { await stop(); }
-  }
+test("get_home falls back to an exact address match when details have no UPRN", async () => {
+  const { mcp, requests, stop } = await start();
+  try {
+    const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+    const enrichment = (answer.structuredContent as Record<string, unknown>)["enrichment"] as Record<string, unknown>;
+    assert.equal(enrichment["scope"], "home");
+    assert.equal(enrichment["source"], "exact_address_match");
+    assert.equal(enrichment["uprn"], "100012345678");
+    assert.ok(requests.some((url) => url.pathname === "/address/find/"));
+  } finally { await stop(); }
+});
+
+test("get_home returns clearly labelled postcode facts when no UPRN can be found", async () => {
+  const { mcp, requests, stop } = await start({ detail: { building_number: null, building_name: null } });
+  try {
+    const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+    const enrichment = (answer.structuredContent as Record<string, unknown>)["enrichment"] as Record<string, unknown>;
+    assert.equal(enrichment["available"], true);
+    assert.equal(enrichment["scope"], "area");
+    assert.match(String(enrichment["notice"]), /not facts about this home/i);
+    const area = enrichment["area"] as Record<string, unknown>;
+    assert.deepEqual(Object.keys(area), ["postcode", "crime", "schools", "broadband", "deprivation", "price_growth"]);
+    assert.equal(requests.some((url) => url.pathname === "/address/find/" || url.pathname.includes("/core/")), false);
+    assert.ok(requests.some((url) => url.pathname === "/schools/nearby"));
+    assert.ok(requests.some((url) => url.pathname === "/price-growth/BA2/"));
+  } finally { await stop(); }
+});
+
+test("get_home never turns an inexact address candidate into home facts", async () => {
+  const { mcp, requests, stop } = await start({ address: { results: [{ uprn: "100012345678", postcode: "BA2 8TJ", building_number: "14", full_address: "14 Heritage Close, Bath, BA2 8TJ" }] } });
+  try {
+    const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+    const enrichment = (answer.structuredContent as Record<string, unknown>)["enrichment"] as Record<string, unknown>;
+    assert.equal(enrichment["scope"], "area");
+    assert.equal(requests.some((url) => url.pathname.includes("/core/")), false);
+  } finally { await stop(); }
 });
 
 test("compare_homes gets two homes and rejects counts outside two to four", async () => {
