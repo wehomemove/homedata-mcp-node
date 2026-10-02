@@ -75,6 +75,15 @@ const PATTERNS: Record<Wish, RegExp[]> = {
 const NEGATION = /\b(?:no|not|without|lacks?|lacking|nor|isn't|doesn't|there's no|there is no)\b(?:\s+\S+){0,2}\s*$/i;
 
 /**
+ * The clause goes on to deny what it named: "off-road parking is not available",
+ * "vacant possession will not be given". Only a denial of the thing itself counts,
+ * so "a garden which is not overlooked" still states a garden.
+ */
+const DENIED_AFTER = /^\s*(?:\w+\s+){0,2}?(?:(?:is|are|was|will be|would be|can be|cannot be|can't be|won't be)\s+(?:not\s+|no longer\s+)?(?:unavailable|available|included|offered|provided|given|possible|guaranteed)|isn't available|aren't available|not (?:available|included|offered|provided|given|possible|guaranteed))\b/i;
+/** For the chain phrases a bare negation after them is enough: "vacant possession is not", "chain free it is not". */
+const CHAIN_DENIED_AFTER = /^\s*(?:\w+\s+){0,2}?(?:is|are|was|will|would|can|could|shall)?\s*(?:not|never|no longer|isn't|won't|cannot|can't)\b/i;
+
+/**
  * A clause that only offers the feature as a possibility ("could be used as a home
  * office", "potential for off-road parking") does not state it.
  */
@@ -156,7 +165,12 @@ export function matchWishes(text: string | null, wishes: readonly Wish[]): WishM
       for (let m = pattern.exec(text); m; m = pattern.exec(text)) {
         const start = m.index; const end = start + m[0].length;
         const before = text.slice(clauseStart(text, start), start);
-        if (wish !== "no_chain" && NEGATION.test(before)) continue;
+        // "No onward chain" carries its own "no"; every other phrase, "chain free" and
+        // "vacant possession" included, is ruled out by a negation before it.
+        if (!/^no\b/i.test(m[0]) && NEGATION.test(before)) continue;
+        const rest = text.slice(end, nextBreak(text, end, CLAUSE_BREAK));
+        if (DENIED_AFTER.test(rest) && /\b(?:not|no longer|unavailable|isn't|aren't|cannot|can't|won't)\b/i.test(rest)) continue;
+        if (wish === "no_chain" && !/^no\b/i.test(m[0]) && CHAIN_DENIED_AFTER.test(rest)) continue;
         if (HEDGE.test(before)) continue;
         // A spare room offered as "bedroom, nursery or home office" is a choice, not an office.
         if (wish === "home_office" && (HEDGE.test(sentenceOf(text, start, end)) || /\bor\b/i.test(sentenceOf(text, start, end)))) continue;

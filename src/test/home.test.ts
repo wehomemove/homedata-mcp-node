@@ -488,8 +488,19 @@ test("a wish matches only when the listing states it, and its evidence is the li
     ["home_office", "This versatile space could be used as a home office, hobby room or occasional guest accommodation."],
     ["open_plan", "The kitchen is not open plan."],
     ["no_chain", "We can take your property in as part exchange, giving you a guaranteed buyer and a quicker, chain-free move."],
+    // Opposite claims: the chain phrases are negated before or after, never evidence.
+    ["no_chain", "This sale is not chain-free."],
+    ["no_chain", "Please note the property is not chain free as the vendors are buying."],
+    ["no_chain", "Vacant possession is not available."],
+    ["no_chain", "Vacant possession will not be given on completion."],
+    ["no_chain", "Sold without vacant possession, with the tenant in situ."],
+    ["off_road_parking", "Off-road parking is not available."],
   ];
   for (const [wish, text] of notStated) assert.deepEqual(matchWishes(text, [wish]), [], `${wish}: ${text}`);
+  // A denial of something else in the clause leaves the wish stated.
+  assert.equal(matchWishes("A rear garden which is not overlooked.", ["garden"])[0]?.evidence, "A rear garden which is not overlooked");
+  assert.equal(matchWishes("Offered with no onward chain, which is not often the case here.", ["no_chain"])[0]?.evidence, "Offered with no onward chain, which is not often the case here");
+  assert.equal(matchWishes("Vacant possession and chain free.", ["no_chain"])[0]?.evidence, "Vacant possession and chain free");
   assert.deepEqual(matchWishes(null, [...WISHES]), []);
 });
 
