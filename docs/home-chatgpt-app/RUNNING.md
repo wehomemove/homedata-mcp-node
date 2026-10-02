@@ -13,7 +13,10 @@ HOMEDATA_API_KEY=... MAPBOX_PUBLIC_TOKEN=... HOME_MCP_PATH=/mcp PORT=4177 npm ru
 The Homedata key is held only by the server and enriches listing details. `HOME_MCP_LISTING_VIEW_SECRET` must match atlas's setting of the same name so property-detail requests use the trusted listing lane; it is a separate secret from `HOME_MCP_API_KEY`. ChatGPT and other callers use the search, detail, area and calculator tools without authentication; the account tools are described under [Saved searches and price alerts](#saved-searches-and-price-alerts). `HOME_BASE_URL` and `HOMEDATA_BASE_URL` exist for staging and tests; production should leave both unset.
 
 `MAPBOX_PUBLIC_TOKEN` is a URL-restricted Mapbox `pk.` browser token. The
-widget uses it for interactive light and dark maps. Never put a Mapbox `sk.`
+widget uses it for interactive light and dark maps, and the server uses the same
+token for `commute_filter` and `plan_viewings` (see
+[Commutes and viewing days](#commutes-and-viewing-days)); without it those two
+tools are not listed. Never put a Mapbox `sk.`
 secret token in this variable. When it is absent, the widget omits the map and
 its Mapbox assets and CSP domains. Deployments that already put a `pk.` token
 in the older `MAPBOX_SECRET_TOKEN` setting continue to work while they migrate;
@@ -94,6 +97,24 @@ The inline component's resource policy permits listing images from `home.co.uk` 
 A Home deployment must install development dependencies: do not run `npm ci --omit=dev`. Mapbox GL and `@phosphor-icons/core` are deliberately development dependencies because `dist/home` is excluded from the public npm package, while the Home server reads its distribution files at startup. The widget's icons are Phosphor Icons (MIT, Copyright (c) 2023 Phosphor Icons): `npm run build` copies the exact SVGs from `@phosphor-icons/core` into `dist/home/phosphor-icons.json`, and the server refuses to start without that file. Add an icon in `scripts/home-icons.mjs` by its Phosphor file name; never write a path by hand.
 
 One-home and comparison responses first use `property_uprn` from property details, then try an exact address match. Exact matches receive `scope: "home"`; listings that cannot be matched receive `scope: "area"` with explicitly labelled postcode facts. When details omit a postcode, published coordinates are reverse-geocoded first. Only a listing with no usable UPRN, postcode or coordinates is reported as unavailable.
+
+## Commutes and viewing days
+
+`commute_filter` and `plan_viewings` are listed only when `MAPBOX_PUBLIC_TOKEN` is set. They call Mapbox from the server; the widget is unchanged. Each home's position comes from `/api/property-details/{id}` (the trusted listing lane, as for wishes) and is kept for an hour. Neither tool uses the Homedata key or the enrichment limit. The token goes only to `api.mapbox.com`, with `Referer: <HOME_MCP_RESOURCE>/` so a URL restriction on the token still admits the server, and it is never logged.
+
+- **Places** come from the Search Box API (`/search/searchbox/v1/forward`, UK only, five candidates, biased towards the homes). Search Box always answers something: `zzqxv nowhere` came back as Norwich City Council, an unknown postcode as a neighbour (`BA1 9ZZ` as `GU2 9ZZ`), and "King Edward's School, Bath" sits among Bath Theatre School and Bath Guitar School. So:
+  - a full postcode must come back as exactly that postcode;
+  - every query word that says which place must be in the candidate's name or its surroundings (street, town, postcode), and at least one must be in the name alone. Town words only qualify: "Bath" cannot turn Bath Theatre School into King Edward's. A candidate whose whole name is query words, such as the town of Bath, also counts;
+  - kind words ("station", "school") must be in the name or street, or, only in a search for that kind, in the candidate's Mapbox category. Bath Spa station is "Bath Spa" filed under transport, and a bus stop called Bath Road is no answer to "Station Road, Bath";
+  - among the candidates that pass, the one whose name has fewest words the query did not ask for wins, so Bath Spa beats the luggage shop beside it;
+  - a query made only of kind words ("the station") is refused.
+
+  A station or school search (`place_kind`, or a query part ending in "station" or "school") tries that POI category first, as asked and then without the kind word, because the category index names Bath Spa station "Bath Spa". A refusal tells the model to name the place with its town or give an address or postcode; a wrong origin is never returned.
+- **`commute_filter`** reads the isochrone API (`mapbox/walking`, `mapbox/cycling` or `mapbox/driving`, 1 to 60 minutes) and tests each home against the outline it returns, holes included. The outline is simplified by 25, 75 or 150 metres for walk, cycle and drive, keeping it to a few hundred points; a home that close to the line is marked `near_edge`. Driving is without traffic.
+- **`plan_viewings`** uses the optimisation API (`/optimized-trips/v1/mapbox/driving`). Mapbox runs an open route only with a fixed first and last stop. With a start, the tool makes one request per home as the last stop (up to six) and keeps the quickest. Without one, it takes the quickest loop, opens it at its longest leg, and makes a second request between those two ends.
+- Mapbox's `NoSegment`, `NoTrips` and `NoRoute` answers are plain errors that say what to change. A 401, 429, 5xx, timeout or unusable answer is "Not available right now.".
+
+Tests replay answers recorded live in Bath (`src/test/fixtures/home-routes.json`, property details cut to position and address). To record them again, run `MAPBOX_PUBLIC_TOKEN=pk... node scripts/home-record-routes.mjs` after `npm run build`, then check the expected figures in `src/test/home.test.ts`. `node scripts/home-live-check.mjs` runs both tools in Bath against live Mapbox when `MAPBOX_PUBLIC_TOKEN` is set.
 
 ## Saved searches and price alerts
 

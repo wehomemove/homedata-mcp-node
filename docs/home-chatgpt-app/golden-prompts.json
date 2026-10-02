@@ -1,6 +1,6 @@
 {
   "about": "Golden prompts for the separate home.co.uk Home ChatGPT app. Run these after changing tool names, descriptions, schemas, instructions or skills. The review packet (review: true) is five positive and three negative cases, each run live against https://mcp.home.co.uk/mcp before its outcome was written; the positive outcomes name figures and filters a reviewer can check.",
-  "version": "2026-10-02-wishes",
+  "version": "2026-10-02-routes",
   "cases": [
     {
       "id": "search-family-home", "kind": "indirect", "review": true,
@@ -106,6 +106,37 @@
       "id": "typical-rents-renter", "kind": "indirect", "review": false,
       "prompt": "I'm moving to BA1 and need a two-bedroom flat. What rent should I budget for?",
       "expect": { "calls": [{ "tool": "typical_rents", "args": { "location": "BA1" } }], "outcome": "Gives median and typical two-bedroom asking rents per month and describes them as asking rents." }
+    },
+    {
+      "id": "commute-walk-station", "kind": "indirect", "review": false,
+      "prompt": "Find three-bedroom houses for sale in Bath and tell me which are within a 15-minute walk of Bath Spa station.",
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "sale", "min_beds": 3}}, {"tool": "commute_filter", "args": {"place": "Bath Spa station", "place_kind": "station", "minutes": 15, "mode": "walk"}}], "allowed": [{"tool": "render_home_listings", "args": {}}], "outcome": "Searches once, then passes the listing IDs to commute_filter with Bath Spa station, 15 minutes and walk. Names only the homes in homes_inside as within the walk, calls any near_edge home borderline, and says the times are typical walking estimates. On 2026-10-02 a 15-minute walk from Bath Spa reached the Hall Floor flat by the Paragon but not 26 The Paragon, which is uphill."}
+    },
+    {
+      "id": "commute-drive-school", "kind": "direct", "review": false,
+      "prompt": "Which homes for sale in Bath are within a 10-minute drive of King Edward's School?",
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "sale"}}, {"tool": "commute_filter", "args": {"place": "King Edward's School, Bath", "place_kind": "school", "minutes": 10, "mode": "drive"}}], "outcome": "Calls commute_filter with the school, 10 minutes and drive, and the search's listing IDs. Reports which homes are inside and that drive times are without traffic, so a school-run time may be longer."}
+    },
+    {
+      "id": "commute-area-only", "kind": "direct", "review": false,
+      "prompt": "How far can I cycle in 20 minutes from BA1 1SU?",
+      "expect": {"calls": [{"tool": "commute_filter", "args": {"place": "BA1 1SU", "place_kind": "postcode", "minutes": 20, "mode": "cycle"}}], "outcome": "Calls commute_filter with no listing IDs and describes the reachable area from its outline, naming places at its edge only as approximate. Does not search for homes unless asked."}
+    },
+    {
+      "id": "viewing-day-from-start", "kind": "followup", "review": false,
+      "prompt": "(after search-family-home) I'm viewing the first four on Saturday, starting from Bath Spa station. What order should I see them in, and how much driving is it?",
+      "expect": {"calls": [{"tool": "plan_viewings", "args": {"start": "Bath Spa station", "start_kind": "station"}}], "outcome": "Passes the first four listing IDs and the station as start to plan_viewings, then lists the homes in its stop order with each drive in minutes and the total driving time. Says the times leave out traffic, parking and the viewings themselves, and does not promise arrival times."}
+    },
+    {
+      "id": "viewing-day-no-start", "kind": "followup", "review": false,
+      "prompt": "(after compare-rentals) I want to see all three in one afternoon. Which order means the least driving?",
+      "expect": {"calls": [{"tool": "plan_viewings", "args": {}}], "outcome": "Calls plan_viewings with the three compared listing IDs and no start, then gives the order with each leg and the total. It does not invent a start point."}
+    },
+    {
+      "id": "boundary-catch-train", "kind": "boundary", "review": false,
+      "prompt": "If I buy on Lower Oldfield Park, will I always make the 8:05 train from Bath Spa?",
+      "expect": {"calls": [], "allowed": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "sale"}}, {"tool": "commute_filter", "args": {"place": "Bath Spa station", "place_kind": "station", "mode": "walk"}}], "outcome": "May show whether the street is within a typical walk of the station, but never promises the user will make a particular train."},
+      "why": "commute_filter gives typical travel estimates, not timetables or guarantees."
     },
     {
       "id": "account-save-search", "kind": "direct", "review": false,

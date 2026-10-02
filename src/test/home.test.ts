@@ -20,7 +20,9 @@ import { ACCOUNT_TOOLS, SAVED_SEARCH_TYPES, type AccountSettings } from "../home
 import { accountFromEnv, createHomeHttpHandler, mapboxTokenFromEnv } from "../home/http.js";
 import { HOME_RULES } from "../home/plugin.js";
 import { MAPBOX_GL_ASSET_PREFIX } from "../home/mapbox-assets.js";
-import { buildHomeServer, HOME_TOOLS } from "../home/server.js";
+import { buildHomeServer, HOME_ROUTE_TOOLS, HOME_TOOLS } from "../home/server.js";
+import { extraWords, insideArea, MapboxRoutes, metresToEdge, namesPlace } from "../home/routes.js";
+import { BATH_HOMES, BATH_ROUTE_SCENARIOS, routeFixtureKey } from "./home-routes-fixture.js";
 import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
 import { matchWishes, WISHES, type Wish } from "../home/wishes.js";
 import { HOME_ICONS } from "../home/icons.js";
@@ -1160,7 +1162,7 @@ test("Home source and tests stay out of the npm package", () => {
   try {
     const listing = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: ROOT, encoding: "utf8", env: { ...process.env, npm_config_cache: cache } })) as Array<{ files: Array<{ path: string }> }>;
     const paths = listing[0]!.files.map((f) => f.path);
-    assert.equal(paths.some((path) => path.startsWith("dist/home/") || path.endsWith("/home.test.js")), false, paths.filter((p) => p.includes("home")).join("\n"));
+    assert.equal(paths.some((path) => path.startsWith("dist/home/") || path.startsWith("dist/test/home")), false, paths.filter((p) => p.includes("home")).join("\n"));
   } finally { rmSync(cache, { recursive: true, force: true }); }
 });
 
@@ -1313,11 +1315,11 @@ function atlas(answers: Record<string, AtlasAnswer> = {}) {
   return { calls, fetchImpl };
 }
 
-async function startAccount(answers: Record<string, AtlasAnswer> = {}, fixtureOptions: FixtureOptions = {}) {
+async function startAccount(answers: Record<string, AtlasAnswer> = {}, fixtureOptions: FixtureOptions = {}, mapboxToken?: string) {
   const fake = atlas(answers);
   const logged: string[] = [];
   const logger = (message: string, detail: unknown) => logged.push(`${message} ${detail instanceof Error ? `${detail.name}: ${detail.message}` : JSON.stringify(detail)}`);
-  const app = await start({ ...fixtureOptions, logger }, { account: { resource: RESOURCE, issuer: "https://home.test", accountMcpUrl: ACCOUNT_URL, fetchImpl: fake.fetchImpl, logger } });
+  const app = await start({ ...fixtureOptions, logger }, { account: { resource: RESOURCE, issuer: "https://home.test", accountMcpUrl: ACCOUNT_URL, fetchImpl: fake.fetchImpl, logger }, mapboxToken });
   const rpc = async (method: string, params: unknown, token?: string) => {
     const response = await fetch(`${app.base}/mcp`, {
       method: "POST",
@@ -1333,10 +1335,11 @@ async function startAccount(answers: Record<string, AtlasAnswer> = {}, fixtureOp
 const challengeOf = (result: Record<string, any>) => (result["_meta"]?.["mcp/www_authenticate"] as string[] | undefined)?.[0];
 
 test("with account settings the nine account tools are listed as oauth2 with their scope, search stays noauth, and the golden set holds", async () => {
-  const app = await startAccount();
+  // As in production: a Mapbox token and account settings, so every tool is listed.
+  const app = await startAccount({}, {}, "pk.production-shape");
   try {
     const tools = (await app.rpc("tools/list", {})).body["result"].tools as Array<Record<string, any>>;
-    assert.deepEqual(tools.map((t) => t.name), [...HOME_TOOLS, ...ACCOUNT_TOOLS].map((t) => t.name));
+    assert.deepEqual(tools.map((t) => t.name), [...HOME_TOOLS, ...HOME_ROUTE_TOOLS, ...ACCOUNT_TOOLS].map((t) => t.name));
     assert.deepEqual(ACCOUNT_TOOLS.map((t) => t.name), [
       "list_saved_searches", "create_saved_search", "pause_saved_search", "delete_saved_search", "get_saved_search_new_results",
       "list_price_alerts", "create_price_alert", "pause_price_alert", "delete_price_alert",
@@ -1585,5 +1588,322 @@ test("only saved-search types atlas's runner executes are advertised, and a sold
     assert.equal(sold["isError"], true);
     assert.match(sold["structuredContent"]["detail"], /sold-price searches cannot be saved/);
     assert.equal(app.atlas.length, advertised.length, "a sold search never reaches atlas");
+  } finally { await app.stop(); }
+});
+
+// ---- Commute and viewing-day tools, replayed from Mapbox and home.co.uk answers recorded in Bath ----
+
+const ROUTE_FIXTURE = JSON.parse(readFileSync(join(ROOT, "src/test/fixtures/home-routes.json"), "utf8")) as { responses: Record<string, { status: number; body: unknown }> };
+const MAPBOX_TOKEN = "pk.test-route-token";
+type RouteOverride = [(url: URL) => boolean, { status: number; body: unknown } | "network"];
+
+async function routeApp(overrides: RouteOverride[] = []) {
+  const requests: Array<{ url: URL; headers: Record<string, string> }> = []; const logged: string[] = [];
+  const fetchImpl = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const url = new URL(String(input)); requests.push({ url, headers: (init?.headers ?? {}) as Record<string, string> });
+    const override = overrides.find(([match]) => match(url))?.[1];
+    if (override === "network") throw new TypeError("fetch failed");
+    // Proximity follows the homes found, so a test that hides a home still replays its place search.
+    const loose = (key: string) => key.replace(/[?&]proximity=[^&]*/, "");
+    const answer = override ?? ROUTE_FIXTURE.responses[routeFixtureKey(url)]
+      ?? Object.entries(ROUTE_FIXTURE.responses).find(([key]) => loose(key) === loose(routeFixtureKey(url)))?.[1];
+    if (!answer) throw new Error(`no recorded answer for ${routeFixtureKey(url)}; re-run scripts/home-record-routes.mjs`);
+    return new Response(JSON.stringify(answer.body), { status: answer.status, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  const logger = (message: string, detail: unknown) => logged.push(`${message} ${JSON.stringify(detail)}`);
+  const client = new HomeClient({ homedata: new HomedataClient({ apiKey: "test", baseUrl: "https://data.test", fetchImpl }), fetchImpl, logger });
+  const routes = new MapboxRoutes({ token: MAPBOX_TOKEN, fetchImpl, logger, referer: "https://mcp.home.co.uk/" });
+  const server = buildHomeServer(client, undefined, { routes });
+  const [clientSide, serverSide] = (await import("@modelcontextprotocol/sdk/inMemory.js")).InMemoryTransport.createLinkedPair();
+  const mcp = new Client({ name: "test", version: "1" }, { capabilities: {} });
+  await server.connect(serverSide); await mcp.connect(clientSide);
+  const call = async (name: string, args: Record<string, unknown>) => {
+    const answer = await mcp.callTool({ name, arguments: args });
+    return { isError: answer.isError === true, body: answer.structuredContent as Record<string, any>, text: JSON.stringify(answer) };
+  };
+  const mapbox = (path: string) => requests.filter((r) => r.url.host === "api.mapbox.com" && r.url.pathname.startsWith(path));
+  return { mcp, call, requests, mapbox, logged, stop: async () => { await mcp.close(); await server.close(); } };
+}
+const scenario = (id: string) => BATH_ROUTE_SCENARIOS.find((s) => s.id === id)!.args as unknown as Record<string, unknown>;
+
+test("commute and viewing tools are listed read-only only when a Mapbox token is configured", async () => {
+  const without = await start();
+  const withToken = await start({}, { mapboxToken: "pk.listed" });
+  try {
+    assert.equal((await without.mcp.listTools()).tools.some((t) => ["commute_filter", "plan_viewings"].includes(t.name)), false);
+    assert.doesNotMatch(without.mcp.getInstructions() ?? "", /commute_filter/);
+    const tools = (await withToken.mcp.listTools()).tools;
+    assert.deepEqual(tools.map((t) => t.name), [...HOME_TOOLS, ...HOME_ROUTE_TOOLS].map((t) => t.name));
+    for (const name of ["commute_filter", "plan_viewings"]) {
+      const tool = tools.find((t) => t.name === name)!;
+      assert.deepEqual(tool.annotations, { readOnlyHint: true, destructiveHint: false, openWorldHint: true }, name);
+      assert.equal(tool._meta?.["ui"], undefined, `${name} draws no widget in this release`);
+    }
+    const commute = tools.find((t) => t.name === "commute_filter")!.inputSchema.properties as Record<string, any>;
+    assert.deepEqual(commute["mode"].enum, ["walk", "cycle", "drive"]);
+    assert.equal(commute["minutes"].maximum, 60);
+    assert.equal((tools.find((t) => t.name === "plan_viewings")!.inputSchema.properties as Record<string, any>)["listing_ids"].maxItems, 6);
+    assert.match(withToken.mcp.getInstructions() ?? "", /commute_filter.*plan_viewings/);
+  } finally { await without.stop(); await withToken.stop(); }
+});
+
+test("commute_filter walks 15 minutes from Bath Spa station and splits the homes by the Mapbox outline", async () => {
+  const app = await routeApp();
+  try {
+    const { isError, body, text } = await app.call("commute_filter", scenario("walk-bath-spa"));
+    assert.equal(isError, false, text);
+    assert.equal(body["place"].name, "Bath Spa");
+    assert.match(body["place"].address, /BA1 1SU/);
+    assert.equal(body["summary"], "1 of 6 homes are within 15 minutes' walk of Bath Spa.");
+    assert.deepEqual(body["homes_inside"].map((h: any) => h.listing_id), [BATH_HOMES.hallFloor]);
+    assert.deepEqual(body["homes_outside"].map((h: any) => h.listing_id), [BATH_HOMES.paragon, BATH_HOMES.oldfieldPark, BATH_HOMES.twerton, BATH_HOMES.upperWeston, BATH_HOMES.peasedown]);
+    assert.equal(body["homes_outside"].find((h: any) => h.listing_id === BATH_HOMES.oldfieldPark).near_edge, true, "a home within the simplification margin is borderline");
+    assert.equal(body["homes_outside"].find((h: any) => h.listing_id === BATH_HOMES.paragon).address, "26 The Paragon, Walcot, Bath");
+    assert.equal(body["reachable_area"].geometry.type, "Polygon");
+    assert.ok(body["reachable_area"].geometry.coordinates[0].length < 500);
+    assert.match(body["note"], /not a timetable/);
+    // The station category is tried as said, then without the word "station".
+    const searches = app.mapbox("/search/searchbox/");
+    assert.deepEqual(searches.map((r) => r.url.searchParams.get("q")), ["Bath Spa station", "Bath Spa"]);
+    assert.ok(searches.every((r) => r.url.searchParams.get("poi_category")?.includes("railway_station") && r.url.searchParams.get("proximity")));
+    const [isochrone] = app.mapbox("/isochrone/");
+    assert.equal(isochrone!.url.pathname, "/isochrone/v1/mapbox/walking/-2.35698,51.37776");
+    assert.equal(isochrone!.url.searchParams.get("contours_minutes"), "15");
+    assert.equal(isochrone!.headers["Referer"], "https://mcp.home.co.uk/");
+    assert.doesNotMatch(text, /pk\.|access_token/);
+    assert.ok(app.requests.filter((r) => r.url.host !== "api.mapbox.com").every((r) => !r.url.searchParams.has("access_token")), "the token only goes to Mapbox");
+  } finally { await app.stop(); }
+});
+
+test("commute_filter drives from a school and gives the area alone for a postcode by bike", async () => {
+  const app = await routeApp();
+  try {
+    const drive = await app.call("commute_filter", scenario("drive-school"));
+    assert.equal(drive.isError, false, drive.text);
+    assert.equal(drive.body["place"].name, "King Edward's School");
+    assert.deepEqual(drive.body["homes_inside"].map((h: any) => h.listing_id), [BATH_HOMES.paragon]);
+    assert.match(drive.body["note"], /without traffic/);
+    assert.equal(app.mapbox("/isochrone/")[0]!.url.pathname.split("/")[4], "driving");
+
+    const cycle = await app.call("commute_filter", scenario("cycle-postcode-area-only"));
+    assert.equal(cycle.isError, false, cycle.text);
+    assert.equal(cycle.body["place"].type, "postcode");
+    assert.equal("homes_inside" in cycle.body, false);
+    assert.equal(cycle.body["reachable_area"].properties.mode, "cycle");
+    assert.equal(app.mapbox("/search/searchbox/").at(-1)!.url.searchParams.get("types"), "postcode");
+  } finally { await app.stop(); }
+});
+
+test("plan_viewings from a start point tries each home last and returns the quickest order, legs, total and route", async () => {
+  const app = await routeApp();
+  try {
+    const { isError, body, text } = await app.call("plan_viewings", scenario("viewings-from-postcode"));
+    assert.equal(isError, false, text);
+    assert.equal(body["start"].name, "BA1 1SU");
+    assert.deepEqual(body["stops"].map((s: any) => s.listing_id), [BATH_HOMES.oldfieldPark, BATH_HOMES.avondaleRoad, BATH_HOMES.paragon, BATH_HOMES.kensingtonPlace]);
+    assert.deepEqual(body["stops"].map((s: any) => s.drive_from_previous_minutes), [4, 10, 10, 4]);
+    assert.deepEqual(body["stops"].map((s: any) => s.driving_minutes_so_far), [4, 14, 24, 28]);
+    assert.equal(body["total_driving_minutes"], 28);
+    assert.equal(body["total_km"], 8.4);
+    assert.equal(body["route"].type, "LineString");
+    const trips = app.mapbox("/optimized-trips/");
+    assert.equal(trips.length, 4, "one optimisation per candidate last stop");
+    assert.ok(trips.every((r) => r.url.searchParams.get("roundtrip") === "false" && r.url.searchParams.get("source") === "first" && r.url.searchParams.get("destination") === "last"));
+    assert.match(body["note"], /without live traffic/);
+  } finally { await app.stop(); }
+});
+
+test("plan_viewings without a start opens the quickest loop at its longest leg", async () => {
+  const app = await routeApp();
+  try {
+    const { isError, body, text } = await app.call("plan_viewings", scenario("viewings-no-start"));
+    assert.equal(isError, false, text);
+    assert.equal(body["start"], null);
+    assert.deepEqual(body["stops"].map((s: any) => s.listing_id), [BATH_HOMES.kensingtonPlace, BATH_HOMES.paragon, BATH_HOMES.oldfieldPark, BATH_HOMES.avondaleRoad, BATH_HOMES.upperWeston]);
+    assert.equal(body["stops"][0].drive_from_previous_minutes, undefined);
+    assert.equal(body["stops"][0].driving_minutes_so_far, 0);
+    assert.equal(body["total_driving_minutes"], body["stops"].at(-1).driving_minutes_so_far);
+    const trips = app.mapbox("/optimized-trips/");
+    assert.deepEqual(trips.map((r) => r.url.searchParams.get("roundtrip")), ["true", "false"]);
+    assert.equal(app.mapbox("/search/").length, 0, "no start, no place search");
+  } finally { await app.stop(); }
+});
+
+test("commute and viewing arguments are checked before any request, with errors that say what to send", async () => {
+  const app = await routeApp();
+  const ids = Object.values(BATH_HOMES);
+  try {
+    const cases: Array<[string, Record<string, unknown>, RegExp]> = [
+      ["commute_filter", { minutes: 15, mode: "walk" }, /place is required/],
+      ["commute_filter", { place: "Bath Spa station", minutes: 15, mode: "run" }, /mode must be walk, cycle or drive/],
+      ["commute_filter", { place: "Bath Spa station", minutes: 61, mode: "walk" }, /minutes must be a whole number from 1 to 60/],
+      ["commute_filter", { place: "Bath Spa station", minutes: 7.5, mode: "walk" }, /whole number/],
+      ["commute_filter", { place: "Bath Spa station", place_kind: "pub", minutes: 15, mode: "walk" }, /place_kind must be one of station, school, office, postcode, address/],
+      ["commute_filter", { place: "BA1", place_kind: "postcode", minutes: 15, mode: "walk" }, /BA1 is not a full UK postcode/],
+      ["commute_filter", { place: "Bath Spa station", minutes: 15, mode: "walk", listing_ids: ["12"] }, /12 is not a listing UUID/],
+      ["commute_filter", { place: "Bath Spa station", minutes: 15, mode: "walk", listing_ids: [...ids, ...ids, ...ids] }, /up to|1 to 20/],
+      ["plan_viewings", { listing_ids: [ids[0]] }, /two|2 to 6/],
+      ["plan_viewings", { listing_ids: ids.slice(0, 7) }, /2 to 6/],
+      ["plan_viewings", { listing_ids: [ids[0], ids[0].toUpperCase()] }, /the same home twice/],
+      ["plan_viewings", { listing_ids: ids.slice(0, 2), start: "  " }, /start must be a place/],
+      ["commute_filter", { place: "the station", place_kind: "station", minutes: 15, mode: "walk" }, /"the station" does not say which place; name it with its town/],
+    ];
+    for (const [tool, args, message] of cases) {
+      const { isError, body } = await app.call(tool, args);
+      assert.equal(isError, true, JSON.stringify(args));
+      assert.equal(body["error"], "invalid_request");
+      assert.match(body["detail"], message, JSON.stringify(args));
+    }
+    assert.equal(app.mapbox("/").length, 0, "nothing reached Mapbox");
+  } finally { await app.stop(); }
+});
+
+test("Mapbox's no-place, no-road and no-route answers are plain errors; refusals and outages are the neutral gap, logged without the token", async () => {
+  const empty = { status: 200, body: { type: "FeatureCollection", features: [] } };
+  const nowhere = await routeApp([[(u) => u.pathname.includes("/searchbox/"), empty]]);
+  const noRoad = await routeApp([[(u) => u.pathname.includes("/isochrone/"), { status: 200, body: { code: "NoSegment", message: "Could not find a matching segment for input coordinates" } }]]);
+  const noTrip = await routeApp([[(u) => u.pathname.includes("/optimized-trips/"), { status: 200, body: { code: "NoTrips", message: "Could not find a trip using all coordinates", trips: [] } }]]);
+  const refused = await routeApp([[(u) => u.host === "api.mapbox.com", { status: 401, body: { message: "Not Authorized - Invalid Token" } }]]);
+  const limited = await routeApp([[(u) => u.pathname.includes("/optimized-trips/"), { status: 429, body: { message: "Too Many Requests" } }]]);
+  const down = await routeApp([[(u) => u.pathname.includes("/isochrone/"), "network"]]);
+  const garbled = await routeApp([[(u) => u.pathname.includes("/optimized-trips/"), { status: 200, body: { code: "Ok", trips: [{}], waypoints: [] } }]]);
+  try {
+    let answer = await nowhere.call("commute_filter", scenario("walk-bath-spa"));
+    assert.equal(answer.body["error"], "invalid_request");
+    assert.match(answer.body["detail"], /Mapbox found no place in the UK matching "Bath Spa station"; add the town/);
+    assert.equal(nowhere.mapbox("/search/").length, 3, "category, bare category, then open search");
+    answer = await noRoad.call("commute_filter", scenario("walk-bath-spa"));
+    assert.match(answer.body["detail"], /no road or path near Bath Spa/);
+    answer = await noTrip.call("plan_viewings", scenario("viewings-no-start"));
+    assert.match(answer.body["detail"], /no driving route that reaches every home/);
+    for (const [app, tool, id] of [[refused, "commute_filter", "walk-bath-spa"], [limited, "plan_viewings", "viewings-from-postcode"], [down, "commute_filter", "cycle-postcode-area-only"], [garbled, "plan_viewings", "viewings-no-start"]] as const) {
+      answer = await app.call(tool, scenario(id));
+      assert.equal(answer.isError, true, id);
+      assert.deepEqual(answer.body, { available: false, reason: "Not available right now." }, id);
+      assert.ok(app.logged.some((line) => /Home Mapbox/.test(line)), `${id} is logged`);
+      for (const line of app.logged) assert.doesNotMatch(line, /pk\.|access_token|-?2\.3\d{3}/, "logs carry no token or coordinates");
+    }
+  } finally { for (const app of [nowhere, noRoad, noTrip, refused, limited, down, garbled]) await app.stop(); }
+});
+
+test("a home with no map position is skipped by commute_filter and refused by plan_viewings", async () => {
+  const missing = (id: string): RouteOverride => [(u) => u.pathname === `/api/property-details/${id}`, { status: 200, body: { id, latitude: null, longitude: null } }];
+  const gone = (id: string): RouteOverride => [(u) => u.pathname === `/api/property-details/${id}`, { status: 200, body: [] }];
+  const app = await routeApp([missing(BATH_HOMES.twerton), gone(BATH_HOMES.peasedown), missing(BATH_HOMES.avondaleRoad)]);
+  try {
+    const commute = await app.call("commute_filter", scenario("walk-bath-spa"));
+    assert.equal(commute.isError, false, commute.text);
+    assert.equal(commute.body["summary"], "1 of 4 homes are within 15 minutes' walk of Bath Spa.");
+    assert.deepEqual(commute.body["homes_not_checked"], [
+      { listing_id: BATH_HOMES.twerton, reason: "The listing publishes no map position." },
+      { listing_id: BATH_HOMES.peasedown, reason: "This home was not found on home.co.uk." },
+    ]);
+    const plan = await app.call("plan_viewings", scenario("viewings-from-postcode"));
+    assert.equal(plan.body["error"], "invalid_request");
+    assert.match(plan.body["detail"], new RegExp(`Home ${BATH_HOMES.avondaleRoad} publishes no map position`));
+    assert.equal(app.mapbox("/optimized-trips/").length, 0);
+  } finally { await app.stop(); }
+});
+
+test("the area test honours holes and multipolygons, and the edge distance is in metres", () => {
+  const square = (x: number, y: number, size: number) => [[x, y], [x + size, y], [x + size, y + size], [x, y + size], [x, y]];
+  const withHole = { type: "Polygon", coordinates: [square(-2.4, 51.3, 0.1), square(-2.37, 51.33, 0.02)] };
+  assert.equal(insideArea([-2.39, 51.31], withHole), true);
+  assert.equal(insideArea([-2.36, 51.34], withHole), false, "inside the hole");
+  assert.equal(insideArea([-2.2, 51.31], withHole), false);
+  const two = { type: "MultiPolygon", coordinates: [[square(-2.4, 51.3, 0.01)], [square(-2.3, 51.3, 0.01)]] };
+  assert.equal(insideArea([-2.295, 51.305], two), true);
+  assert.equal(insideArea([-2.35, 51.305], two), false);
+  assert.equal(insideArea([0, 0], { type: "Point", coordinates: [0, 0] }), false);
+  // 0.001 degrees of latitude is about 111 metres.
+  const metres = metresToEdge([-2.395, 51.301], { type: "Polygon", coordinates: [square(-2.4, 51.3, 0.1)] });
+  assert.ok(metres > 105 && metres < 115, String(metres));
+});
+
+test("the Bath route recording holds no token and no listing text", () => {
+  const raw = readFileSync(join(ROOT, "src/test/fixtures/home-routes.json"), "utf8");
+  assert.doesNotMatch(raw, /pk\.|sk\.|access_token/);
+  for (const [key, answer] of Object.entries(ROUTE_FIXTURE.responses)) {
+    if (key.includes("/property-details/")) assert.deepEqual(Object.keys(answer.body as object).sort(), ["building_name", "building_number", "id", "latitude", "locality", "longitude", "postcode", "street_name", "town_name"]);
+  }
+});
+
+test("a place answer counts only when it names the place asked for, and a postcode only when it is that postcode", async () => {
+  const feature = (name: string, full_address: string, feature_type = "poi") => ({ type: "Feature", geometry: { type: "Point", coordinates: [1.2917, 52.62835] }, properties: { name, full_address, feature_type } });
+  // Search Box's real answers on 2026-10-02: gibberish became a Norwich council office, an unknown postcode its neighbours.
+  const app = await routeApp([
+    [(u) => u.searchParams.get("q") === "zzqxv nowhere", { status: 200, body: { type: "FeatureCollection", features: [feature("Norwich City Council", "St Peters St, Norwich, NR2 1NH, United Kingdom")] } }],
+    [(u) => u.searchParams.get("q") === "BA1 9ZZ", { status: 200, body: { type: "FeatureCollection", features: [feature("BA1", "", "postcode"), feature("GU2 9ZZ", "", "postcode")] } }],
+  ]);
+  try {
+    let answer = await app.call("commute_filter", { place: "zzqxv nowhere", minutes: 10, mode: "walk" });
+    assert.match(answer.body["detail"], /Mapbox found no place in the UK matching "zzqxv nowhere"/);
+    answer = await app.call("plan_viewings", { listing_ids: [BATH_HOMES.paragon, BATH_HOMES.hallFloor], start: "BA1 9ZZ" });
+    assert.match(answer.body["detail"], /Mapbox does not know the postcode BA1 9ZZ/);
+    assert.equal(app.mapbox("/optimized-trips/").length, 0);
+  } finally { await app.stop(); }
+  assert.equal(namesPlace("Dyson, Malmesbury", { name: "Dyson Office", where: "Tetbury Hill Malmesbury, SN16 0RP" }), true);
+  assert.equal(namesPlace("King Edward's School, Bath", { name: "King Edward’s School", where: "North Rd Bath, BA2 6HX" }), true);
+  assert.equal(namesPlace("Bath Spa station", { name: "Green Park Station", where: "Bristol" }), false, "a shared kind word is not a match");
+});
+
+test("a place in the right town and category but with another name is never taken for the one asked", async () => {
+  const at = (name: string, place: string, categories: string[], lng: number, street?: string) => ({
+    type: "Feature", geometry: { type: "Point", coordinates: [lng, 51.38] },
+    properties: { name, feature_type: "poi", place_formatted: `${place}, United Kingdom`, full_address: `${street ?? ""} ${place}`.trim(), poi_category_ids: categories,
+      context: { place: { name: place }, country: { name: "United Kingdom" }, ...(street ? { street: { name: street } } : {}) } },
+  });
+  const answers = (features: unknown[]) => ({ status: 200, body: { type: "FeatureCollection", features } });
+  const theatre = at("Bath Theatre School", "Bath", ["education", "school"], -2.351);
+  const guitar = at("Bath Guitar School", "Bath", ["education", "school"], -2.352);
+  const kingEdwards = at("King Edward's School", "Bath", ["education", "school"], -2.34238, "North Rd");
+  // Only the place chosen matters here, so any recorded outline will do.
+  const outline = Object.entries(ROUTE_FIXTURE.responses).find(([key]) => key.includes("/isochrone/"))![1];
+  const app = await routeApp([
+    [(u) => u.pathname.includes("/isochrone/"), outline],
+    // Same category and town listed first, the school asked for third.
+    [(u) => u.searchParams.get("q") === "King Edward's School, Bath", answers([theatre, guitar, kingEdwards])],
+    [(u) => u.searchParams.get("q") === "Prior Park School, Bath", answers([theatre, guitar])],
+    [(u) => u.searchParams.get("q") === "Prior Park, Bath", answers([theatre])],
+    [(u) => u.searchParams.get("q") === "Dyson, Malmesbury", answers([at("Malmesbury Abbey Office", "Malmesbury", ["office"], -2.098), at("Dyson Office", "Malmesbury", ["office"], -2.10565, "Tetbury Hill")])],
+    // Search Box's own order on 2026-10-02: the luggage shop beside Bath Spa station before the station.
+    [(u) => u.searchParams.get("q") === "Bath Spa station" && u.searchParams.get("limit") === "5", answers([at("Bounce Luggage Storage - Bath Spa Station", "Bath", ["services"], -2.35724, "Manvers St"), at("Bath Spa", "Bath", ["public_transportation_station"], -2.35698)])],
+    // Bus stops named after a road carry the transport-station category.
+    [(u) => u.searchParams.get("q") === "Station Road, Bath", answers([at("Bath Road", "Bridgwater", ["public_transportation_station"], -3.0), at("Station Road", "Bath", [], -2.388, "Station Road")])],
+  ]);
+  try {
+    const school = await app.call("commute_filter", { place: "King Edward's School, Bath", place_kind: "school", minutes: 10, mode: "drive" });
+    assert.equal(school.body["place"].name, "King Edward's School");
+    assert.equal(school.body["place"].coordinates.longitude, -2.34238);
+    const unknown = await app.call("commute_filter", { place: "Prior Park School, Bath", place_kind: "school", minutes: 10, mode: "drive" });
+    assert.match(unknown.body["detail"], /no place in the UK matching "Prior Park School, Bath"/, "two Bath schools are not Prior Park");
+    const office = await app.call("commute_filter", { place: "Dyson, Malmesbury", place_kind: "office", minutes: 30, mode: "drive" });
+    assert.equal(office.body["place"].name, "Dyson Office");
+    const station = await app.call("commute_filter", { place: "Bath Spa station", minutes: 15, mode: "walk" });
+    assert.equal(station.body["place"].name, "Bath Spa", "the closest name wins over Mapbox's first answer");
+    const road = await app.call("commute_filter", { place: "Station Road, Bath", minutes: 15, mode: "walk" });
+    assert.equal(road.body["place"].name, "Station Road");
+    assert.equal(app.mapbox("/search/").filter((r) => r.url.searchParams.get("q") === "Station Road, Bath").every((r) => !r.url.searchParams.has("poi_category")), true, "a road named Station is not searched as a station");
+  } finally { await app.stop(); }
+  // Town words qualify; they never name the place.
+  assert.equal(namesPlace("King Edward's School, Bath", { name: "Bath Theatre School", where: "Alexandra Park Bath, BA2 4LL" }), false);
+  assert.equal(namesPlace("Bath", { name: "Bath", where: "Bath and North East Somerset England" }), true);
+  assert.equal(namesPlace("26 The Paragon, Bath", { name: "26 The Paragon", where: "26 The Paragon The Paragon Bath BA1 5LY Walcot" }), true);
+  assert.equal(namesPlace("26 The Paragon, Bath", { name: "26 The Paragon", where: "26 The Paragon The Paragon Bristol BS8 4LA Hotwells" }), false, "the same address in another town");
+  assert.equal(namesPlace("Bath Spa station", { name: "Bath Spa", where: "Bath BA1 1SU", categories: ["public_transportation_station"] }, "station"), true);
+  assert.equal(namesPlace("Station Road, Bath", { name: "Bath Road", where: "Bridgwater TA6 4PP", categories: ["public_transportation_station"] }), false, "a category backs a kind word only in a search for that kind");
+  assert.equal(namesPlace("Bath Spa station", { name: "Thermae Bath Spa", where: "Bath BA1 1SJ", categories: ["spa"] }), false, "a station must be a station");
+  assert.equal(extraWords("Bath Spa station", "Bounce Luggage Storage - Bath Spa Station"), 3);
+});
+
+test("plan_viewings gives the same quickest order whatever order the homes are listed in", async () => {
+  const app = await routeApp();
+  try {
+    for (const [first, second] of [["viewings-from-postcode", "viewings-from-postcode-reordered"], ["viewings-no-start", "viewings-no-start-reordered"]]) {
+      const a = await app.call("plan_viewings", scenario(first)); const b = await app.call("plan_viewings", scenario(second));
+      assert.equal(b.isError, false, b.text);
+      assert.deepEqual(b.body["stops"].map((s: any) => s.listing_id), a.body["stops"].map((s: any) => s.listing_id), second);
+      assert.equal(b.body["total_driving_minutes"], a.body["total_driving_minutes"], second);
+    }
   } finally { await app.stop(); }
 });

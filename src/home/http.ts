@@ -12,6 +12,7 @@ import { AccountTools, DEFAULT_ACCOUNT_MCP_URL, DEFAULT_ISSUER, DEFAULT_RESOURCE
 import { HomeClient } from "./client.js";
 import { buildHomeServer } from "./server.js";
 import { MAPBOX_GL_ASSETS } from "./mapbox-assets.js";
+import { MapboxRoutes } from "./routes.js";
 
 export interface HomeHttpOptions {
   client: HomeClient;
@@ -28,8 +29,13 @@ export interface HomeHttpOptions {
    * published, and a signed-in call is forwarded to atlas with its bearer.
    */
   account?: AccountSettings;
-  /** URL-restricted Mapbox browser token. When absent the widget exposes no map. */
+  /**
+   * URL-restricted Mapbox browser token. When absent the widget exposes no map
+   * and the commute and viewing-day tools are not listed.
+   */
   mapboxToken?: string;
+  /** Commute and viewing-day answers; built from mapboxToken when not given. */
+  routes?: MapboxRoutes;
   /** Public origin used for this endpoint's widget assets. */
   assetOrigin?: string;
   now?: () => number;
@@ -122,6 +128,8 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
   const callLimits = new CallerLimits(options.callsPerMinute ?? 30, now);
   const enrichmentLimits = new CallerLimits(options.enrichmentsPerMinute ?? 4, now);
   const account = options.account ? new AccountTools(options.account, options.client) : undefined;
+  const assetOrigin = options.assetOrigin ?? options.account?.resource ?? DEFAULT_RESOURCE;
+  const routes = options.routes ?? (options.mapboxToken ? new MapboxRoutes({ token: options.mapboxToken, referer: `${assetOrigin}/` }) : undefined);
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     noStoreOnErrors(res);
     const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
@@ -169,7 +177,7 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
     const server = buildHomeServer(
       options.client,
       account ? { tools: account, token: bearerToken(req), onRefused: (challenge) => { refused ??= challenge; } } : undefined,
-      { mapboxToken: options.mapboxToken, assetOrigin: options.assetOrigin ?? options.account?.resource ?? DEFAULT_RESOURCE },
+      { mapboxToken: options.mapboxToken, assetOrigin, routes },
     );
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });

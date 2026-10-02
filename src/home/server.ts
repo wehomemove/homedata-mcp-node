@@ -12,6 +12,7 @@ import { ACCOUNT_TOOLS, isAccountTool, type AccountTools } from "./account.js";
 import { HomeClient, HomeError, HomeUpstreamError, type SearchArgs, type SoldArgs } from "./client.js";
 import { HOME_WIDGET_HTML, HOME_WIDGET_URI } from "./widget.js";
 import { mapboxAssetTags } from "./mapbox-assets.js";
+import { PLACE_KINDS, TRAVEL_MODES, type MapboxRoutes } from "./routes.js";
 import { WISHES } from "./wishes.js";
 
 type Schema = Record<string, unknown>;
@@ -32,6 +33,9 @@ export const HOME_INSTRUCTIONS = [
   "For sellers and landlords: sold_prices shows what nearby homes actually sold for and when, find_agents ranks local agents by the homes they are selling or letting in the area, and typical_rents gives current asking rents. Sold prices are evidence about other homes, never a valuation of the user's home.",
   "Never invent availability, safety, mortgage eligibility or future prices. Dates and status are snapshots and should be described as such.",
 ].join(" ");
+
+/** Added to the instructions only when the Mapbox route tools are listed. */
+export const HOME_ROUTE_INSTRUCTIONS = "For commute questions (homes within a walk, cycle or drive of a station, office, school or postcode), call commute_filter with the place, minutes, mode and the listing IDs from search_homes; describe homes_inside as within that journey and any near_edge home as borderline. For a viewing day, call plan_viewings with two to six listing IDs and the user's start point if they gave one; give the stops in its order with each leg's minutes and the total. Both give Mapbox travel estimates without live traffic or timetables: never promise an arrival time.";
 
 /** Added to the instructions only when the account tools are listed. */
 export const HOME_ACCOUNT_INSTRUCTIONS = "Signed-in users can keep saved searches (list_saved_searches, create_saved_search, pause_saved_search, delete_saved_search, get_saved_search_new_results) and price alerts on single homes (list_price_alerts, create_price_alert, pause_price_alert, delete_price_alert) on their own home.co.uk account. Confirm the details before creating anything and before deleting, which cannot be undone; use the ids the list tools return.";
@@ -129,6 +133,32 @@ export const HOME_TOOLS: readonly Tool[] = [
   },
 ] as const;
 
+const placeKind = (description: string): Schema => string(description, [...PLACE_KINDS]);
+
+/** Listed only when a Mapbox token is configured; they answer from Mapbox's isochrone and optimisation services. */
+export const HOME_ROUTE_TOOLS: readonly Tool[] = [
+  {
+    name: "commute_filter", title: "Filter homes by commute",
+    description: "Find the area reachable within a number of minutes' walk, cycle or drive of a place (a station, office, school, address or full UK postcode), and which of the given homes fall inside it. Returns the place it measured from, the reachable outline as GeoJSON, and the homes inside and outside, with a near_edge flag for borderline homes. Use this when someone wants homes within a commute of somewhere, after search_homes has returned listing IDs. Times are typical Mapbox estimates, not timetables or rush-hour times.",
+    inputSchema: obj({
+      place: string("Where the commute ends, as the user said it with its town: \"Bath Spa station\", \"Dyson, Malmesbury\", \"King Edward's School, Bath\" or \"BA1 1SU\"."),
+      place_kind: placeKind("What the place is, when known. station and school search those categories first; postcode requires a full UK postcode."),
+      minutes: { type: "integer", minimum: 1, maximum: 60, description: "Longest journey in minutes, from 1 to 60." },
+      mode: string("How the user travels.", [...TRAVEL_MODES]),
+      listing_ids: { type: "array", minItems: 1, maxItems: 20, uniqueItems: true, items: { type: "string" }, description: "Up to twenty listing UUIDs returned by search_homes to check against the area. Leave out to get the area only." },
+    }, ["place", "minutes", "mode"]),
+  },
+  {
+    name: "plan_viewings", title: "Plan a viewing day",
+    description: "Put two to six homes in the quickest driving order for a day of viewings, from an optional start point, using Mapbox's optimisation service. Returns each stop in order with the drive from the previous one in minutes and kilometres, the running and total driving time, and the route line as GeoJSON. Use this when someone is viewing several homes in a day and asks what order to see them in or how long the driving takes. Times are estimates without traffic, parking or time at each viewing.",
+    inputSchema: obj({
+      listing_ids: { type: "array", minItems: 2, maxItems: 6, uniqueItems: true, items: { type: "string" }, description: "Two to six listing UUIDs returned by search_homes." },
+      start: string("Where the day starts, if the user said: an address, station or full UK postcode with its town. Leave out to let the route start at whichever home is best."),
+      start_kind: placeKind("What the start is, when known."),
+    }, ["listing_ids"]),
+  },
+] as const;
+
 const metadata = {
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   securitySchemes: [{ type: "noauth" }],
@@ -182,8 +212,10 @@ function positive(args: Record<string, unknown>, name: string, allowZero = false
   return value;
 }
 
-export function buildHomeServer(client: HomeClient, account?: HomeAccount, options: { mapboxToken?: string; assetOrigin?: string } = {}): Server {
-  const server = new Server({ name: "home", version: VERSION }, { capabilities: { tools: {}, resources: {} }, instructions: account ? `${HOME_INSTRUCTIONS} ${HOME_ACCOUNT_INSTRUCTIONS}` : HOME_INSTRUCTIONS });
+export function buildHomeServer(client: HomeClient, account?: HomeAccount, options: { mapboxToken?: string; assetOrigin?: string; routes?: MapboxRoutes } = {}): Server {
+  const routes = options.routes;
+  const instructions = [HOME_INSTRUCTIONS, ...(routes ? [HOME_ROUTE_INSTRUCTIONS] : []), ...(account ? [HOME_ACCOUNT_INSTRUCTIONS] : [])].join(" ");
+  const server = new Server({ name: "home", version: VERSION }, { capabilities: { tools: {}, resources: {} }, instructions });
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
     resources: [{ uri: HOME_WIDGET_URI, name: "Home listings and detail", description: "Responsive listing carousel, shortlist, refinement controls, map and home gallery.", mimeType: "text/html;profile=mcp-app" }],
   }));
@@ -213,7 +245,7 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
   });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
-      ...HOME_TOOLS.map((tool) => ({ ...tool, outputSchema: tool.outputSchema ?? { type: "object", additionalProperties: true }, ...metadata, _meta: { ...metadata._meta, ...tool._meta } })),
+      ...[...HOME_TOOLS, ...(routes ? HOME_ROUTE_TOOLS : [])].map((tool) => ({ ...tool, outputSchema: tool.outputSchema ?? { type: "object", additionalProperties: true }, ...metadata, _meta: { ...metadata._meta, ...tool._meta } })),
       ...(account ? accountTools() : []),
     ],
   }));
@@ -254,10 +286,12 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
           if (deposit >= price) throw new HomeError("deposit must be less than price");
           return result(await client.calculator("mortgage", { price: String(price), deposit: String(deposit), rate: String(positive(args, "rate", true)), term: String(positive(args, "term")) }));
         }
+        case "commute_filter": if (routes) return result(await routes.commute(client, args)); break;
+        case "plan_viewings": if (routes) return result(await routes.viewings(client, args)); break;
         case "render_home_listings": return renderListings(args);
         case "render_home_detail": return renderDetail(args);
-        default: return result({ error: "unknown_tool", detail: request.params.name }, true);
       }
+      return result({ error: "unknown_tool", detail: request.params.name }, true);
     } catch (error) {
       if (error instanceof HomeError) return result({ error: "invalid_request", detail: error.message }, true);
       if (error instanceof HomeUpstreamError) return result({ available: false, reason: "Not available right now." }, true);

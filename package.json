@@ -13,7 +13,7 @@
   "files": [
     "dist",
     "!dist/home",
-    "!dist/test/home.test.*",
+    "!dist/test/home*",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"

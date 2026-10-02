@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Calls the wish searches and the seller and renter tools against live home.co.uk
 // and checks each answer has real local data. No Homedata key is needed: these tools read home.co.uk only.
+// With MAPBOX_PUBLIC_TOKEN set it also runs commute_filter and plan_viewings in Bath against live Mapbox.
 import { HomedataClient } from '../dist/client.js';
 import { cleanListingDescription, HomeClient } from '../dist/home/client.js';
+import { MapboxRoutes } from '../dist/home/routes.js';
 
 const client = new HomeClient({ homeBaseUrl: process.argv[2] || undefined, listingViewSecret: process.env.HOME_MCP_LISTING_VIEW_SECRET, homedata: new HomedataClient({ apiKey: 'unused' }), logger: (message, detail) => console.error(`     ${message} (HTTP ${detail?.statusCode ?? '?'})`) });
 const base = (process.argv[2] || 'https://home.co.uk').replace(/\/+$/, '');
@@ -33,6 +35,28 @@ const checks = [
   ['find_agents BA1 lettings', () => client.agents('BA1', 'lettings', 5), (r) => r.agents.length > 0 && r.agents[0].homes_to_let_here > 0],
   ['typical_rents BA1', () => client.rents('BA1'), (r) => r.rent_period === 'per_calendar_month' && r.median_asking_rent_pcm_pounds > 0],
 ];
+// Bath Spa station's platforms, and the straight-line reach of the fastest 15-minute walk.
+const BATH_SPA = { latitude: 51.3775, longitude: -2.3570 };
+const metres = (a, b) => Math.hypot((a.longitude - b.longitude) * 111320 * Math.cos((a.latitude * Math.PI) / 180), (a.latitude - b.latitude) * 110574);
+const token = (process.env.MAPBOX_PUBLIC_TOKEN ?? '').trim();
+if (token) {
+  const routes = new MapboxRoutes({ token, referer: 'https://mcp.home.co.uk/' });
+  const bathHomes = async (count) => (await client.search({ location: 'BA1', listing_type: 'sale' })).homes
+    .filter((home) => Number.isFinite(Number(home.coordinates.latitude))).slice(0, count).map((home) => home.id);
+  checks.push(
+    ['commute_filter 15 min walk from Bath Spa station', async () => routes.commute(client, { place: 'Bath Spa station', place_kind: 'station', minutes: 15, mode: 'walk', listing_ids: await bathHomes(8) }),
+      (r) => metres(r.place.coordinates, BATH_SPA) < 300 && r.homes_inside.length + r.homes_outside.length + (r.homes_not_checked ?? []).length === 8 &&
+        r.homes_inside.length > 0 && r.homes_inside.every((h) => metres(h.coordinates, BATH_SPA) < 1700) && r.reachable_area.geometry.type.endsWith('Polygon')],
+    // Search Box lists Bath Theatre School and Bath Guitar School beside it: the named school must win, never just a Bath one.
+    ['commute_filter resolves King Edward\'s School, Bath, not another Bath school', () => routes.commute(client, { place: "King Edward's School, Bath", place_kind: 'school', minutes: 10, mode: 'drive' }),
+      (r) => r.place.name === "King Edward's School" && /BA2 6HX/.test(r.place.address)],
+    ['plan_viewings four Bath homes from BA1 1SU', async () => { const ids = await bathHomes(4); return { ids, r: await routes.viewings(client, { listing_ids: ids, start: 'BA1 1SU' }) }; },
+      ({ ids, r }) => r.stops.length === 4 && new Set(r.stops.map((s) => s.listing_id)).size === 4 && r.stops.every((s) => ids.includes(s.listing_id)) &&
+        r.total_driving_minutes > 0 && r.total_driving_minutes < 90 && Math.abs(r.stops.at(-1).driving_minutes_so_far - r.total_driving_minutes) <= 1 && r.route.type === 'LineString'],
+    ['plan_viewings three Bath homes, no start', async () => routes.viewings(client, { listing_ids: await bathHomes(3) }),
+      (r) => r.start === null && r.stops.length === 3 && r.stops[0].driving_minutes_so_far === 0 && r.total_driving_minutes > 0],
+  );
+} else console.log('skip commute_filter and plan_viewings: set MAPBOX_PUBLIC_TOKEN to check them against live Mapbox');
 let failed = 0;
 for (const [name, run, ok] of checks) {
   try {
