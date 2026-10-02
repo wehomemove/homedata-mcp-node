@@ -1,6 +1,6 @@
 {
   "about": "Golden prompts for the separate home.co.uk Home ChatGPT app. Run these after changing tool names, descriptions, schemas or instructions. Review cases are five positive and three negative examples.",
-  "version": "2026-10-02-market-signals",
+  "version": "2026-10-02-sellers-renters",
   "cases": [
     {
       "id": "search-family-home", "kind": "indirect", "review": true,
@@ -48,9 +48,40 @@
       "expect": { "calls": [{ "tool": "calculate_stamp_duty", "args": { "price": 450000, "buyer_type": "first_time" } }], "outcome": "Returns an SDLT estimate and labels it as an estimate rather than tax advice." }
     },
     {
+      "id": "sold-prices-seller", "kind": "indirect", "review": false,
+      "prompt": "I'm thinking of selling my terraced house at BA2 3PL. What have terraced houses nearby sold for in the last year?",
+      "expect": { "calls": [{ "tool": "sold_prices", "args": { "postcode": "BA2 3PL", "property_type": "terraced" } }], "outcome": "Lists nearby recorded sales with prices and dates, and says they are past sales of other homes, not a valuation of the user's house." }
+    },
+    {
+      "id": "sold-prices-district", "kind": "direct", "review": false,
+      "prompt": "Show me the most expensive homes sold in BA1 over the last two years.",
+      "expect": { "calls": [{ "tool": "sold_prices", "args": { "postcode": "BA1", "months": 24, "sort": "price_desc" } }], "outcome": "Lists the highest recorded sale prices in BA1 with dates." }
+    },
+    {
+      "id": "find-letting-agents", "kind": "indirect", "review": false,
+      "prompt": "I want to let out my flat in Bath. Which letting agents are most active there?",
+      "expect": { "calls": [{ "tool": "find_agents", "args": { "location": "Bath", "agent_type": "lettings" } }], "outcome": "Ranks letting agents by the homes they are letting in Bath and does not call the ranking a recommendation." }
+    },
+    {
+      "id": "find-estate-agents", "kind": "direct", "review": false,
+      "prompt": "Which estate agents are selling the most homes in BS7?",
+      "expect": { "calls": [{ "tool": "find_agents", "args": { "location": "BS7", "agent_type": "sales" } }], "outcome": "Ranks estate agents by homes for sale in BS7 with their offices and profile links." }
+    },
+    {
+      "id": "typical-rents-renter", "kind": "indirect", "review": false,
+      "prompt": "I'm moving to BA1 and need a two-bedroom flat. What rent should I budget for?",
+      "expect": { "calls": [{ "tool": "typical_rents", "args": { "location": "BA1" } }], "outcome": "Gives median and typical two-bedroom asking rents per month and describes them as asking rents." }
+    },
+    {
+      "id": "boundary-home-value-today", "kind": "boundary", "review": false,
+      "prompt": "What is my house at BA2 3PL worth today?",
+      "expect": { "calls": [], "allowed": [{ "tool": "sold_prices", "args": { "postcode": "BA2 3PL" } }, { "tool": "area_insights", "args": { "postcode": "BA2 3PL" } }], "outcome": "Does not give a figure for the user's house. It may show recent nearby sales as evidence, labelled as past sales of other homes." },
+      "why": "Sold prices nearby are evidence, not a valuation; the app must never turn them into a price for the user's home."
+    },
+    {
       "id": "negative-sell-home", "kind": "negative", "review": true,
       "prompt": "List my home for sale and contact agents for me.",
-      "expect": { "calls": [], "outcome": "Explains that the app is read-only." },
+      "expect": { "calls": [], "outcome": "Explains that the app is read-only and cannot list a home or contact agents; it may offer to show local agents instead." },
       "why": "The Home app cannot create listings or contact anyone."
     },
     {

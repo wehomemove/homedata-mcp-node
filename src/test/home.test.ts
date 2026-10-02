@@ -19,6 +19,7 @@ import { HOME_TOOLS } from "../home/server.js";
 
 const ID = "b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
 const ID2 = "c9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
+const SALE = { id: 1, price: 538000, sold_date: "2026-08-21", postcode: "BA2 3PL", property_type: "Terraced", full_address: "17 CLARENCE STREET, BATH, BA2 3PL", display_address: "17 CLARENCE STREET, BATH, BA2 3PL", bedrooms: 2, latitude: 51.39, longitude: -2.35 };
 const ROOT = join(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 
 type FixtureOptions = {
@@ -40,6 +41,31 @@ function fixtures(options: FixtureOptions = {}) {
     else if (url.pathname === "/api/reverse-geocode") body = options.reverseGeocode ?? { success: true, place_name: "Heritage Close, Bath, BA2 8TJ, United Kingdom", context: [{ id: "postcode.123", text: "BA2 8TJ" }] };
     else if (url.pathname === "/address/find/") body = options.address ?? { results: [{ uprn: "100012345678", postcode: "BA2 8TJ", building_number: "12", full_address: "12 Heritage Close, Bath, BA2 8TJ" }] };
     else if (url.pathname === "/property/100012345678/core/") body = { epc: { rating: "C" }, council_tax: { band: "D" }, flood: { risk: "low" } };
+    else if (url.pathname === "/sold-properties/ba1-1/") body = { isNationalSearch: false, total: 2, filters: { gid: 121 }, pagination: { current_page: 1, last_page: 1 }, properties: [] };
+    else if (url.pathname === "/sold-properties/ba2-3/") body = { isNationalSearch: false, total: 40, filters: { gid: 122 }, pagination: { current_page: 1, last_page: 2, total: 40 }, properties: [SALE, { ...SALE, postcode: "BA2 3QQ", price: 410000 }] };
+    else if (url.pathname === "/sold-properties/ba1/") body = { isNationalSearch: false, total: 296, filters: { gid: 120 }, pagination: { current_page: 1, last_page: 15, total: 296 }, properties: [{ ...SALE, postcode: "BA1 5NS" }] };
+    else if (url.pathname.startsWith("/sold-properties/")) body = { isNationalSearch: true, total: null, filters: { gid: null }, pagination: null, properties: [SALE] };
+    else if (url.pathname === "/api/agents/search/bath/lettings") body = { searchMode: "property", displayLocation: "Bath", boundaryName: "Bath", agents: [
+      { id: 1, agent_name: "Partner Lettings", branch_name: "Bath", property_count: 6, boundary_listing_count: 6, is_hm_agent: true, card_html: "MUST NOT LEAK", email: "x@example.test" },
+      { id: 2, agent_name: "Busy Lettings", branch_name: "Bath", property_count: 23, boundary_listing_count: 23, address_lines: "1 Saville Row, Bath", postcode: "BA1 2QP", website_url: "https://busy.example" },
+      { id: 3, agent_name: "Featured Only", branch_name: "Bath", property_count: 0, boundary_listing_count: 0, is_founder_250: true },
+    ] };
+    else if (url.pathname === "/api/agents/search/london/sales" || url.pathname === "/api/agents/search/leeds/sales") {
+      // Partner-first page order, as live: the busiest agent is on a later page.
+      const page = Number(url.searchParams.get("page") ?? 1);
+      const pages = [
+        [{ id: 66292, agent_name: "Exp UK", branch_name: "London", boundary_listing_count: 1095, property_count: 1095, is_hm_agent: true }, { id: 7, agent_name: "Featured Only", boundary_listing_count: 0, property_count: 0, is_founder_250: true }],
+        [{ id: 8, agent_name: "Quiet Agent", branch_name: "Soho", boundary_listing_count: 3, property_count: 3 }],
+        [{ id: 65570, agent_name: "Purplebricks", branch_name: "London", boundary_listing_count: 1133, property_count: 1133, address_lines: "1 Example Road, London", postcode: "W10 6TR" }],
+      ];
+      const london = url.pathname.includes("london");
+      body = { searchMode: "property", boundaryName: london ? "London" : "Leeds", total: 4, pagination: { current_page: page, last_page: 3, total: 4 },
+        agents: london ? (page === 1 ? pages[0] : []) : pages[page - 1],
+        ...(london ? { allPins: pages.flat().map(({ id, agent_name, property_count }) => ({ id, agent_name, property_count, postcode: "PIN" })) } : {}) };
+    }
+    else if (url.pathname.startsWith("/api/agents/search/")) body = { searchMode: "located", agents: [{ id: 9, agent_name: "Somewhere Else", property_count: 500 }] };
+    else if (url.pathname === "/rental-prices/postcode/ba1/current") body = { location: { tier: "postcode", code: "BA1", name: "BA1" }, currency: "GBP", frequency: "pcm", summary: { listings: 232, median_rent: 1600 }, by_bedrooms: [{ bedrooms: "2", listings: 58, median_rent: 1685 }], by_property_type: [] };
+    else if (url.pathname.startsWith("/rental-prices/")) return new Response("<!DOCTYPE html><html></html>", { status: 200, headers: { "Content-Type": "text/html" } });
     else body = { source: url.pathname };
     body = options.responseBody?.[url.pathname] ?? body;
     const status = options.status?.[url.pathname] ?? 200;
@@ -60,7 +86,7 @@ async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPe
   return { base, mcp, requests, stop: async () => { await mcp.close(); http.closeAllConnections(); await new Promise((resolve) => http.close(resolve)); } };
 }
 
-test("Home lists only its six no-auth read-only tools and its golden set holds", async () => {
+test("Home lists only its nine no-auth read-only tools and its golden set holds", async () => {
   const { mcp, stop } = await start();
   try {
     const tools = (await mcp.listTools()).tools;
@@ -267,6 +293,92 @@ test("area_insights normalises the postcode, uses its outcode and marks an upstr
     assert.ok(requests.filter((url) => url.hostname === "data.test").every((url) => url.searchParams.get("postcode") === "BA1 1LZ" || url.pathname === "/price-growth/BA1/"));
     const invalid = await mcp.callTool({ name: "area_insights", arguments: { postcode: "find BA1 1LZ please" } });
     assert.equal(invalid.isError, true);
+  } finally { await stop(); }
+});
+
+test("sold_prices searches the postcode sector, widens a thin one and never reports national sales", async () => {
+  const { mcp, requests, stop } = await start();
+  try {
+    const sector = await mcp.callTool({ name: "sold_prices", arguments: { postcode: "ba23pl", property_type: "terraced", months: 24, max_price: 600000 } });
+    const body = sector.structuredContent as Record<string, unknown> & { sales: Array<Record<string, unknown>> };
+    assert.equal(body["area"], "BA2 3");
+    assert.equal(body["area_type"], "postcode sector");
+    assert.deepEqual(body.sales.map((sale) => sale["same_postcode"]), [true, false]);
+    assert.deepEqual(Object.keys(body.sales[0]!).sort(), ["address", "bedrooms", "postcode", "price", "property_type", "same_postcode", "sold_date"]);
+    assert.match(String(body["not_a_valuation"]), /not a valuation/);
+    const url = requests.find((u) => u.pathname === "/sold-properties/ba2-3/")!;
+    assert.equal(url.searchParams.get("daterange"), "24months");
+    assert.equal(url.searchParams.get("terraced"), "1");
+    assert.equal(url.searchParams.get("maxprice"), "600000");
+    assert.equal(url.searchParams.get("sort"), "date_desc");
+
+    const thin = await mcp.callTool({ name: "sold_prices", arguments: { postcode: "BA1 1LZ" } });
+    assert.equal((thin.structuredContent as Record<string, unknown>)["area"], "BA1");
+    assert.equal((thin.structuredContent as Record<string, unknown>)["area_type"], "postcode district");
+
+    const unknown = await mcp.callTool({ name: "sold_prices", arguments: { postcode: "ZZ9 9ZZ" } });
+    assert.equal(unknown.isError, true);
+    assert.equal((unknown.structuredContent as Record<string, unknown>)["error"], "invalid_request");
+    for (const bad of [{ postcode: "my house" }, { postcode: "BA1", months: 7 }, { postcode: "BA1", min_price: 5, max_price: 1 }]) {
+      assert.equal((await mcp.callTool({ name: "sold_prices", arguments: bad })).isError, true);
+    }
+  } finally { await stop(); }
+});
+
+test("find_agents ranks by homes listed in the area, not by partner placement", async () => {
+  const { mcp, requests, stop } = await start();
+  try {
+    const answer = await mcp.callTool({ name: "find_agents", arguments: { location: "Bath", agent_type: "lettings" } });
+    const body = answer.structuredContent as Record<string, unknown> & { agents: Array<Record<string, unknown>> };
+    assert.deepEqual(body.agents.map((a) => [a["rank"], a["name"], a["homes_to_let_here"]]), [[1, "Busy Lettings", 23], [2, "Partner Lettings", 6]]);
+    assert.equal(body["agents_with_listings"], 2);
+    assert.equal(body.agents[0]!["profile_url"], "https://home.co.uk/agents/2/busy-lettings");
+    assert.doesNotMatch(JSON.stringify(body), /MUST NOT LEAK|x@example\.test/);
+    const url = requests.find((u) => u.pathname.startsWith("/api/agents/search/"))!;
+    assert.equal(url.pathname, "/api/agents/search/bath/lettings");
+    assert.equal(url.searchParams.get("per_page"), "120");
+
+    // Outside a matched boundary the counts are each agent's whole stock, which cannot rank an area.
+    const located = await mcp.callTool({ name: "find_agents", arguments: { location: "Nowhere", agent_type: "sales" } });
+    assert.equal(located.isError, true);
+    assert.equal((await mcp.callTool({ name: "find_agents", arguments: { location: "Bath", agent_type: "buyers" } })).isError, true);
+    assert.equal((await mcp.callTool({ name: "find_agents", arguments: { location: "Bath", agent_type: "sales", limit: 50 } })).isError, true);
+  } finally { await stop(); }
+});
+
+test("find_agents ranks the whole area, so an agent on a later directory page can rank first", async () => {
+  const { mcp, requests, stop } = await start();
+  try {
+    // allPins carries every agent's in-area count in the first answer: one request.
+    const pinned = await mcp.callTool({ name: "find_agents", arguments: { location: "London", agent_type: "sales", limit: 3 } });
+    const fromPins = (pinned.structuredContent as { agents: Array<Record<string, unknown>>; agents_with_listings: number });
+    assert.deepEqual(fromPins.agents.map((a) => [a["name"], a["homes_for_sale_here"]]), [["Purplebricks", 1133], ["Exp UK", 1095], ["Quiet Agent", 3]]);
+    assert.equal(fromPins.agents_with_listings, 3);
+    assert.equal(fromPins.agents[1]!["branch"], "London"); // card details still joined where the page had them
+    assert.equal(requests.filter((u) => u.pathname === "/api/agents/search/london/sales").length, 1);
+
+    // Without pins, every page is read before ranking.
+    const paged = await mcp.callTool({ name: "find_agents", arguments: { location: "Leeds", agent_type: "sales" } });
+    const fromPages = (paged.structuredContent as { agents: Array<Record<string, unknown>> }).agents;
+    assert.deepEqual(fromPages.map((a) => a["name"]), ["Purplebricks", "Exp UK", "Quiet Agent"]);
+    assert.equal(fromPages[0]!["office"], "1 Example Road, London");
+    assert.deepEqual(requests.filter((u) => u.pathname === "/api/agents/search/leeds/sales").map((u) => u.searchParams.get("page") ?? "1"), ["1", "2", "3"]);
+  } finally { await stop(); }
+});
+
+test("typical_rents reads the district's rental price data and refuses a page that is not JSON", async () => {
+  const { mcp, requests, stop } = await start();
+  try {
+    const answer = await mcp.callTool({ name: "typical_rents", arguments: { location: "BA1 1LZ" } });
+    const body = answer.structuredContent as Record<string, unknown>;
+    assert.equal((body["summary"] as Record<string, unknown>)["median_rent"], 1600);
+    assert.equal(body["frequency"], "pcm");
+    assert.match(String(body["note"]), /whole BA1 postcode district/);
+    assert.match(String(body["not_achieved_rents"]), /asking rents/);
+    assert.equal(requests[0]!.pathname, "/rental-prices/postcode/ba1/current");
+    const town = await mcp.callTool({ name: "typical_rents", arguments: { location: "Milton Keynes" } });
+    assert.equal(town.isError, true);
+    assert.equal(requests[1]!.pathname, "/rental-prices/location/milton-keynes/current");
   } finally { await stop(); }
 });
 
