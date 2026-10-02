@@ -19,6 +19,7 @@ import { cleanListingDescription, HomeClient, HomeUpstreamError, type HomeClient
 import { ACCOUNT_TOOLS, SAVED_SEARCH_TYPES, type AccountSettings } from "../home/account.js";
 import { accountFromEnv, createHomeHttpHandler, mapboxTokenFromEnv } from "../home/http.js";
 import { HOME_RULES } from "../home/plugin.js";
+import { MAPBOX_GL_ASSET_PREFIX } from "../home/mapbox-assets.js";
 import { buildHomeServer, HOME_TOOLS } from "../home/server.js";
 import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
 import { HOME_WIDGET_HTML, HOME_WIDGET_URI, homeMapLayout, homeMapProject, homePinLabel, humaniseDaysListed } from "../home/widget.js";
@@ -315,18 +316,39 @@ test("Home publishes a v4 MCP Apps resource without a map surface when the brows
   } finally { await stop(); }
 });
 
-test("Home publishes the integrity-pinned interactive Mapbox client and CSP domains when configured", async () => {
+test("Home serves the exact integrity-pinned Mapbox client bytes referenced by the widget", async () => {
   const { base, mcp, stop } = await start({}, { mapboxToken: "pk.browser-token" });
   try {
     const resource = await mcp.readResource({ uri: HOME_WIDGET_URI });
     const content = resource.contents[0] as { text?: string; _meta?: Record<string, unknown> };
-    assert.match(content.text ?? "", /mapbox-gl-js\/v3\.15\.0/);
-    assert.match(content.text ?? "", /integrity="sha384-bdNholknIOkWEb1azEKvnPJRgM0yXw3\+r2L2Hjhl0twDnzUC7WxuBpKfJdp7Fzpg" crossorigin="anonymous"/);
+    const html = content.text ?? "";
+    for (const file of ["mapbox-gl.js", "mapbox-gl.css"]) {
+      const path = `${MAPBOX_GL_ASSET_PREFIX}/${file}`;
+      const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const tag = html.match(new RegExp(`(?:src|href)="https://mcp\\.home\\.co\\.uk${escapedPath}"[^>]*integrity="(sha384-[^"]+)"`));
+      assert.ok(tag, `${file} tag and integrity`);
+      const response = await fetch(base + path);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable");
+      assert.equal(response.headers.get("access-control-allow-origin"), "*");
+      const bytes = Buffer.from(await response.arrayBuffer());
+      assert.equal(`sha384-${createHash("sha384").update(bytes).digest("base64")}`, tag[1]);
+
+      const head = await fetch(base + path, { method: "HEAD" });
+      assert.equal(head.status, 200);
+      assert.equal((await head.arrayBuffer()).byteLength, 0);
+      assert.equal(head.headers.get("content-length"), String(bytes.length));
+
+      const refused = await fetch(base + path, { method: "POST" });
+      assert.equal(refused.status, 405);
+      assert.equal(refused.headers.get("allow"), "GET, HEAD");
+    }
     assert.match(content.text ?? "", /mapboxToken="pk\.browser-token"/);
     assert.match(content.text ?? "", /new gl\.Map/);
     assert.match(content.text ?? "", /NavigationControl/);
     const ui = content._meta?.["ui"] as { csp?: { connectDomains?: string[]; resourceDomains?: string[] } };
     assert.deepEqual(ui.csp?.connectDomains, ["https://api.mapbox.com", "https://events.mapbox.com"]);
+    assert.ok(ui.csp?.resourceDomains?.includes("https://mcp.home.co.uk"));
     assert.ok(ui.csp?.resourceDomains?.includes("https://api.mapbox.com"));
     assert.ok(ui.csp?.resourceDomains?.includes("https://events.mapbox.com"));
     assert.equal((await fetch(base + "/maps/static?points=51.38%2C-2.36")).status, 404);

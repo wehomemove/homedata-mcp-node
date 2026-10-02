@@ -11,6 +11,7 @@ import { MinuteLimiter } from "../limiter.js";
 import { AccountTools, DEFAULT_ACCOUNT_MCP_URL, DEFAULT_ISSUER, DEFAULT_RESOURCE, protectedResourceMetadata, type AccountSettings } from "./account.js";
 import { HomeClient } from "./client.js";
 import { buildHomeServer } from "./server.js";
+import { MAPBOX_GL_ASSETS } from "./mapbox-assets.js";
 
 export interface HomeHttpOptions {
   client: HomeClient;
@@ -29,6 +30,8 @@ export interface HomeHttpOptions {
   account?: AccountSettings;
   /** URL-restricted Mapbox browser token. When absent the widget exposes no map. */
   mapboxToken?: string;
+  /** Public origin used for this endpoint's widget assets. */
+  assetOrigin?: string;
   now?: () => number;
 }
 const send = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => res.writeHead(status, { "Content-Type": "application/json", ...headers }).end(JSON.stringify(body));
@@ -122,6 +125,18 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     noStoreOnErrors(res);
     const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
+    const mapboxAsset = MAPBOX_GL_ASSETS.get(requestPath);
+    if (mapboxAsset) {
+      if (req.method !== "GET" && req.method !== "HEAD") { res.setHeader("Allow", "GET, HEAD"); return void send(res, 405, { error: "method_not_allowed" }); }
+      res.writeHead(200, {
+        "Content-Type": mapboxAsset.contentType,
+        "Content-Length": String(mapboxAsset.body.length),
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "Access-Control-Allow-Origin": "*",
+        "X-Content-Type-Options": "nosniff",
+      });
+      return void res.end(req.method === "HEAD" ? undefined : mapboxAsset.body);
+    }
     if (requestPath === "/healthz") return void send(res, 200, { ok: true, service: "home", version: VERSION, enrichment_cache: options.client.enrichmentCacheStats() }, { "Cache-Control": "no-store" });
     if (requestPath === "/.well-known/openai-apps-challenge") {
       if (!options.appsChallenge) return void send(res, 404, { error: "not_found" });
@@ -154,7 +169,7 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
     const server = buildHomeServer(
       options.client,
       account ? { tools: account, token: bearerToken(req), onRefused: (challenge) => { refused ??= challenge; } } : undefined,
-      { mapboxToken: options.mapboxToken },
+      { mapboxToken: options.mapboxToken, assetOrigin: options.assetOrigin ?? options.account?.resource ?? DEFAULT_RESOURCE },
     );
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });
@@ -201,6 +216,8 @@ async function main(): Promise<void> {
   const apiKey = (process.env["HOMEDATA_API_KEY"] ?? "").trim();
   if (!apiKey) throw new Error("HOMEDATA_API_KEY is required for Home listing enrichment");
   const mapboxToken = mapboxTokenFromEnv(process.env);
+  const account = accountFromEnv(process.env);
+  const assetOrigin = account?.resource ?? checkUrl("HOME_MCP_RESOURCE", (process.env["HOME_MCP_RESOURCE"] ?? "").trim() || DEFAULT_RESOURCE, true);
   const client = new HomeClient({
     homeBaseUrl: (process.env["HOME_BASE_URL"] ?? "").trim() || undefined,
     listingViewSecret: (process.env["HOME_MCP_LISTING_VIEW_SECRET"] ?? "").trim() || undefined,
@@ -213,8 +230,9 @@ async function main(): Promise<void> {
     enrichmentsPerMinute: checkCallsPerMinute(process.env["HOME_ENRICHMENTS_PER_MINUTE"] || "4"),
     clientIpHeader: (process.env["HOME_CLIENT_IP_HEADER"] ?? "").trim() || undefined,
     appsChallenge: checkAppsChallenge(process.env["OPENAI_APPS_CHALLENGE"]),
-    account: accountFromEnv(process.env),
+    account,
     mapboxToken,
+    assetOrigin,
   });
   const port = Number(process.env["PORT"] || 4177); const host = process.env["HOST"] || "127.0.0.1";
   createServer((req, res) => void handler(req, res).catch((error) => { console.error("[home-mcp-http] request failed:", error); if (!res.headersSent) send(res, 500, { error: "internal_error" }); })).listen(port, host, () => console.error(`home-mcp-http ${VERSION} listening on http://${host}:${port}`));
