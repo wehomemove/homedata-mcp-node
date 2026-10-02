@@ -25,7 +25,7 @@ const string = (description: string, values?: string[]): Schema => ({ type: "str
 export const HOME_INSTRUCTIONS = [
   "Home helps people buying, renting, selling or letting homes across the United Kingdom using home.co.uk.",
   "Start with search_homes. Keep the listing IDs it returns: get_home gives every photo, the full description, agent and Homedata checks; compare_homes gives the same depth side by side.",
-  "After choosing search results, call render_home_listings with those home objects to show cards and a map. Call render_home_detail with the get_home result to show its gallery and key facts. A refinement can pass a subset of the homes already returned to render_home_listings without searching again.",
+  "After choosing search results, call render_home_listings with those home objects to show cards, honest listing evidence, market dates and a map. Call render_home_detail with the get_home result to show its gallery and key facts. A refinement can pass a subset of the homes already returned to render_home_listings without searching again. The widget can keep a local shortlist and calls compare_homes itself for two to four saved homes.",
   "When someone says what they want in a home beyond price and size (a garden, off-road parking, a quiet street, period features, open-plan living, a home office, no chain), pass those as wishes to search_homes. Describe a home as having a wish only when it is in that home's wishes_matched, and quote its evidence; a wish under wishes_not_stated is not mentioned in the listing, so say the listing does not say rather than that the home lacks it.",
   "Use area_insights for schools, broadband, recorded crime, deprivation and local price growth. Use the two calculators only when the user supplies their assumptions.",
   "Property enrichment is labelled with scope home. When no UPRN can be found, enrichment labelled with scope area contains postcode-level facts only: never present those as facts about the home.",
@@ -64,6 +64,7 @@ export const HOME_TOOLS: readonly Tool[] = [
     name: "compare_homes", title: "Compare homes",
     description: "Get two to four homes with the same full listing detail and Homedata enrichment for a side-by-side comparison. Use this when someone is choosing between search results.",
     inputSchema: obj({ listing_ids: { type: "array", minItems: 2, maxItems: 4, uniqueItems: true, items: { type: "string" }, description: "Two to four UUIDs returned by search_homes." } }, ["listing_ids"]),
+    _meta: { "openai/widgetAccessible": true, ui: { visibility: ["model", "app"] } },
   },
   {
     name: "area_insights", title: "Area insights",
@@ -108,7 +109,7 @@ export const HOME_TOOLS: readonly Tool[] = [
   },
   {
     name: "render_home_listings", title: "Show home cards and map",
-    description: "Render home objects already returned by search_homes as a photo-card carousel and a map. Always call search_homes first, choose or refine its results, then pass those home objects here. For a follow-up refinement, re-render the earlier homes without searching again when they contain enough information.",
+    description: "Render home objects already returned by search_homes as a photo-card carousel and a map, with local shortlist controls, result-derived refine chips, dated market signals and any listing-supplied wish evidence. Always call search_homes first, choose or refine its results, then pass those complete home objects here. For a follow-up refinement, re-render the earlier homes without searching again when they contain enough information.",
     inputSchema: obj({
       title: string("A short heading that describes this chosen set of homes."),
       homes: { type: "array", minItems: 1, maxItems: 20, items: { type: "object", additionalProperties: true }, description: "One to twenty complete home card objects returned by search_homes." },
@@ -184,7 +185,7 @@ function positive(args: Record<string, unknown>, name: string, allowZero = false
 export function buildHomeServer(client: HomeClient, account?: HomeAccount, options: { mapboxToken?: string; assetOrigin?: string } = {}): Server {
   const server = new Server({ name: "home", version: VERSION }, { capabilities: { tools: {}, resources: {} }, instructions: account ? `${HOME_INSTRUCTIONS} ${HOME_ACCOUNT_INSTRUCTIONS}` : HOME_INSTRUCTIONS });
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-    resources: [{ uri: HOME_WIDGET_URI, name: "Home listings and detail", description: "Responsive listing carousel, map and home gallery.", mimeType: "text/html;profile=mcp-app" }],
+    resources: [{ uri: HOME_WIDGET_URI, name: "Home listings and detail", description: "Responsive listing carousel, shortlist, refinement controls, map and home gallery.", mimeType: "text/html;profile=mcp-app" }],
   }));
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     if (request.params.uri !== HOME_WIDGET_URI) throw new Error("Unknown Home UI resource");
@@ -202,7 +203,7 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
         .replace("__HOME_MAPBOX_TOKEN__", JSON.stringify(options.mapboxToken ?? "")),
       _meta: {
         ui: { prefersBorder: false, domain: "https://mcp.home.co.uk", csp },
-        "openai/widgetDescription": "A responsive carousel and map for chosen homes, or a photo gallery and facts for one home.",
+        "openai/widgetDescription": "A responsive carousel, shortlist, honest listing evidence and map for chosen homes, or a photo gallery and facts for one home.",
         "openai/widgetPrefersBorder": false,
         "openai/widgetDomain": "https://mcp.home.co.uk",
         "openai/widgetCSP": { connect_domains: csp.connectDomains, resource_domains: csp.resourceDomains, redirect_domains: ["https://home.co.uk"] },

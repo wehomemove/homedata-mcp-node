@@ -63,6 +63,16 @@ The second runs the review packet's positive cases live and prints what came bac
 
 To check the wish searches and the seller and renter tools against live home.co.uk data (no key needed), run `node scripts/home-live-check.mjs` after `npm run build`. Each wish check reads every matched listing again on its own and fails if any quoted evidence is not in that listing's description.
 
+To refresh the light and dark listing screenshots from live Bath results, build first and provide a public Mapbox token plus a local Chrome or Chromium executable:
+
+```sh
+HOME_MAPBOX_TOKEN=pk.example \
+CHROME_PATH="/path/to/Chrome" \
+node scripts/home-widget-screenshots.mjs
+```
+
+Instead of `HOME_MAPBOX_TOKEN`, `HOME_MAPBOX_CREDENTIALS` may name a JSON file containing a `token` field. The script writes both `docs/home-chatgpt-app/screenshots/listings-light.jpg` and `listings-dark.jpg`; it contains no demo listing fixtures.
+
 ## Searching by wishes
 
 `search_homes` takes an optional `wishes` list: `garden`, `off_road_parking`, `quiet_street`, `period_features`, `open_plan`, `home_office`, `no_chain`. The search card carries only the first 150 characters of a description, so a wish search reads each home's full description from `/api/property-details/{id}` (five at a time, about 1.5 s for a page of 20). These reads go to home.co.uk, not Homedata, and use the trusted listing lane like `get_home`. Without `HOME_MCP_LISTING_VIEW_SECRET`, each read counts against atlas's daily per-address listing limit. Descriptions are kept in memory for an hour, so refining the wishes on the same page reads nothing again. A failed read is not kept.
