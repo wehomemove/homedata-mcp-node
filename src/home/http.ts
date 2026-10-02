@@ -84,11 +84,18 @@ function bearerToken(req: IncomingMessage): string | null {
   return match ? match[1]! : null;
 }
 
-function enrichmentUnits(call: ToolCall): number {
-  if (call.name === "get_home") return 1;
+/**
+ * Homedata lookups a call may spend, one per home. A home whose enrichment is
+ * already cached costs nothing, so repeat views stay outside the cap.
+ */
+function enrichmentUnits(call: ToolCall, client: HomeClient): number {
+  const args = call.arguments as { listing_id?: unknown; listing_ids?: unknown } | null;
+  const uncached = (id: unknown) => !(typeof id === "string" && client.enrichmentCached(id));
+  if (call.name === "get_home") return uncached(args?.listing_id) ? 1 : 0;
   if (call.name !== "compare_homes") return 0;
-  const ids = (call.arguments as { listing_ids?: unknown } | null)?.listing_ids;
-  return Array.isArray(ids) ? Math.max(1, ids.length) : 1;
+  const ids = args?.listing_ids;
+  if (!Array.isArray(ids) || !ids.length) return 1;
+  return ids.filter(uncached).length;
 }
 
 /** Turns the transport's 200 into a 401 with WWW-Authenticate once a call's token was refused. */
@@ -140,7 +147,7 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     noStoreOnErrors(res);
     const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
-    if (requestPath === "/healthz") return void send(res, 200, { ok: true, service: "home", version: VERSION });
+    if (requestPath === "/healthz") return void send(res, 200, { ok: true, service: "home", version: VERSION, enrichment_cache: options.client.enrichmentCacheStats() }, { "Cache-Control": "no-store" });
     if (requestPath === "/maps/static") {
       if (req.method !== "GET" || !options.mapboxToken) return void send(res, 404, { error: "not_found" });
       const upstream = mapboxRequest(new URL(req.url ?? "/", "http://localhost"), options.mapboxToken);
@@ -179,7 +186,7 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
     try { body = await read(req); } catch { return void send(res, 400, { jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null }); }
     const calls = toolCalls(body);
     const caller = callerAddress(req, options.clientIpHeader);
-    const enrichmentCount = calls.reduce((total, call) => total + enrichmentUnits(call), 0);
+    const enrichmentCount = calls.reduce((total, call) => total + enrichmentUnits(call, options.client), 0);
     if ((calls.length && !callLimits.take(caller, calls.length)) ||
         (enrichmentCount && !enrichmentLimits.take(caller, enrichmentCount))) {
       return void send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" });

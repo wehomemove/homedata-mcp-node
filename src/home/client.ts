@@ -1,4 +1,5 @@
 import { HomedataClient, type ApiResponse } from "../client.js";
+import { TtlCache } from "./cache.js";
 
 const DEFAULT_HOME_URL = "https://home.co.uk";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -10,6 +11,21 @@ export class HomeUpstreamError extends Error {
 }
 
 const UNAVAILABLE = Object.freeze({ available: false, reason: "Not available right now." });
+const NO_ENRICHMENT = Object.freeze({ available: false, reason: "No UPRN or valid full postcode was published for enrichment." });
+const isUnavailable = (value: unknown): boolean => object(value)["available"] === false && object(value)["reason"] === UNAVAILABLE.reason;
+
+/** How a listing's enrichment was resolved, so a repeat view skips address matching. */
+type EnrichmentRoute =
+  | { kind: "home"; uprn: string; source: "listing_uprn" | "exact_address_match" }
+  | { kind: "area"; postcode: string }
+  | { kind: "none" };
+
+export const ENRICHMENT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+export interface EnrichmentCacheStats {
+  homes: { hits: number; misses: number; entries: number };
+  areas: { hits: number; misses: number; entries: number };
+}
 
 export interface HomeClientOptions {
   homeBaseUrl?: string;
@@ -19,6 +35,14 @@ export interface HomeClientOptions {
   listingViewSecret?: string;
   now?: () => Date;
   logger?: (message: string, detail: unknown) => void;
+  /**
+   * Successful Homedata answers are kept this long: each home's core lookup by
+   * UPRN, and area facts by postcode. Failures are never kept.
+   */
+  enrichmentTtlMs?: number;
+  /** Most homes held at once; about one month of the Home app's allowance. */
+  cachedHomes?: number;
+  cachedAreas?: number;
 }
 
 export type SearchArgs = {
@@ -127,6 +151,9 @@ export class HomeClient {
   private readonly timeoutMs: number;
   private readonly now: () => Date;
   private readonly logger: (message: string, detail: unknown) => void;
+  private readonly cachedHomes: TtlCache<unknown>;
+  private readonly cachedAreas: TtlCache<JsonObject>;
+  private readonly listingRoutes: TtlCache<EnrichmentRoute>;
 
   constructor(private readonly options: HomeClientOptions) {
     this.homeBaseUrl = (options.homeBaseUrl ?? DEFAULT_HOME_URL).replace(/\/+$/, "");
@@ -134,6 +161,28 @@ export class HomeClient {
     this.timeoutMs = options.timeoutMs ?? 30_000;
     this.now = options.now ?? (() => new Date());
     this.logger = options.logger ?? ((message, detail) => console.error(message, detail));
+    const ttl = options.enrichmentTtlMs ?? ENRICHMENT_CACHE_TTL_MS;
+    const clock = () => this.now().getTime();
+    this.cachedHomes = new TtlCache(options.cachedHomes ?? 2_000, ttl, clock);
+    this.cachedAreas = new TtlCache(options.cachedAreas ?? 2_000, ttl, clock);
+    this.listingRoutes = new TtlCache(4 * (options.cachedHomes ?? 2_000), ttl, clock);
+  }
+
+  /** Hit and miss counts for health. A home hit is one Homedata core lookup not spent. */
+  enrichmentCacheStats(): EnrichmentCacheStats {
+    return { homes: this.cachedHomes.stats(), areas: this.cachedAreas.stats() };
+  }
+
+  /**
+   * True when viewing this listing now would spend nothing on Homedata: its
+   * enrichment was resolved recently and the facts it resolved to are still held.
+   */
+  enrichmentCached(listingId: string): boolean {
+    const route = this.listingRoutes.peek(listingId);
+    if (!route) return false;
+    if (route.kind === "home") return this.cachedHomes.peek(route.uprn) !== undefined;
+    if (route.kind === "area") return this.cachedAreas.peek(route.postcode) !== undefined;
+    return true;
   }
 
   async search(args: SearchArgs): Promise<JsonObject> {
@@ -267,7 +316,7 @@ export class HomeClient {
         branch: detail["branch_name"] ?? listing["branch_name"] ?? null,
         logo: absoluteHomeUrl(detail["brand_logo"] ?? listing["agent_logo"]),
       },
-      enrichment: await this.enrich(detail["property_uprn"], address, postcode, text(detail["building_number"]), text(detail["building_name"])),
+      enrichment: await this.enrich(listingId, detail["property_uprn"], address, postcode, text(detail["building_number"]), text(detail["building_name"])),
     };
   }
 
@@ -279,6 +328,8 @@ export class HomeClient {
     const compact = postcode.trim().toUpperCase().replace(/\s+/g, "");
     const normalised = compact.length > 3 ? `${compact.slice(0, -3)} ${compact.slice(-3)}` : compact;
     if (!POSTCODE.test(normalised)) throw new HomeError("postcode must be a full UK postcode");
+    const cached = this.cachedAreas.get(normalised);
+    if (cached) return structuredClone(cached);
     const outcode = normalised.split(/\s+/)[0]!;
     const calls = [
       ["crime", "/crime/", { postcode: normalised }],
@@ -288,7 +339,10 @@ export class HomeClient {
       ["price_growth", `/price-growth/${encodeURIComponent(outcode)}/`, {}],
     ] as const;
     const settled = await Promise.all(calls.map(async ([name, path, query]) => [name, await this.data(path, query)] as const));
-    return { postcode: normalised, ...Object.fromEntries(settled) };
+    const facts: JsonObject = { postcode: normalised, ...Object.fromEntries(settled) };
+    // A part that failed would otherwise stay missing for a day.
+    if (!settled.some(([, value]) => isUnavailable(value))) this.cachedAreas.set(normalised, structuredClone(facts));
+    return facts;
   }
 
   /**
@@ -459,6 +513,7 @@ export class HomeClient {
   }
 
   private async enrich(
+    listingId: string,
     publishedUprn: unknown,
     address: string,
     postcode: string | null,
@@ -468,39 +523,60 @@ export class HomeClient {
     const directUprn = (typeof publishedUprn === "string" || typeof publishedUprn === "number") && /^\d+$/.test(String(publishedUprn))
       ? String(publishedUprn)
       : null;
-    if (directUprn) return this.propertyEnrichment(directUprn, postcode, "listing_uprn");
+    if (directUprn) {
+      this.listingRoutes.set(listingId, { kind: "home", uprn: directUprn, source: "listing_uprn" });
+      return this.propertyEnrichment(directUprn, postcode, "listing_uprn");
+    }
 
+    const known = this.listingRoutes.peek(listingId);
+    if (known?.kind === "home") return this.propertyEnrichment(known.uprn, postcode, known.source);
+    if (known?.kind === "area") return (await this.areaEnrichment(known.postcode)) ?? { ...NO_ENRICHMENT };
+    if (known?.kind === "none") return { ...NO_ENRICHMENT };
+
+    // Only a definite answer is remembered: a failed address lookup is retried next time.
+    let definite = true;
     if (address && postcode && (buildingNumber || buildingName)) {
       const found = await this.data("/address/find/", { q: address });
+      if (isUnavailable(found)) definite = false;
       const body = object(found);
       const candidates = Array.isArray(body["results"]) ? body["results"] : Array.isArray(found) ? found : [];
       const match = candidates.map(object).find((candidate) => this.sameAddress(candidate, postcode, buildingNumber, buildingName));
       const matchedUprn = match?.["uprn"];
       if ((typeof matchedUprn === "string" || typeof matchedUprn === "number") && /^\d+$/.test(String(matchedUprn))) {
+        this.listingRoutes.set(listingId, { kind: "home", uprn: String(matchedUprn), source: "exact_address_match" });
         return this.propertyEnrichment(String(matchedUprn), postcode, "exact_address_match");
       }
     }
 
-    if (postcode) {
-      try {
-        const area = await this.area(postcode);
-        return {
-          available: true,
-          scope: "area",
-          postcode: area["postcode"],
-          notice: "These are postcode-level area facts. They are not facts about this home.",
-          area,
-        };
-      } catch (error) {
-        if (!(error instanceof HomeError)) throw error;
-      }
+    const area = postcode ? await this.areaEnrichment(postcode) : null;
+    if (definite) this.listingRoutes.set(listingId, area ? { kind: "area", postcode: String(area["postcode"]) } : { kind: "none" });
+    return area ?? { ...NO_ENRICHMENT };
+  }
+
+  /** Postcode-level facts labelled as such, or null when the postcode is not a full one. */
+  private async areaEnrichment(postcode: string): Promise<JsonObject | null> {
+    try {
+      const area = await this.area(postcode);
+      return {
+        available: true,
+        scope: "area",
+        postcode: area["postcode"],
+        notice: "These are postcode-level area facts. They are not facts about this home.",
+        area,
+      };
+    } catch (error) {
+      if (!(error instanceof HomeError)) throw error;
+      return null;
     }
-    return { available: false, reason: "No UPRN or valid full postcode was published for enrichment." };
   }
 
   private async propertyEnrichment(uprn: string, postcode: string | null, source: "listing_uprn" | "exact_address_match"): Promise<JsonObject> {
-    const core = await this.data(`/property/${encodeURIComponent(uprn)}/core/`, {});
-    if (object(core)["available"] === false) return { ...UNAVAILABLE };
+    let core = this.cachedHomes.get(uprn);
+    if (core === undefined) {
+      core = await this.data(`/property/${encodeURIComponent(uprn)}/core/`, {});
+      if (object(core)["available"] === false) return { ...UNAVAILABLE };
+      this.cachedHomes.set(uprn, structuredClone(core));
+    } else core = structuredClone(core);
     return { available: true, scope: "home", source, uprn, postcode, property: core };
   }
 
