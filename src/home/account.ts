@@ -36,6 +36,7 @@ export interface AccountSettings {
   logger?: (message: string, detail: unknown) => void;
 }
 
+
 type Schema = Record<string, unknown>;
 type Annotations = { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint?: boolean; openWorldHint: boolean };
 export type AccountTool = { name: string; title: string; description: string; inputSchema: Schema; scope: Scope; annotations: Annotations };

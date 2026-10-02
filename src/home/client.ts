@@ -98,16 +98,20 @@ export function buyerPropertyFacts(value: unknown): JsonObject {
   const nestedEpc = object(core["epc"]); const nestedTax = object(core["council_tax"]);
   const first = (...values: unknown[]) => values.find(present);
   const epc = compactObject([
-    ["current_rating", first(core["current_energy_rating"], nestedEpc["current_rating"], nestedEpc["rating"])],
-    ["potential_rating", first(core["potential_energy_rating"], nestedEpc["potential_rating"])],
-    ["assessment_date", first(core["last_epc_date"], nestedEpc["assessment_date"], nestedEpc["date"])],
+    ["rating", first(core["current_energy_rating"], nestedEpc["current_energy_rating"], nestedEpc["current_rating"], nestedEpc["rating"])],
+    ["potential_rating", first(core["potential_energy_rating"], nestedEpc["potential_energy_rating"], nestedEpc["potential_rating"])],
+    ["assessment_date", first(core["last_epc_date"], nestedEpc["last_epc_date"], nestedEpc["assessment_date"], nestedEpc["date"])],
   ]);
-  const councilTax = compactObject([["band", first(core["council_tax_band"], nestedTax["band"])]]) ;
+  const councilTax = compactObject([["band", first(core["council_tax_band"], nestedTax["council_tax_band"], nestedTax["band"])]]);
   const safeRisk = (risk: unknown): unknown => {
-    if (Array.isArray(risk)) return risk.map(safeRisk).filter((item) => Object.keys(object(item)).length);
+    if (Array.isArray(risk)) {
+      const details = risk.map(safeRisk).map(object).filter((item) => Object.keys(item).length);
+      const levels = details.map((item) => text(item["level"])).filter((level): level is string => level !== null);
+      return compactObject([["level", levels.join("; ") || undefined], ["details", details.length ? details : undefined]]);
+    }
     const item = object(risk);
     if (!Object.keys(item).length) return typeof risk === "string" ? risk : undefined;
-    return compactObject([["type", first(item["risk_type"], item["type"])], ["level", first(item["label"], item["level"], item["rating"], item["risk"])]]) ;
+    return compactObject([["type", first(item["risk_type"], item["type"])], ["level", first(item["label"], item["level"], item["rating"], item["risk"])]]);
   };
   const safeSchool = (value: unknown): JsonObject => {
     const school = object(value); const ofsted = object(school["ofsted"]);
@@ -119,36 +123,45 @@ export function buyerPropertyFacts(value: unknown): JsonObject {
     ]);
   };
   const schoolBlock = object(core["schools"]);
+  const propertyTypeBlock = object(core["property_type"]);
+  const roomsBlock = object(core["rooms"]);
+  const dimensionsBlock = object(core["dimensions"]);
+  const titleBlock = object(core["lr_title"]);
   const schools = (Array.isArray(core["schools"]) ? core["schools"] : Array.isArray(schoolBlock["schools"]) ? schoolBlock["schools"] : []).map(safeSchool);
   const broadbandBlock = object(core["broadband"]);
   const broadband = compactObject([
-    ["average_download_speed", first(core["avg_download_speed"], broadbandBlock["avg_download_speed"], broadbandBlock["average_download_speed"])],
-    ["maximum_download_speed", first(core["max_download_speed"], broadbandBlock["max_download_speed"], broadbandBlock["maximum_download_speed"])],
+    ["avg_download_speed", first(core["avg_download_speed"], broadbandBlock["avg_download_speed"], broadbandBlock["average_download_speed"])],
+    ["max_download_speed", first(core["max_download_speed"], broadbandBlock["max_download_speed"], broadbandBlock["maximum_download_speed"])],
     ["superfast_available_pct", first(core["superfast_available_pct"], broadbandBlock["superfast_available_pct"])],
     ["gigabit_available_pct", first(core["gigabit_available_pct"], broadbandBlock["gigabit_available_pct"])],
     ["full_fibre_available_pct", first(core["full_fibre_available_pct"], broadbandBlock["full_fibre_available_pct"])],
   ]);
   const crimeBlock = object(core["crime"]);
   const crime = compactObject([
-    ["level", first(core["crime_level"], crimeBlock["level"], crimeBlock["rating"])],
+    ["level", first(core["crime_level"], crimeBlock["level"], crimeBlock["rating"],
+      present(crimeBlock["total_crimes"]) ? `${String(crimeBlock["total_crimes"])} recorded crimes${present(crimeBlock["latest_month"]) ? ` (${String(crimeBlock["latest_month"])})` : ""}` : undefined)],
     ["total", first(crimeBlock["total_crimes"], crimeBlock["total"])], ["period", first(crimeBlock["latest_month"], crimeBlock["period"])],
     ["categories", Array.isArray(crimeBlock["categories"]) ? crimeBlock["categories"].map((category) => {
       const item = object(category); return compactObject([["name", first(item["label"], item["category"])], ["count", item["count"]]]);
     }) : undefined],
   ]);
-  const risks = compactObject([
-    ["flood", safeRisk(core["flood"])], ["radon", safeRisk(core["radon"])], ["noise", safeRisk(core["noise"])],
-    ["landfill", safeRisk(core["landfill"])], ["coal_mining", safeRisk(core["coal_mining"])],
-    ["air_quality", safeRisk(core["air_quality"])], ["other", safeRisk(core["risks"])],
+  const rooms = compactObject([
+    ["bedrooms", first(core["bedrooms"], roomsBlock["bedrooms"])],
+    ["bathrooms", first(core["bathrooms"], roomsBlock["bathrooms"])],
+    ["habitable", first(core["habitable_rooms"], roomsBlock["habitable_rooms"])],
+    ["heated", first(core["heated_rooms"], roomsBlock["heated_rooms"])],
   ]);
-  const rooms = compactObject([["bedrooms", core["bedrooms"]], ["bathrooms", core["bathrooms"]], ["habitable", core["habitable_rooms"]], ["heated", core["heated_rooms"]]]);
   return compactObject([
     ["epc", Object.keys(epc).length ? epc : undefined], ["council_tax", Object.keys(councilTax).length ? councilTax : undefined],
-    ["risks", Object.keys(risks).length ? risks : undefined], ["broadband", Object.keys(broadband).length ? broadband : undefined],
+    ["flood", safeRisk(core["flood"])], ["radon", safeRisk(core["radon"])], ["noise", safeRisk(core["noise"])],
+    ["landfill", safeRisk(core["landfill"])], ["coal_mining", safeRisk(core["coal_mining"])],
+    ["air_quality", safeRisk(core["air_quality"])], ["other_risks", safeRisk(core["risks"])],
+    ["broadband", Object.keys(broadband).length ? broadband : undefined],
     ["schools", schools.length ? schools : undefined], ["crime", Object.keys(crime).length ? crime : undefined],
-    ["property_type", core["property_type"]], ["rooms", Object.keys(rooms).length ? rooms : undefined],
-    ["floor_area_sqm", first(core["epc_floor_area"], core["predicted_floor_area"], core["floor_area_sqm"])],
-    ["tenure", first(core["tenure"], core["ownership"], core["estate_interest"])],
+    ["property_type", first(propertyTypeBlock["property_type"], core["property_type"])],
+    ["rooms", Object.keys(rooms).length ? rooms : undefined],
+    ["floor_area_sqm", first(core["epc_floor_area"], nestedEpc["epc_floor_area"], core["predicted_floor_area"], dimensionsBlock["predicted_floor_area"], core["floor_area_sqm"])],
+    ["tenure", first(core["tenure"], core["ownership"], core["estate_interest"], titleBlock["estate_interest"])],
   ]);
 }
 
