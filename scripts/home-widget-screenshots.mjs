@@ -10,9 +10,14 @@ import { matchWishes } from "../dist/home/wishes.js";
 import { HOME_WIDGET_HTML } from "../dist/home/widget.js";
 
 const root = resolve(import.meta.dirname, "..");
-const credentials = JSON.parse(await readFile("/Users/homemove/project-onyx/credentials/mapbox-chatgpt-apps.json", "utf8"));
-const token = credentials.token;
-if (typeof token !== "string" || !token.startsWith("pk.")) throw new Error("Mapbox screenshot token is missing");
+const credentialsPath = process.env.HOME_MAPBOX_CREDENTIALS;
+const credentials = credentialsPath ? JSON.parse(await readFile(credentialsPath, "utf8")) : {};
+const token = process.env.HOME_MAPBOX_TOKEN ?? credentials.token;
+if (typeof token !== "string" || !token.startsWith("pk.")) {
+  throw new Error("Set HOME_MAPBOX_TOKEN to a public Mapbox token, or HOME_MAPBOX_CREDENTIALS to a JSON file containing {\"token\":\"pk.…\"}");
+}
+const chromePath = process.env.CHROME_PATH;
+if (!chromePath) throw new Error("Set CHROME_PATH to a Chrome or Chromium executable");
 
 const search = await fetch("https://home.co.uk/api/for-sale/Bath/?page=1&per_page=8").then((response) => {
   if (!response.ok) throw new Error(`Home search returned ${response.status}`);
@@ -41,7 +46,7 @@ const temporary = join(tmpdir(), `home-widget-${process.pid}.html`);
 await writeFile(temporary, html);
 
 const browser = await chromium.launch({
-  executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  executablePath: chromePath,
   args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--allow-file-access-from-files"],
 });
 try {

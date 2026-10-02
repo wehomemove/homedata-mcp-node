@@ -64,6 +64,7 @@ export const HOME_TOOLS: readonly Tool[] = [
     name: "compare_homes", title: "Compare homes",
     description: "Get two to four homes with the same full listing detail and Homedata enrichment for a side-by-side comparison. Use this when someone is choosing between search results.",
     inputSchema: obj({ listing_ids: { type: "array", minItems: 2, maxItems: 4, uniqueItems: true, items: { type: "string" }, description: "Two to four UUIDs returned by search_homes." } }, ["listing_ids"]),
+    _meta: { "openai/widgetAccessible": true, ui: { visibility: ["model", "app"] } },
   },
   {
     name: "area_insights", title: "Area insights",
