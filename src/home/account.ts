@@ -55,6 +55,14 @@ const DELETE: Annotations = { readOnlyHint: false, destructiveHint: true, idempo
 
 const PROPERTY_TYPES = ["detached", "semi_detached", "terraced", "flat"];
 
+/**
+ * The saved-search types atlas's SavedSearchRunner actually runs. It stores
+ * `sold` but returns null from run() and newResults() for it, so a sold search
+ * would never send an email or show a new result: it is neither advertised nor
+ * forwarded.
+ */
+export const SAVED_SEARCH_TYPES = ["for_sale", "to_rent", "new_builds"] as const;
+
 export const ACCOUNT_TOOLS: readonly AccountTool[] = [
   {
     name: "list_saved_searches", title: "List saved searches", scope: SAVED_SEARCHES_SCOPE, annotations: READ,
@@ -66,7 +74,7 @@ export const ACCOUNT_TOOLS: readonly AccountTool[] = [
     description: "Save a property search to the user's home.co.uk account so home.co.uk emails them new matching homes. Use this when someone asks to save a search or be told about new homes matching it; confirm the area and filters with them first.",
     inputSchema: obj({
       name: { type: "string", maxLength: 255, description: "A short name the user will recognise, such as \"3-bed houses in Bath\"." },
-      search_type: { type: "string", enum: ["for_sale", "to_rent", "new_builds", "sold"], description: "What to search. Defaults to for_sale." },
+      search_type: { type: "string", enum: [...SAVED_SEARCH_TYPES], description: "What to search: homes for sale, to rent, or new builds only. Defaults to for_sale." },
       search_criteria: obj({
         location: { type: "string", description: "Town, city, county or UK postcode, as given to search_homes." },
         min_price: { type: "integer", minimum: 0, description: "Minimum price in whole pounds." },
@@ -234,6 +242,10 @@ export class AccountTools {
 
   /** Validates create_saved_search's criteria and adds where it should look. */
   private async withArea(args: Record<string, unknown>): Promise<{ forwarded: Record<string, unknown>; area: unknown }> {
+    const type = args["search_type"];
+    if (type !== undefined && !(SAVED_SEARCH_TYPES as readonly unknown[]).includes(type)) {
+      throw new HomeError(`search_type must be one of ${SAVED_SEARCH_TYPES.join(", ")}; sold-price searches cannot be saved`);
+    }
     const criteria = object(args["search_criteria"]);
     const location = criteria["location"];
     if (typeof location !== "string") throw new HomeError("search_criteria.location is required");

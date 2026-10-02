@@ -15,7 +15,7 @@ import golden from "../../docs/home-chatgpt-app/golden-prompts.json" with { type
 import { HomedataClient } from "../client.js";
 import { checkGoldenSet, type GoldenSet } from "../golden.js";
 import { HomeClient, HomeUpstreamError } from "../home/client.js";
-import { ACCOUNT_TOOLS, type AccountSettings } from "../home/account.js";
+import { ACCOUNT_TOOLS, SAVED_SEARCH_TYPES, type AccountSettings } from "../home/account.js";
 import { accountFromEnv, createHomeHttpHandler } from "../home/http.js";
 import { HOME_RULES } from "../home/plugin.js";
 import { buildHomeServer, HOME_TOOLS } from "../home/server.js";
@@ -904,4 +904,26 @@ test("account settings come from the environment with home.co.uk defaults and ca
   assert.throws(() => accountFromEnv({ HOME_ACCOUNTS: "maybe" }), /HOME_ACCOUNTS/);
   assert.throws(() => accountFromEnv({ HOME_MCP_RESOURCE: "https://mcp.home.co.uk/mcp" }), /origin/);
   assert.throws(() => accountFromEnv({ HOME_ACCOUNT_MCP_URL: "http://atlas.example/api/mcp" }), /https/);
+});
+
+test("only saved-search types atlas's runner executes are advertised, and a sold search is refused before atlas", async () => {
+  // atlas SavedSearchRunner::run() and newResults() return null for TYPE_SOLD, so a stored
+  // sold search would never email or show a new result. These are the types it runs.
+  const create = ACCOUNT_TOOLS.find((t) => t.name === "create_saved_search")!;
+  const advertised = ((create.inputSchema["properties"] as Record<string, any>)["search_type"].enum) as string[];
+  assert.deepEqual(advertised, ["for_sale", "to_rent", "new_builds"]);
+  assert.deepEqual(advertised, [...SAVED_SEARCH_TYPES]);
+
+  const app = await startAccount({}, { responseBody: { "/api/for-sale/Bath/": { displayLocation: "Bath", hasBoundarySearch: true, centerLat: 51.38, centerLng: -2.36, radiusMiles: 1, properties: [] }, "/api/to-rent/Bath/": { displayLocation: "Bath", hasBoundarySearch: true, centerLat: 51.38, centerLng: -2.36, radiusMiles: 1, properties: [] } } });
+  try {
+    for (const search_type of advertised) {
+      const result = await app.call("create_saved_search", { name: search_type, search_type, search_criteria: { location: "Bath" } }, TOKEN);
+      assert.notEqual(result["isError"], true, search_type);
+    }
+    assert.deepEqual(app.atlas.map((c) => c.body["params"].arguments.search_type), advertised);
+    const sold = await app.call("create_saved_search", { name: "sold", search_type: "sold", search_criteria: { location: "Bath" } }, TOKEN);
+    assert.equal(sold["isError"], true);
+    assert.match(sold["structuredContent"]["detail"], /sold-price searches cannot be saved/);
+    assert.equal(app.atlas.length, advertised.length, "a sold search never reaches atlas");
+  } finally { await app.stop(); }
 });
