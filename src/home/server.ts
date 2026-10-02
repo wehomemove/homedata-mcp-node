@@ -193,7 +193,7 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
       uri: HOME_WIDGET_URI,
       mimeType: "text/html;profile=mcp-app",
       text: HOME_WIDGET_HTML
-        .replace("__HOME_MAPBOX_ASSETS__", options.mapboxToken ? '<link href="https://api.mapbox.com/mapbox-gl-js/v3.15.0/mapbox-gl.css" rel="stylesheet"><script src="https://api.mapbox.com/mapbox-gl-js/v3.15.0/mapbox-gl.js"></script>' : "")
+        .replace("__HOME_MAPBOX_ASSETS__", options.mapboxToken ? '<link href="https://api.mapbox.com/mapbox-gl-js/v3.15.0/mapbox-gl.css" rel="stylesheet" integrity="sha384-ybStW03vjH/S7ZApCJT0nH1D7iITNZEYRxjmkJWtpkDDUhwI+hXoHm7JcDvL6spf" crossorigin="anonymous"><script src="https://api.mapbox.com/mapbox-gl-js/v3.15.0/mapbox-gl.js" integrity="sha384-bdNholknIOkWEb1azEKvnPJRgM0yXw3+r2L2Hjhl0twDnzUC7WxuBpKfJdp7Fzpg" crossorigin="anonymous"></script>' : "")
         .replace("__HOME_MAPBOX_TOKEN__", JSON.stringify(options.mapboxToken ?? "")),
       _meta: {
         ui: { prefersBorder: false, domain: "https://mcp.home.co.uk", csp },

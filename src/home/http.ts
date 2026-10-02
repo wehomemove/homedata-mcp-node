@@ -27,11 +27,8 @@ export interface HomeHttpOptions {
    * published, and a signed-in call is forwarded to atlas with its bearer.
    */
   account?: AccountSettings;
-  /** Server-only Mapbox token. When absent the widget and HTTP surface expose no map. */
+  /** URL-restricted Mapbox browser token. When absent the widget exposes no map. */
   mapboxToken?: string;
-  mapsPerMinute?: number;
-  mapOrigin?: string;
-  fetchImpl?: typeof fetch;
   now?: () => number;
 }
 const send = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => res.writeHead(status, { "Content-Type": "application/json", ...headers }).end(JSON.stringify(body));
@@ -111,27 +108,6 @@ function challengeOnRefusal(res: ServerResponse, challenge: () => string | undef
   }) as typeof res.writeHead;
 }
 
-const mapCache = new Map<string, { body: Uint8Array; contentType: string }>();
-
-function mapboxRequest(requestUrl: URL, token: string): URL | null {
-  const raw = requestUrl.searchParams.get("points");
-  const theme = requestUrl.searchParams.get("theme") === "dark" ? "dark-v11" : "light-v11";
-  if (!raw || raw.length > 2_000) return null;
-  const points = raw.split(";").map((part) => part.split(",").map(Number));
-  if (!points.length || points.length > 20 || points.some(([lat, lon]) => !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat!) > 85 || Math.abs(lon!) > 180)) return null;
-  const overlay = encodeURIComponent(JSON.stringify({
-    type: "FeatureCollection",
-    features: points.map(([latitude, longitude]) => ({
-      type: "Feature", geometry: { type: "Point", coordinates: [longitude, latitude] },
-      properties: { "marker-color": "#111827", "marker-size": "small" },
-    })),
-  }));
-  const mapbox = new URL(`https://api.mapbox.com/styles/v1/mapbox/${theme}/static/geojson(${overlay})/auto/900x520@2x`);
-  mapbox.searchParams.set("padding", "64");
-  mapbox.searchParams.set("access_token", token);
-  return mapbox;
-}
-
 /**
  * The same stateless Streamable HTTP shape as the Homedata app. Search tools
  * are no-auth; the account tools need a home.co.uk sign-in, which atlas checks.
@@ -142,33 +118,11 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
   const now = options.now ?? Date.now;
   const callLimits = new CallerLimits(options.callsPerMinute ?? 30, now);
   const enrichmentLimits = new CallerLimits(options.enrichmentsPerMinute ?? 4, now);
-  const mapLimits = new CallerLimits(options.mapsPerMinute ?? 20, now);
   const account = options.account ? new AccountTools(options.account, options.client) : undefined;
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     noStoreOnErrors(res);
     const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
     if (requestPath === "/healthz") return void send(res, 200, { ok: true, service: "home", version: VERSION, enrichment_cache: options.client.enrichmentCacheStats() }, { "Cache-Control": "no-store" });
-    if (requestPath === "/maps/static") {
-      if (req.method !== "GET" || !options.mapboxToken) return void send(res, 404, { error: "not_found" });
-      const upstream = mapboxRequest(new URL(req.url ?? "/", "http://localhost"), options.mapboxToken);
-      if (!upstream) return void send(res, 400, { error: "invalid_map_points" });
-      const key = upstream.pathname + upstream.searchParams.get("padding");
-      let image = mapCache.get(key);
-      if (!image) {
-        const caller = callerAddress(req, options.clientIpHeader);
-        if (!mapLimits.take(caller, 1)) return void send(res, 429, { error: "too_many_map_requests" }, { "Retry-After": "60" });
-        const response = await (options.fetchImpl ?? fetch)(upstream, {
-          headers: { Accept: "image/avif,image/webp,image/png" },
-          signal: AbortSignal.timeout(5_000),
-        });
-        if (!response.ok) return void send(res, 502, { error: "map_unavailable" }, { "Cache-Control": "no-store" });
-        image = { body: new Uint8Array(await response.arrayBuffer()), contentType: response.headers.get("content-type") ?? "image/png" };
-        if (mapCache.size >= 200) mapCache.delete(mapCache.keys().next().value!);
-        mapCache.set(key, image);
-      }
-      res.writeHead(200, { "Content-Type": image.contentType, "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800", "X-Content-Type-Options": "nosniff" });
-      return void res.end(image.body);
-    }
     if (requestPath === "/.well-known/openai-apps-challenge") {
       if (!options.appsChallenge) return void send(res, 404, { error: "not_found" });
       // Exactly the token: OpenAI rejects JSON, a list or a trailing newline.
@@ -231,13 +185,22 @@ export function accountFromEnv(env: NodeJS.ProcessEnv): AccountSettings | undefi
   };
 }
 
+/** Selects only a browser-safe Mapbox token and explains ignored legacy secrets. */
+export function mapboxTokenFromEnv(env: NodeJS.ProcessEnv, warn: (message: string) => void = console.warn): string | undefined {
+  const configured = (env["MAPBOX_PUBLIC_TOKEN"] ?? "").trim();
+  if (configured && !configured.startsWith("pk.")) throw new Error("MAPBOX_PUBLIC_TOKEN must be a Mapbox pk. browser token");
+  if (configured) return configured;
+  const legacy = (env["MAPBOX_SECRET_TOKEN"] ?? "").trim();
+  if (!legacy) return undefined;
+  if (legacy.startsWith("pk.")) return legacy;
+  warn("MAPBOX_SECRET_TOKEN is an sk. secret and cannot be sent to the browser; set MAPBOX_PUBLIC_TOKEN to a URL-restricted pk. token to enable maps");
+  return undefined;
+}
+
 async function main(): Promise<void> {
   const apiKey = (process.env["HOMEDATA_API_KEY"] ?? "").trim();
   if (!apiKey) throw new Error("HOMEDATA_API_KEY is required for Home listing enrichment");
-  const configuredMapboxToken = (process.env["MAPBOX_PUBLIC_TOKEN"] ?? "").trim();
-  const legacyMapboxToken = (process.env["MAPBOX_SECRET_TOKEN"] ?? "").trim();
-  const mapboxToken = configuredMapboxToken || (legacyMapboxToken.startsWith("pk.") ? legacyMapboxToken : "");
-  if (mapboxToken && !mapboxToken.startsWith("pk.")) throw new Error("MAPBOX_PUBLIC_TOKEN must be a Mapbox pk. browser token");
+  const mapboxToken = mapboxTokenFromEnv(process.env);
   const client = new HomeClient({
     homeBaseUrl: (process.env["HOME_BASE_URL"] ?? "").trim() || undefined,
     listingViewSecret: (process.env["HOME_MCP_LISTING_VIEW_SECRET"] ?? "").trim() || undefined,
@@ -248,12 +211,10 @@ async function main(): Promise<void> {
     mcpPath: process.env["HOME_MCP_PATH"] || "/mcp",
     callsPerMinute: checkCallsPerMinute(process.env["MCP_CALLS_PER_MINUTE"]),
     enrichmentsPerMinute: checkCallsPerMinute(process.env["HOME_ENRICHMENTS_PER_MINUTE"] || "4"),
-    mapsPerMinute: checkCallsPerMinute(process.env["HOME_MAPS_PER_MINUTE"] || "20"),
     clientIpHeader: (process.env["HOME_CLIENT_IP_HEADER"] ?? "").trim() || undefined,
     appsChallenge: checkAppsChallenge(process.env["OPENAI_APPS_CHALLENGE"]),
     account: accountFromEnv(process.env),
-    mapboxToken: mapboxToken || undefined,
-    mapOrigin: checkUrl("HOME_MCP_RESOURCE", (process.env["HOME_MCP_RESOURCE"] ?? "").trim() || DEFAULT_RESOURCE, true),
+    mapboxToken,
   });
   const port = Number(process.env["PORT"] || 4177); const host = process.env["HOST"] || "127.0.0.1";
   createServer((req, res) => void handler(req, res).catch((error) => { console.error("[home-mcp-http] request failed:", error); if (!res.headersSent) send(res, 500, { error: "internal_error" }); })).listen(port, host, () => console.error(`home-mcp-http ${VERSION} listening on http://${host}:${port}`));

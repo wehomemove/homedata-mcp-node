@@ -17,7 +17,7 @@ import { checkGoldenSet, type GoldenSet } from "../golden.js";
 import { TtlCache } from "../home/cache.js";
 import { HomeClient, HomeUpstreamError, type HomeClientOptions } from "../home/client.js";
 import { ACCOUNT_TOOLS, SAVED_SEARCH_TYPES, type AccountSettings } from "../home/account.js";
-import { accountFromEnv, createHomeHttpHandler } from "../home/http.js";
+import { accountFromEnv, createHomeHttpHandler, mapboxTokenFromEnv } from "../home/http.js";
 import { HOME_RULES } from "../home/plugin.js";
 import { buildHomeServer, HOME_TOOLS } from "../home/server.js";
 import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
@@ -82,7 +82,7 @@ function fixtures(options: FixtureOptions = {}) {
   return { client: new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, logger: options.logger, ...options.client }), requests };
 }
 
-async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; mapsPerMinute?: number; clientIpHeader?: string; appsChallenge?: string; account?: AccountSettings; mapboxToken?: string; mapOrigin?: string; fetchImpl?: typeof fetch } = {}) {
+async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; clientIpHeader?: string; appsChallenge?: string; account?: AccountSettings; mapboxToken?: string } = {}) {
   const { client, requests } = fixtures(fixtureOptions);
   const handler = createHomeHttpHandler({ client, callsPerMinute: 20, ...httpOptions });
   const http: HttpServer = createServer((req, res) => void handler(req, res));
@@ -176,6 +176,67 @@ test("the generated dependency-free widget script is valid JavaScript", () => {
   assert.match(script, /risk\('Crime',p\.crime/);
 });
 
+test("the widget follows ChatGPT events, MCP host context and the system fallback for cards and live maps", () => {
+  const source = HOME_WIDGET_HTML
+    .replace("__HOME_MAPBOX_ASSETS__", "")
+    .replace("__HOME_MAPBOX_TOKEN__", JSON.stringify("pk.test"));
+  const script = source.match(/<script>([\s\S]*)<\/script>/)?.[1];
+  if (!script) throw new Error("widget script missing");
+  const widgetScript = script;
+  assert.match(source, /@media\(prefers-color-scheme:dark\)\{:root:not\(\.light\)/);
+
+  function harness(systemDark = false, openai: Record<string, unknown> | undefined = undefined) {
+    const listeners = new Map<string, Array<(event: any) => void>>();
+    const classes = new Set<string>();
+    const styles: string[] = [];
+    const mapElement = { clientWidth: 600, querySelectorAll: () => [], querySelector: () => null };
+    const root = {
+      innerHTML: "", querySelector: () => null,
+      querySelectorAll: (selector: string) => selector === "[data-map]" ? [mapElement] : [],
+    };
+    const classList = { toggle: (name: string, on: boolean) => on ? classes.add(name) : classes.delete(name) };
+    const parent = { postMessage: () => undefined };
+    const window = {
+      parent, openai,
+      addEventListener: (type: string, listener: (event: any) => void) => listeners.set(type, [...(listeners.get(type) ?? []), listener]),
+    };
+    const button = () => ({
+      dataset: {} as Record<string, string>, className: "", type: "", textContent: "",
+      classList: { contains: () => false, toggle: () => undefined },
+      matches: (selector: string) => selector === "[data-index]", setAttribute: () => undefined,
+      addEventListener: () => undefined,
+    });
+    const document = { getElementById: () => root, documentElement: { classList }, createElement: button };
+    class FakeMap {
+      constructor(options: { style: string }) { styles.push(options.style); }
+      addControl() {} jumpTo() {} fitBounds() {} remove() {}
+      setStyle(style: string) { styles.push(style); }
+    }
+    class Marker { setLngLat() { return this; } addTo() { return this; } }
+    class Bounds { extend() { return this; } }
+    const mapboxgl = { Map: FakeMap, Marker, LngLatBounds: Bounds, NavigationControl: class {}, accessToken: "" };
+    new Function("window", "document", "matchMedia", "mapboxgl", widgetScript)(window, document, () => ({ matches: systemDark }), mapboxgl);
+    const dispatch = (type: string, event: any) => (listeners.get(type) ?? []).forEach((listener) => listener(event));
+    const render = () => dispatch("message", { source: parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [{ price: 325000, coordinates: { latitude: 51.38, longitude: -2.36 } }] } } } });
+    return { classes, styles, parent, dispatch, render };
+  }
+
+  const chatgpt = harness(false, { theme: "dark" });
+  assert.ok(chatgpt.classes.has("dark"));
+  chatgpt.render();
+  chatgpt.dispatch("openai:set_globals", { detail: { globals: { theme: "light" } } });
+  assert.ok(chatgpt.classes.has("light"));
+  assert.equal(chatgpt.styles.at(-1), "mapbox://styles/mapbox/light-v11");
+
+  const mcp = harness();
+  mcp.dispatch("message", { source: mcp.parent, data: { jsonrpc: "2.0", id: "home-ui-init", result: { hostContext: { theme: "dark" } } } });
+  assert.ok(mcp.classes.has("dark"));
+
+  const system = harness(true);
+  system.render();
+  assert.equal(system.styles[0], "mapbox://styles/mapbox/dark-v11");
+});
+
 test("render tools reuse supplied homes without another search and keep text fallbacks", async () => {
   const { mcp, requests, stop } = await start();
   try {
@@ -216,19 +277,13 @@ test("Home publishes a v3 MCP Apps resource without a map surface when the brows
   } finally { await stop(); }
 });
 
-test("Home publishes the interactive Mapbox client and CSP domains when configured", async () => {
-  const upstream: URL[] = [];
-  const signals: Array<AbortSignal | null | undefined> = [];
-  const mapFetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-    upstream.push(new URL(String(input)));
-    signals.push(init?.signal);
-    return new Response(Uint8Array.from([137, 80, 78, 71]), { headers: { "Content-Type": "image/png" } });
-  }) as typeof fetch;
-  const { base, mcp, stop } = await start({}, { mapboxToken: "pk.browser-token", fetchImpl: mapFetch });
+test("Home publishes the integrity-pinned interactive Mapbox client and CSP domains when configured", async () => {
+  const { base, mcp, stop } = await start({}, { mapboxToken: "pk.browser-token" });
   try {
     const resource = await mcp.readResource({ uri: HOME_WIDGET_URI });
     const content = resource.contents[0] as { text?: string; _meta?: Record<string, unknown> };
     assert.match(content.text ?? "", /mapbox-gl-js\/v3\.15\.0/);
+    assert.match(content.text ?? "", /integrity="sha384-bdNholknIOkWEb1azEKvnPJRgM0yXw3\+r2L2Hjhl0twDnzUC7WxuBpKfJdp7Fzpg" crossorigin="anonymous"/);
     assert.match(content.text ?? "", /mapboxToken="pk\.browser-token"/);
     assert.match(content.text ?? "", /new mapboxgl\.Map/);
     assert.match(content.text ?? "", /NavigationControl/);
@@ -236,34 +291,17 @@ test("Home publishes the interactive Mapbox client and CSP domains when configur
     assert.deepEqual(ui.csp?.connectDomains, ["https://api.mapbox.com", "https://events.mapbox.com"]);
     assert.ok(ui.csp?.resourceDomains?.includes("https://api.mapbox.com"));
     assert.ok(ui.csp?.resourceDomains?.includes("https://events.mapbox.com"));
-    const path = "/maps/static?theme=light&points=51.38%2C-2.36%3B51.39%2C-2.35";
-    const first = await fetch(base + path); const second = await fetch(base + path);
-    assert.equal(first.status, 200); assert.equal(first.headers.get("content-type"), "image/png");
-    assert.equal(second.status, 200); assert.equal(upstream.length, 1);
-    assert.equal(upstream[0]!.hostname, "api.mapbox.com");
-    assert.equal(upstream[0]!.searchParams.get("access_token"), "pk.browser-token");
-    assert.ok(signals[0] instanceof AbortSignal);
-    assert.equal((await fetch(base + "/maps/static?points=bad")).status, 400);
+    assert.equal((await fetch(base + "/maps/static?points=51.38%2C-2.36")).status, 404);
   } finally { await stop(); }
 });
 
-test("Home limits distinct uncached maps per caller but serves cache hits without spending the allowance", async () => {
-  let upstreamCalls = 0;
-  const mapFetch = (async () => {
-    upstreamCalls++;
-    return new Response(Uint8Array.from([137, 80, 78, 71]), { headers: { "Content-Type": "image/png" } });
-  }) as typeof fetch;
-  const { base, stop } = await start({}, { mapboxToken: "sk.rate-limit", mapsPerMinute: 2, fetchImpl: mapFetch });
-  try {
-    const first = "/maps/static?points=50.001%2C-1.001";
-    assert.equal((await fetch(base + first)).status, 200);
-    assert.equal((await fetch(base + first)).status, 200);
-    assert.equal((await fetch(base + "/maps/static?points=50.002%2C-1.002")).status, 200);
-    const refused = await fetch(base + "/maps/static?points=50.003%2C-1.003");
-    assert.equal(refused.status, 429);
-    assert.equal(refused.headers.get("retry-after"), "60");
-    assert.equal(upstreamCalls, 2);
-  } finally { await stop(); }
+test("Mapbox environment selection exposes only public tokens and explains ignored legacy secrets", () => {
+  assert.equal(mapboxTokenFromEnv({ MAPBOX_PUBLIC_TOKEN: " pk.public " }), "pk.public");
+  assert.equal(mapboxTokenFromEnv({ MAPBOX_SECRET_TOKEN: "pk.legacy" }), "pk.legacy");
+  const warnings: string[] = [];
+  assert.equal(mapboxTokenFromEnv({ MAPBOX_SECRET_TOKEN: "sk.secret" }, (message) => warnings.push(message)), undefined);
+  assert.deepEqual(warnings, ["MAPBOX_SECRET_TOKEN is an sk. secret and cannot be sent to the browser; set MAPBOX_PUBLIC_TOKEN to a URL-restricted pk. token to enable maps"]);
+  assert.throws(() => mapboxTokenFromEnv({ MAPBOX_PUBLIC_TOKEN: "sk.secret" }), /must be a Mapbox pk\. browser token/);
 });
 
 test("search sends market signals as Atlas date filters in one request", async () => {
