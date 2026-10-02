@@ -177,6 +177,10 @@ test("the generated dependency-free widget script is valid JavaScript", () => {
   assert.match(script, /risk\('Flood',p\.flood/);
   assert.match(script, /b\.max_speed\|\|b\.max_download_speed/);
   assert.match(script, /risk\('Crime',p\.crime/);
+  assert.match(script, /setWidgetState/);
+  assert.match(script, /callTool\('compare_homes'/);
+  assert.match(script, /sendFollowUpMessage/);
+  assert.match(script, /method:'ui\/message'/);
 });
 
 test("the widget uses home.co.uk's colours: no pastel pink tints, pink outlines or grey Mapbox styles", () => {
@@ -320,6 +324,21 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   assert.match(statuses.root.innerHTML, /<span class="card-tag"><i class="card-tag-dot"><\/i>New<\/span>/);
   assert.match(statuses.root.innerHTML, /<span class="card-tag card-tag-dark">Under offer<\/span>/);
   assert.match(statuses.root.innerHTML, /<span class="glass">New build<\/span>/);
+
+  const creative = harness(false, { widgetState: { shortlist: ["home-a", "home-b"] } });
+  creative.dispatch("message", { source: creative.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", title: "Bath homes", homes: [
+    { id: "home-a", price: 300000, added_date: "2026-08-12", reduced_date: new Date().toISOString(), under_offer_date: "2026-10-01", wishes_matched: [{ wish: "garden", evidence: "A private walled garden opens from the kitchen" }] },
+    { id: "home-b", price: 500000 },
+  ] } } } });
+  assert.match(creative.root.innerHTML, /Shortlist · 2/);
+  assert.match(creative.root.innerHTML, /aria-label="Remove from shortlist" aria-pressed="true"/);
+  assert.match(creative.root.innerHTML, /<b>Added<\/b>12 Aug/);
+  assert.match(creative.root.innerHTML, /<b>Reduced<\/b>/);
+  assert.match(creative.root.innerHTML, /<b>Under offer<\/b>1 Oct/);
+  assert.match(creative.root.innerHTML, /✓ Garden<\/b> · <q>A private walled garden opens from the kitchen<\/q>/);
+  assert.match(creative.root.innerHTML, />Under £300k<\/button>/);
+  assert.match(creative.root.innerHTML, />Reduced recently<\/button>/);
+  assert.match(creative.root.innerHTML, />With a garden<\/button>/);
 
   const mcp = harness();
   mcp.dispatch("message", { source: mcp.parent, data: { jsonrpc: "2.0", id: "home-ui-init", result: { hostContext: { theme: "dark" } } } });
