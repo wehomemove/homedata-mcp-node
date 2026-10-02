@@ -36,6 +36,7 @@ export interface AccountSettings {
   logger?: (message: string, detail: unknown) => void;
 }
 
+
 type Schema = Record<string, unknown>;
 type Annotations = { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint?: boolean; openWorldHint: boolean };
 export type AccountTool = { name: string; title: string; description: string; inputSchema: Schema; scope: Scope; annotations: Annotations };
@@ -111,7 +112,7 @@ export const ACCOUNT_TOOLS: readonly AccountTool[] = [
     description: "Watch one home so home.co.uk emails the user when its asking price or listing status changes. Use this when someone asks to be told if a home from search_homes or get_home is reduced, goes under offer or comes back on the market. Only one alert per home.",
     inputSchema: obj({
       property_id: { type: "string", description: "The listing id from search_homes or get_home." },
-      uprn: { type: "string", description: "The home's UPRN when get_home returned one." },
+      uprn: { type: "string", description: "The home's UPRN, only when the user supplied it from their own records." },
       address: { type: "string", maxLength: 500, description: "The home's address as search_homes or get_home gave it." },
       current_price_pounds: { type: "integer", minimum: 0, description: "The current asking price in whole pounds, as search_homes or get_home gave it, for example 350000 for £350,000." },
       alert_type: { type: "string", enum: ["price_drop", "price_increase", "any_change", "back_on_market", "sold_stc", "reduced"], description: "What to be told about. Defaults to any_change." },
@@ -278,4 +279,3 @@ export class AccountTools {
     return { forwarded: { ...args, search_criteria: { ...kept, ...where } }, area };
   }
 }
-
