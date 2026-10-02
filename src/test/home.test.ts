@@ -26,7 +26,7 @@ import { BATH_HOMES, BATH_ROUTE_SCENARIOS, routeFixtureKey } from "./home-routes
 import { buildManifest, readSkills, secretsIn, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
 import { matchWishes, WISHES, type Wish } from "../home/wishes.js";
 import { HOME_ICONS } from "../home/icons.js";
-import { HOME_WIDGET_HTML, HOME_WIDGET_URI, homeMapLayout, homeMapProject, homePinCollisions, homePinLabel, humaniseDaysListed } from "../home/widget.js";
+import { HOME_WIDGET_HTML, HOME_WIDGET_URI, HOME_WIDGET_VERSION, homeMapLayout, homeMapProject, homePinCollisions, homePinLabel, humaniseDaysListed } from "../home/widget.js";
 
 const ID = "b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
 const ID2 = "c9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
@@ -575,6 +575,24 @@ test("Home publishes a v12 MCP Apps resource without a map surface when the brow
     assert.doesNotMatch(content.text ?? "", /openstreetmap|tile\.openstreetmap/i);
     assert.doesNotMatch(content.text ?? "", /mapbox-gl-js/);
     assert.match(content.text ?? "", /mapboxToken=""/);
+  } finally { await stop(); }
+});
+
+test("Home keeps every earlier listings-and-detail template address serving the current widget", async () => {
+  const { mcp, stop } = await start();
+  try {
+    const current = await mcp.readResource({ uri: HOME_WIDGET_URI });
+    const expected = current.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
+
+    for (let version = 1; version <= HOME_WIDGET_VERSION; version += 1) {
+      const uri = `ui://home/listings-and-detail-v${version}.html`;
+      const resource = await mcp.readResource({ uri });
+      const content = resource.contents[0] as { uri?: string; mimeType?: string; text?: string; _meta?: Record<string, unknown> };
+      assert.equal(content.uri, uri);
+      assert.equal(content.mimeType, expected.mimeType);
+      assert.equal(content.text, expected.text);
+      assert.deepEqual(content._meta, expected._meta);
+    }
   } finally { await stop(); }
 });
 
