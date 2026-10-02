@@ -263,6 +263,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     const listeners = new Map<string, Array<(event: any) => void>>();
     const timers = new Map<number, () => void>();
     let nextTimer = 0;
+    let contentHeight = 480;
     const classes = new Set<string>();
     const styles: string[] = [];
     let mapRemoved = false;
@@ -296,7 +297,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     }; pins.push(pin); return pin; };
     const mapboxListeners = new Map<string, () => void>();
     const mapboxScript = { addEventListener: (type: string, listener: () => void) => mapboxListeners.set(type, listener) };
-    const document = { getElementById: (id: string) => id === "root" ? root : id === "home-mapbox" ? mapboxScript : null, documentElement: { classList, scrollHeight: 470 }, body: { scrollHeight: 460 }, createElement: button };
+    const document = { getElementById: (id: string) => id === "root" ? root : id === "home-mapbox" ? mapboxScript : null, documentElement: { classList, scrollHeight: 900 }, body: { getBoundingClientRect: () => ({ height: contentHeight }) }, createElement: button };
     const pins: Array<{ className: string; innerHTML: string }> = [];
     const layers: Array<{ id: string; type: string; paint: Record<string, unknown> }> = [];
     const mapEvents = new Map<string, () => void>();
@@ -323,7 +324,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
       assert.ok(control?.onclick, `${selector} is clickable`);
       control.onclick({ stopPropagation() {} });
     };
-    return { pins, layers, mapEvents, mapClasses, classes, styles, messages, parent, dispatch, render, root, window, mapboxgl, mapboxListeners, mapRemoved: () => mapRemoved, runTimers: () => { for (const fn of [...timers.values()]) fn(); timers.clear(); }, click };
+    return { pins, layers, mapEvents, mapClasses, classes, styles, messages, parent, dispatch, render, root, window, mapboxgl, mapboxListeners, mapRemoved: () => mapRemoved, setContentHeight: (height: number) => { contentHeight = height; }, runTimers: () => { for (const fn of [...timers.values()]) fn(); timers.clear(); }, click };
   }
 
   const home = { id: "strict-home", price: 410000 };
@@ -342,8 +343,12 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   directResult.dispatch("message", { source: directResult.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { view: "listings", title: "From direct result", homes: [home] } } });
   assert.match(directResult.root.innerHTML, /From direct result/);
 
-  const initialGlobal = harness(false, { toolOutput: { view: "listings", title: "Initial global", homes: [home] } });
+  const originalToolOutput = { view: "listings", title: "Initial global", homes: [home] };
+  const initialGlobal = harness(false, { toolOutput: originalToolOutput });
   assert.match(initialGlobal.root.innerHTML, /Initial global/);
+  initialGlobal.root.innerHTML = "User's interactive view";
+  initialGlobal.dispatch("openai:set_globals", { detail: { globals: { theme: "dark", toolOutput: structuredClone(originalToolOutput) } } });
+  assert.equal(initialGlobal.root.innerHTML, "User's interactive view");
   const laterGlobal = harness();
   laterGlobal.dispatch("openai:set_globals", { detail: { globals: { toolOutput: { view: "detail", home } } } });
   assert.match(laterGlobal.root.innerHTML, /£410,000/);
@@ -355,6 +360,9 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     { jsonrpc: "2.0", method: "ui/notifications/size-changed", params: { height: 480 } },
     { jsonrpc: "2.0", method: "ui/notifications/size-changed", params: { height: 480 } },
   ]);
+  sizing.setContentHeight(300);
+  sizing.dispatch("message", { source: sizing.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { view: "listings", homes: [home] } } });
+  assert.deepEqual(sizing.messages.at(-1), { jsonrpc: "2.0", method: "ui/notifications/size-changed", params: { height: 300 } });
   const timedOut = harness();
   assert.match(timedOut.root.innerHTML, /Finding beautiful homes/);
   timedOut.runTimers();
