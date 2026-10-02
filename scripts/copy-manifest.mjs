@@ -6,4 +6,4 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 cpSync(join(ROOT, 'src/manifest'), join(ROOT, 'dist/manifest'), { recursive: true });
-console.log('copied src/manifest → dist/manifest');
+console.error('copied src/manifest → dist/manifest');
