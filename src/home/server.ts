@@ -35,7 +35,7 @@ export const HOME_TOOLS: readonly Tool[] = [
       on_market_at_least_days: { type: "integer", minimum: 1, description: "Only return homes that have been listed for at least N days." },
       new_within_days: { type: "integer", minimum: 1, description: "Only return homes first added in the last N days." },
       sort: string("Result order.", ["newest", "oldest", "price_asc", "price_desc"]),
-      page: { type: "integer", minimum: 1, maximum: 100, description: "Results page, starting at 1." },
+      page: { type: "integer", minimum: 1, maximum: 100, description: "Source results page, starting at 1. For a market-signal search with results_limited true, repeat the same search using its next_page value to continue without gaps or duplicates." },
     }, ["location", "listing_type"]),
   },
   {

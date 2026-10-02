@@ -124,6 +124,7 @@ export class HomeClient {
     let lastPage: number | null = null;
     let pagesScanned = 0;
     let lastSourcePageHadResults = false;
+    let nextPage: number | null = null;
     for (let offset = 0; offset < maxPages && cards.length < 20; offset += 1) {
       const currentPage = firstPage + offset;
       query["page"] = String(currentPage);
@@ -135,25 +136,40 @@ export class HomeClient {
       pagesScanned += 1;
       const properties = Array.isArray(raw["properties"]) ? raw["properties"] : [];
       lastSourcePageHadResults = properties.length > 0;
-      cards.push(...properties.filter((property) => this.matchesMarketSignals(object(property), args)).map(trimCard));
+      const matches = properties.filter((property) => this.matchesMarketSignals(object(property), args)).map(trimCard);
+      // A source page is the smallest safe continuation unit. If adding it
+      // would cross the response cap, leave the entire page for the next call
+      // so no matching home is duplicated or skipped.
+      if (cards.length > 0 && cards.length + matches.length > 20) {
+        nextPage = currentPage;
+        break;
+      }
+      cards.push(...matches);
       if (!signalFilters || properties.length === 0 || (lastPage !== null && currentPage >= lastPage)) break;
     }
-    const morePages = signalFilters && (lastPage !== null
-      ? firstPage + pagesScanned - 1 < lastPage
-      : pagesScanned === maxPages && lastSourcePageHadResults);
-    const homes = cards.slice(0, 20);
+    const lastScannedPage = firstPage + pagesScanned - 1;
+    if (signalFilters && nextPage === null && lastSourcePageHadResults) {
+      const sourceHasMore = lastPage !== null ? lastScannedPage < lastPage : true;
+      if (sourceHasMore && (cards.length >= 20 || pagesScanned === maxPages)) nextPage = lastScannedPage + 1;
+    }
+    const morePages = nextPage !== null;
+    const homes = cards;
     const pagination = object(firstRaw["pagination"]);
     return {
       location: firstRaw["displayLocation"] ?? args.location,
       listing_type: args.listing_type,
-      total: firstRaw["total"] ?? pagination["total"] ?? null,
+      total: signalFilters ? null : firstRaw["total"] ?? pagination["total"] ?? null,
       page: pagination["current_page"] ?? firstPage,
       last_page: pagination["last_page"] ?? null,
       ...(signalFilters ? {
+        source_total: firstRaw["total"] ?? pagination["total"] ?? null,
         matching_homes_returned: homes.length,
         pages_scanned: pagesScanned,
-        results_limited: morePages || cards.length > homes.length,
-        ...((morePages || cards.length > homes.length) ? { note: `Market-signal filters checked ${pagesScanned} source page${pagesScanned === 1 ? "" : "s"} from page ${firstPage}; more source results were not checked or returned.` } : {}),
+        results_limited: morePages,
+        ...(nextPage !== null ? {
+          next_page: nextPage,
+          note: `Market-signal filters checked ${pagesScanned} source page${pagesScanned === 1 ? "" : "s"} from page ${firstPage}. More source results remain; call search_homes again with page ${nextPage} and the same filters to continue.`,
+        } : {}),
       } : {}),
       homes,
     };
@@ -168,10 +184,24 @@ export class HomeClient {
       if (maximumDays === undefined) return true;
       const date = text(value);
       if (!date) return false;
-      const timestamp = Date.parse(date);
-      if (!Number.isFinite(timestamp)) return false;
-      const age = this.now().getTime() - timestamp;
-      return age >= 0 && age <= maximumDays * 86_400_000;
+      const calendarParts = (input: Date): [number, number, number] | null => {
+        if (!Number.isFinite(input.getTime())) return null;
+        const parts = new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
+        }).formatToParts(input);
+        const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((item) => item.type === type)?.value);
+        const values: [number, number, number] = [part("year"), part("month"), part("day")];
+        return values.every(Number.isInteger) ? values : null;
+      };
+      const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+      const listed = dateOnly
+        ? [Number(dateOnly[1]), Number(dateOnly[2]), Number(dateOnly[3])] as [number, number, number]
+        : calendarParts(new Date(date));
+      const today = calendarParts(this.now());
+      if (!listed || !today) return false;
+      const ordinal = ([year, month, day]: [number, number, number]) => Date.UTC(year, month - 1, day) / 86_400_000;
+      const ageInCalendarDays = ordinal(today) - ordinal(listed);
+      return ageInCalendarDays >= 0 && ageInCalendarDays <= maximumDays;
     };
     return withinDays(property["reduced_date"], args.reduced_within_days)
       && withinDays(property["added_date"], args.new_within_days);

@@ -104,13 +104,47 @@ test("search applies market signals across at most three pages and reports incom
   const client = new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, now: () => new Date("2026-10-02T00:00:00Z") });
   const body = await client.search({ location: "Bath", listing_type: "sale", reduced_within_days: 14, on_market_at_least_days: 90 });
   assert.equal((body["homes"] as unknown[]).length, 3);
-  assert.equal(body["total"], 10);
+  assert.equal(body["total"], null);
+  assert.equal(body["source_total"], 10);
   assert.equal(body["matching_homes_returned"], 3);
   assert.equal(body["pages_scanned"], 3);
   assert.equal(body["results_limited"], true);
-  assert.match(String(body["note"]), /more source results were not checked/i);
+  assert.equal(body["next_page"], 4);
+  assert.match(String(body["note"]), /page 4.*continue/i);
   assert.deepEqual(requests.map((url) => url.searchParams.get("page")), ["1", "2", "3"]);
   assert.ok(requests.every((url) => !url.searchParams.has("reduced_within_days") && !url.searchParams.has("on_market_at_least_days")));
+});
+
+test("market-signal continuation returns no duplicates or gaps when a source page would cross the cap", async () => {
+  const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
+    const url = new URL(String(input));
+    const page = Number(url.searchParams.get("page"));
+    const properties = Array.from({ length: 15 }, (_, index) => ({
+      listing_id: `00000000-0000-4000-8000-${String(page * 100 + index).padStart(12, "0")}`,
+      days_listed: 100,
+    }));
+    return new Response(JSON.stringify({ total: 60, pagination: { current_page: page, last_page: 4 }, properties }), { headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  const homedata = new HomedataClient({ apiKey: "test", baseUrl: "https://data.test", fetchImpl });
+  const client = new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl });
+  const first = await client.search({ location: "Bath", listing_type: "sale", on_market_at_least_days: 90 });
+  assert.equal(first["next_page"], 2);
+  const second = await client.search({ location: "Bath", listing_type: "sale", on_market_at_least_days: 90, page: Number(first["next_page"]) });
+  assert.equal(second["next_page"], 3);
+  const ids = [...first["homes"] as Array<Record<string, unknown>>, ...second["homes"] as Array<Record<string, unknown>>].map((home) => home["id"]);
+  assert.equal(new Set(ids).size, 30);
+  assert.deepEqual(ids, [1, 2].flatMap((page) => Array.from({ length: 15 }, (_, index) => `00000000-0000-4000-8000-${String(page * 100 + index).padStart(12, "0")}`)));
+});
+
+test("day windows include today and the exact London calendar-day boundary", async () => {
+  const fetchImpl = (async () => new Response(JSON.stringify({ total: 2, pagination: { current_page: 1, last_page: 1 }, properties: [
+    { listing_id: ID, reduced_date: "2026-07-15" },
+    { listing_id: ID2, reduced_date: "2026-07-01" },
+  ] }), { headers: { "Content-Type": "application/json" } })) as typeof fetch;
+  const homedata = new HomedataClient({ apiKey: "test", baseUrl: "https://data.test", fetchImpl });
+  const client = new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, now: () => new Date("2026-07-14T23:30:00Z") });
+  const body = await client.search({ location: "Bath", listing_type: "sale", reduced_within_days: 14 });
+  assert.deepEqual((body["homes"] as Array<Record<string, unknown>>).map((home) => home["id"]), [ID, ID2]);
 });
 
 test("new-listing market signal stops at the last source page and validates day counts", async () => {
