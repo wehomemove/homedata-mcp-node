@@ -12,6 +12,7 @@ export interface HomeClientOptions {
   homedata: HomedataClient;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  now?: () => Date;
 }
 
 export type SearchArgs = {
@@ -25,6 +26,9 @@ export type SearchArgs = {
   new_build?: boolean;
   sort?: "newest" | "oldest" | "price_asc" | "price_desc";
   page?: number;
+  reduced_within_days?: number;
+  on_market_at_least_days?: number;
+  new_within_days?: number;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -80,19 +84,22 @@ export class HomeClient {
   private readonly homeBaseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
+  private readonly now: () => Date;
 
   constructor(private readonly options: HomeClientOptions) {
     this.homeBaseUrl = (options.homeBaseUrl ?? DEFAULT_HOME_URL).replace(/\/+$/, "");
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 30_000;
+    this.now = options.now ?? (() => new Date());
   }
 
   async search(args: SearchArgs): Promise<JsonObject> {
     if (!text(args.location)) throw new HomeError("location is required");
     if (!(["sale", "rent"] as unknown[]).includes(args.listing_type)) throw new HomeError("listing_type must be sale or rent");
-    for (const name of ["min_price", "max_price", "min_beds", "max_beds", "page"] as const) {
+    for (const name of ["min_price", "max_price", "min_beds", "max_beds", "page", "reduced_within_days", "on_market_at_least_days", "new_within_days"] as const) {
       const value = args[name];
-      if (value !== undefined && (!Number.isInteger(value) || value < (name === "page" ? 1 : 0))) throw new HomeError(`${name} must be a non-negative whole number${name === "page" ? " starting at 1" : ""}`);
+      const positive = name === "page" || name.endsWith("_days");
+      if (value !== undefined && (!Number.isInteger(value) || value < (positive ? 1 : 0))) throw new HomeError(`${name} must be a whole number${positive ? " starting at 1" : " of zero or greater"}`);
     }
     if ((args.page ?? 1) > 100) throw new HomeError("page must be no more than 100");
     if (args.min_price !== undefined && args.max_price !== undefined && args.min_price > args.max_price) throw new HomeError("min_price cannot exceed max_price");
@@ -109,16 +116,95 @@ export class HomeClient {
     if (args.property_type) query[args.property_type === "semi_detached" ? "semi" : args.property_type] = "1";
     if (args.new_build) query["is_new_build"] = "1";
     if (args.sort) query["sort"] = args.sort === "newest" ? "date_desc" : args.sort === "oldest" ? "date_asc" : args.sort;
-    const raw = object(await this.homeGet(`/api/${route}/${location}/`, query));
-    const pagination = object(raw["pagination"]);
+    const signalFilters = args.reduced_within_days !== undefined || args.on_market_at_least_days !== undefined || args.new_within_days !== undefined;
+    const firstPage = args.page ?? 1;
+    const maxPages = signalFilters ? 3 : 1;
+    const cards: JsonObject[] = [];
+    let firstRaw: JsonObject = {};
+    let lastPage: number | null = null;
+    let pagesScanned = 0;
+    let lastSourcePageHadResults = false;
+    let nextPage: number | null = null;
+    for (let offset = 0; offset < maxPages && cards.length < 20; offset += 1) {
+      const currentPage = firstPage + offset;
+      query["page"] = String(currentPage);
+      const raw = object(await this.homeGet(`/api/${route}/${location}/`, query));
+      if (offset === 0) firstRaw = raw;
+      const pagination = object(raw["pagination"]);
+      const parsedLastPage = Number(pagination["last_page"]);
+      if (Number.isInteger(parsedLastPage) && parsedLastPage >= 1) lastPage = parsedLastPage;
+      pagesScanned += 1;
+      const properties = Array.isArray(raw["properties"]) ? raw["properties"] : [];
+      lastSourcePageHadResults = properties.length > 0;
+      const matches = properties.filter((property) => this.matchesMarketSignals(object(property), args)).map(trimCard);
+      // A source page is the smallest safe continuation unit. If adding it
+      // would cross the response cap, leave the entire page for the next call
+      // so no matching home is duplicated or skipped.
+      if (cards.length > 0 && cards.length + matches.length > 20) {
+        nextPage = currentPage;
+        break;
+      }
+      cards.push(...matches);
+      if (!signalFilters || properties.length === 0 || (lastPage !== null && currentPage >= lastPage)) break;
+    }
+    const lastScannedPage = firstPage + pagesScanned - 1;
+    if (signalFilters && nextPage === null && lastSourcePageHadResults) {
+      const sourceHasMore = lastPage !== null ? lastScannedPage < lastPage : true;
+      if (sourceHasMore && (cards.length >= 20 || pagesScanned === maxPages)) nextPage = lastScannedPage + 1;
+    }
+    const morePages = nextPage !== null;
+    const homes = cards;
+    const pagination = object(firstRaw["pagination"]);
     return {
-      location: raw["displayLocation"] ?? args.location,
+      location: firstRaw["displayLocation"] ?? args.location,
       listing_type: args.listing_type,
-      total: raw["total"] ?? pagination["total"] ?? null,
-      page: pagination["current_page"] ?? args.page ?? 1,
+      total: signalFilters ? null : firstRaw["total"] ?? pagination["total"] ?? null,
+      page: pagination["current_page"] ?? firstPage,
       last_page: pagination["last_page"] ?? null,
-      homes: (Array.isArray(raw["properties"]) ? raw["properties"] : []).map(trimCard),
+      ...(signalFilters ? {
+        source_total: firstRaw["total"] ?? pagination["total"] ?? null,
+        matching_homes_returned: homes.length,
+        pages_scanned: pagesScanned,
+        results_limited: morePages,
+        ...(nextPage !== null ? {
+          next_page: nextPage,
+          note: `Market-signal filters checked ${pagesScanned} source page${pagesScanned === 1 ? "" : "s"} from page ${firstPage}. More source results remain; call search_homes again with page ${nextPage} and the same filters to continue.`,
+        } : {}),
+      } : {}),
+      homes,
     };
+  }
+
+  private matchesMarketSignals(property: JsonObject, args: SearchArgs): boolean {
+    if (args.on_market_at_least_days !== undefined) {
+      const days = Number(property["days_listed"]);
+      if (!Number.isFinite(days) || days < args.on_market_at_least_days) return false;
+    }
+    const withinDays = (value: unknown, maximumDays: number | undefined): boolean => {
+      if (maximumDays === undefined) return true;
+      const date = text(value);
+      if (!date) return false;
+      const calendarParts = (input: Date): [number, number, number] | null => {
+        if (!Number.isFinite(input.getTime())) return null;
+        const parts = new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
+        }).formatToParts(input);
+        const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((item) => item.type === type)?.value);
+        const values: [number, number, number] = [part("year"), part("month"), part("day")];
+        return values.every(Number.isInteger) ? values : null;
+      };
+      const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+      const listed = dateOnly
+        ? [Number(dateOnly[1]), Number(dateOnly[2]), Number(dateOnly[3])] as [number, number, number]
+        : calendarParts(new Date(date));
+      const today = calendarParts(this.now());
+      if (!listed || !today) return false;
+      const ordinal = ([year, month, day]: [number, number, number]) => Date.UTC(year, month - 1, day) / 86_400_000;
+      const ageInCalendarDays = ordinal(today) - ordinal(listed);
+      return ageInCalendarDays >= 0 && ageInCalendarDays <= maximumDays;
+    };
+    return withinDays(property["reduced_date"], args.reduced_within_days)
+      && withinDays(property["added_date"], args.new_within_days);
   }
 
   async home(listingId: string): Promise<JsonObject> {
