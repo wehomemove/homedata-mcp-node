@@ -1,6 +1,6 @@
 {
   "about": "Golden prompts for the separate home.co.uk Home ChatGPT app. Run these after changing tool names, descriptions, schemas, instructions or skills. The review packet (review: true) is five positive and three negative cases, each run live against https://mcp.home.co.uk/mcp before its outcome was written; the positive outcomes name figures and filters a reviewer can check.",
-  "version": "2026-10-02-review-packet",
+  "version": "2026-10-02-wishes",
   "cases": [
     {
       "id": "search-family-home", "kind": "indirect", "review": true,
@@ -41,6 +41,21 @@
       "id": "search-new-rentals", "kind": "indirect", "review": false,
       "prompt": "What rentals were newly listed in Manchester in the last 3 days?",
       "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Manchester", "listing_type": "rent", "new_within_days": 3}}], "outcome": "Returns rentals whose recorded added date is within the requested period."}
+    },
+    {
+      "id": "wish-garden-parking-quiet", "kind": "indirect", "review": false,
+      "prompt": "Find three-bedroom homes for sale in Bath up to £600,000 with a garden and off-road parking, ideally on a quiet street.",
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "sale", "min_beds": 3, "max_price": 600000, "wishes": ["garden", "off_road_parking", "quiet_street"]}}], "allowed": [{"tool": "render_home_listings", "args": {}}], "outcome": "Calls search_homes once with the three wishes. Homes whose listings state all three come first (eight on the first page when run live on 2 October 2026), and each wish is shown with the listing's own phrase, such as \"Heritage Close is a quiet cul-de-sac within the village of Peasedown St John\". A wish under wishes_not_stated is reported as not mentioned in the listing, never as missing from the home, and the answer offers to check the next page."}
+    },
+    {
+      "id": "wish-period-no-chain", "kind": "indirect", "review": false,
+      "prompt": "I'd love a period house in Bristol with original features, ideally with no onward chain.",
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bristol", "listing_type": "sale", "wishes": ["period_features", "no_chain"]}}], "outcome": "Calls search_homes with period_features and no_chain. Homes stating both come first (three on the first page live on 2 October 2026), each quoted from its own listing, such as \"retaining picture rails, coving\" and \"Offered to the market with no onward chain\". It never says a home has period features or no chain unless that home's wishes_matched says so."}
+    },
+    {
+      "id": "wish-rental-open-plan-parking", "kind": "indirect", "review": false,
+      "prompt": "I'm looking for somewhere to rent in Manchester with open-plan living and somewhere to park off the road.",
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Manchester", "listing_type": "rent", "wishes": ["open_plan", "off_road_parking"]}}], "outcome": "Calls search_homes for rentals with open_plan and off_road_parking. Rentals stating both come first (six on the first page live on 2 October 2026) with phrases such as \"open plan lounge with modern integrated kitchen\" and \"SECURE ALLOCATED PARKING\", and rentals that state only one are described as such."}
     },
     {
       "id": "open-result", "kind": "followup", "review": false,

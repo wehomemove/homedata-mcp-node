@@ -12,6 +12,7 @@ import { ACCOUNT_TOOLS, isAccountTool, type AccountTools } from "./account.js";
 import { HomeClient, HomeError, HomeUpstreamError, type SearchArgs, type SoldArgs } from "./client.js";
 import { HOME_WIDGET_HTML, HOME_WIDGET_URI } from "./widget.js";
 import { mapboxAssetTags } from "./mapbox-assets.js";
+import { WISHES } from "./wishes.js";
 
 type Schema = Record<string, unknown>;
 type Tool = { name: string; title: string; description: string; inputSchema: Schema; outputSchema?: Schema; _meta?: Record<string, unknown> };
@@ -25,6 +26,7 @@ export const HOME_INSTRUCTIONS = [
   "Home helps people buying, renting, selling or letting homes across the United Kingdom using home.co.uk.",
   "Start with search_homes. Keep the listing IDs it returns: get_home gives every photo, the full description, agent and Homedata checks; compare_homes gives the same depth side by side.",
   "After choosing search results, call render_home_listings with those home objects to show cards and a map. Call render_home_detail with the get_home result to show its gallery and key facts. A refinement can pass a subset of the homes already returned to render_home_listings without searching again.",
+  "When someone says what they want in a home beyond price and size (a garden, off-road parking, a quiet street, period features, open-plan living, a home office, no chain), pass those as wishes to search_homes. Describe a home as having a wish only when it is in that home's wishes_matched, and quote its evidence; a wish under wishes_not_stated is not mentioned in the listing, so say the listing does not say rather than that the home lacks it.",
   "Use area_insights for schools, broadband, recorded crime, deprivation and local price growth. Use the two calculators only when the user supplies their assumptions.",
   "Property enrichment is labelled with scope home. When no UPRN can be found, enrichment labelled with scope area contains postcode-level facts only: never present those as facts about the home.",
   "For sellers and landlords: sold_prices shows what nearby homes actually sold for and when, find_agents ranks local agents by the homes they are selling or letting in the area, and typical_rents gives current asking rents. Sold prices are evidence about other homes, never a valuation of the user's home.",
@@ -37,7 +39,7 @@ export const HOME_ACCOUNT_INSTRUCTIONS = "Signed-in users can keep saved searche
 export const HOME_TOOLS: readonly Tool[] = [
   {
     name: "search_homes", title: "Search homes",
-    description: "Search current UK homes for sale or to rent by location, price, bedrooms, property type, new-build status and market signals. Can find homes reduced within the last N days, on the market for at least N days, or newly added within the last N days. Market-signal dates are sent to the source and verified on the returned page; the answer clearly says when more source pages remain. Returns compact cards with time on market, reduction and under-offer dates. Use this when someone wants to find homes or refine a previous property search.",
+    description: "Search current UK homes for sale or to rent by location, price, bedrooms, property type, new-build status and market signals. Can find homes reduced within the last N days, on the market for at least N days, or newly added within the last N days. Market-signal dates are sent to the source and verified on the returned page; the answer clearly says when more source pages remain. Returns compact cards with time on market, reduction and under-offer dates. With wishes, such as a garden, off-road parking or no chain, it reads each home's full listing, puts the homes that state the most wishes first, and gives each home the wishes its listing states with the listing's own phrase as evidence. Use this when someone wants to find homes or refine a previous property search.",
     inputSchema: obj({
       location: string("Town, city, county or UK postcode."),
       listing_type: string("Whether the user wants to buy or rent.", ["sale", "rent"]),
@@ -48,8 +50,9 @@ export const HOME_TOOLS: readonly Tool[] = [
       reduced_within_days: { type: "integer", minimum: 1, description: "Only return homes with a recorded price reduction in the last N days." },
       on_market_at_least_days: { type: "integer", minimum: 1, description: "Only return homes that have been listed for at least N days." },
       new_within_days: { type: "integer", minimum: 1, description: "Only return homes first added in the last N days." },
+      wishes: { type: "array", minItems: 1, maxItems: WISHES.length, uniqueItems: true, items: { type: "string", enum: [...WISHES] }, description: "What the user wants in the home itself. Each home's listing is checked for each wish, and homes stating more of them come first. A wish matches only when the listing says so in its own words." },
       sort: string("Result order.", ["newest", "oldest", "price_asc", "price_desc"]),
-      page: { type: "integer", minimum: 1, maximum: 100, description: "Source results page, starting at 1. For a market-signal search with results_limited true, repeat the same search using its next_page value to check the next source page." },
+      page: { type: "integer", minimum: 1, maximum: 100, description: "Source results page, starting at 1. For a wish search with wishes_next_page, repeat the same search with that page to check more homes. For a market-signal search with results_limited true, repeat the same search using its next_page value to check the next source page." },
     }, ["location", "listing_type"]),
   },
   {
