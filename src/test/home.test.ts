@@ -366,7 +366,8 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     { id: "wish-a", price: 1, wishes_matched: [{ wish: "off_road_parking", evidence: "A private driveway provides off road parking for several vehicles beside the house" }] },
   ] } } } });
   assert.match(wishes.root.innerHTML, /✓ Off-road parking<\/b>/);
-  assert.match(wishes.root.innerHTML, /<q[^>]*>A private driveway provides off road parking for several…<\/q>/);
+  assert.match(wishes.root.innerHTML, /<q aria-hidden="true"[^>]*>A private driveway provides off road parking for several…<\/q>/);
+  assert.match(wishes.root.innerHTML, /class="sr-only">“A private driveway provides off road parking for several vehicles beside the house”<\/span>/);
   assert.doesNotMatch(wishes.root.innerHTML, /class="refine"/, "a refinement that keeps every result is not offered");
 
   const detailFacts = harness();
@@ -374,7 +375,9 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     bedrooms: 4, bathrooms: 2, reception_rooms: 3, property_type: "detached", floor_area_sqm: 180, tenure: "freehold",
   } } } } });
   assert.equal((detailFacts.root.innerHTML.match(/class="fact"/g) ?? []).length, 4);
-  assert.doesNotMatch(detailFacts.root.innerHTML, /Floor area/);
+  assert.match(detailFacts.root.innerHTML, /Floor area/);
+  assert.match(detailFacts.root.innerHTML, /Tenure/);
+  assert.doesNotMatch(detailFacts.root.innerHTML, /Receptions/);
 
   const calls: Array<[string, Record<string, unknown>]> = [];
   const compare = harness(false, {
@@ -456,11 +459,11 @@ test("render tools reuse supplied homes without another search and keep text fal
   } finally { await stop(); }
 });
 
-test("Home publishes a v8 MCP Apps resource without a map surface when the browser token is absent", async () => {
+test("Home publishes a v9 MCP Apps resource without a map surface when the browser token is absent", async () => {
   const { mcp, stop } = await start();
   try {
     const resources = await mcp.listResources();
-    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v8.html"]);
+    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v9.html"]);
     const resource = await mcp.readResource({ uri: resources.resources[0]!.uri });
     const content = resource.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
     assert.equal(content.mimeType, "text/html;profile=mcp-app");
