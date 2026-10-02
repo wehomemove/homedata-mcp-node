@@ -2,8 +2,12 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "home",
   "version": "1.0.0",
-  "description": "Find homes for sale and to rent across the UK in ChatGPT with home.co.uk: full property details, every photo, time on market and price reductions, side-by-side comparisons, area checks, stamp duty and mortgage estimates, and workflows for viewings, shortlists and buying costs.",
-  "author": { "name": "Home", "email": "property@home.co.uk", "url": "https://home.co.uk" },
+  "description": "Find homes for sale and to rent across the UK in ChatGPT with home.co.uk: search by what you want in a home, see every photo and the full details, check commute times, plan a viewing day, compare a shortlist, check the area, and estimate stamp duty, mortgage repayments and what you can afford.",
+  "author": {
+    "name": "Home",
+    "email": "property@home.co.uk",
+    "url": "https://home.co.uk"
+  },
   "homepage": "https://home.co.uk/chatgpt/",
   "license": "MIT",
   "keywords": [
@@ -46,7 +50,28 @@
     "Ofsted",
     "crime",
     "area guide",
-    "neighbourhood"
+    "neighbourhood",
+    "garden",
+    "off-road parking",
+    "quiet street",
+    "period features",
+    "open plan",
+    "home office",
+    "no onward chain",
+    "commute",
+    "commute time",
+    "walk to the station",
+    "school run",
+    "viewing day",
+    "plan viewings",
+    "what can I afford",
+    "affordability",
+    "budget",
+    "sold prices",
+    "local agents",
+    "typical rents",
+    "saved searches",
+    "property alerts"
   ],
   "skills": "./skills/",
   "extensions": {
@@ -54,16 +79,19 @@
       "interface": {
         "displayName": "Home",
         "shortDescription": "UK homes for sale and to rent",
-        "longDescription": "Home finds homes for sale and to rent across the United Kingdom from home.co.uk, right in the conversation. Describe what you want in your own words: a town, city or postcode, buying or renting, your budget, how many bedrooms, a house or a flat, new build or not, newest or lowest price first. Home shows the matching houses and flats with asking price or rent, photos, bedrooms, tenure, the date each one was added, how long it has been on the market, and whether it has been reduced or gone under offer.\n\nOpen any result for the full picture in chat: every photo, the complete description, the agent, key facts and, where the published address can be matched to a property, checks from Homedata such as the EPC energy rating, council tax band, flood and other environmental risks, broadband, nearby schools and recorded crime. Compare two to four homes side by side, ask what an area is like for schools, broadband, recorded crime, deprivation and local house price growth, and estimate stamp duty or monthly mortgage repayments from your own figures.\n\nHome also brings three workflows: prepare for a viewing, with a checklist and questions for the agent built from the home's own details; shortlist and compare, ranking homes against what matters to you; and buying costs, setting out stamp duty, deposit, loan and monthly repayments together.\n\nSign in with your home.co.uk account to save a search and get emails about new matching homes, or to watch a home and hear when its asking price or status changes; you can list, pause and delete both from the conversation.\n\nIt is for anyone house hunting: first-time buyers, movers, renters and families comparing places to live. Searching needs no account.\n\nLimitations: Home does not value homes or forecast prices, list a home, contact agents for you, or decide mortgage eligibility. Calculator results are estimates, not tax or financial advice, and stamp duty covers England and Northern Ireland. Availability and status are snapshots from the time of the search.",
+        "longDescription": "Home finds homes for sale and to rent across the United Kingdom from home.co.uk, right in the conversation. Describe what you want in your own words: a town, city or postcode, buying or renting, your budget, how many bedrooms, new build or not, newest or lowest price first, and what you want in the home itself, such as a garden, off-road parking, a quiet street, period features, open-plan living, a home office or no onward chain. Home shows the matching houses and flats as photo cards and a map, with asking price or rent, bedrooms, tenure, the date each one was added, how long it has been on the market, whether it has been reduced or gone under offer, and the listing's own words for each feature you asked about.\n\nOpen any result for the full picture in chat: every photo, the complete description, the agent, key facts and, where the published address can be matched to a property, checks from Homedata such as the EPC energy rating, council tax band, flood and other environmental risks, broadband, nearby schools and recorded crime. Keep a shortlist and compare two to four homes side by side. See which homes are within a walk, cycle or drive of a station, office, school or postcode, and put up to six viewings in the quickest driving order for the day. Ask what an area is like for schools, broadband, recorded crime and local house price growth, see recent sold prices and typical rents nearby, find local estate and letting agents, and estimate stamp duty or monthly mortgage repayments from your own figures.\n\nHome also brings five workflows: what can I afford, turning a monthly budget and deposit into a price and the homes at it; prepare for a viewing, with a checklist and questions for the agent built from the home's own details; plan a viewing day, with the order, the driving between stops and what to ask at each; shortlist and compare, ranking homes against what matters to you, commute included; and buying costs, setting out stamp duty, deposit, loan and monthly repayments together.\n\nSign in with your home.co.uk account to save a search and get emails about new matching homes, or to watch a home and hear when its asking price or status changes; you can list, pause and delete both from the conversation.\n\nIt is for anyone house hunting: first-time buyers, movers, renters and families comparing places to live. Searching needs no account.\n\nLimitations: Home does not value homes or forecast prices, list a home, contact agents for you, or decide mortgage eligibility. Calculator results are estimates, not tax or financial advice, and stamp duty covers England and Northern Ireland. Commute and driving times are typical estimates, not timetables or live traffic. Availability and status are snapshots from the time of the search.",
         "developerName": "Home",
         "category": "Lifestyle",
         "capabilities": [
           "Search UK homes for sale and to rent",
+          "Search by garden, parking, quiet street and more",
           "Every photo and the full description of a home",
           "Time on market, price reductions and under-offer dates",
           "Compare two to four homes side by side",
+          "Homes within a walk, cycle or drive of a place",
+          "Plan the quickest order for a day of viewings",
           "Area checks: schools, broadband, crime, price growth",
-          "Stamp duty and mortgage repayment estimates",
+          "Stamp duty, mortgage and affordability estimates",
           "Saved searches and alerts on homes you are watching"
         ],
         "websiteURL": "https://home.co.uk/chatgpt/",
@@ -71,9 +99,9 @@
         "privacyPolicyURL": "https://home.co.uk/privacy/",
         "termsOfServiceURL": "https://home.co.uk/terms/",
         "defaultPrompt": [
-          "Find three-bedroom houses for sale in Bath, newest first",
-          "Show me two-bedroom flats to rent in Manchester",
-          "What should I ask at a viewing for the newest home for sale in York?"
+          "Find three-bedroom houses for sale in Bath with a garden, newest first",
+          "Which two-bedroom homes for sale in Bristol are within a 15-minute cycle of Temple Meads?",
+          "What could I buy in Bristol paying 1,500 a month with a 40,000 deposit?"
         ],
         "brandColor": "#E11D48",
         "brandColorDark": "#FB7185",
@@ -86,7 +114,7 @@
       },
       "publication": {
         "countries": [],
-        "release_notes": "First release: search UK homes for sale and to rent from home.co.uk, full home details, comparisons, area checks, stamp duty and mortgage estimates, and skills for viewings, shortlists and buying costs."
+        "release_notes": "First release: search UK homes for sale and to rent from home.co.uk by place, budget, bedrooms and wishes such as a garden or parking; full home details; comparisons; commute checks and viewing-day routes; area checks; stamp duty and mortgage estimates; and skills for affordability, viewings, viewing days, shortlists and buying costs."
       }
     }
   }

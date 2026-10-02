@@ -23,7 +23,7 @@ import { MAPBOX_GL_ASSET_PREFIX } from "../home/mapbox-assets.js";
 import { buildHomeServer, HOME_ROUTE_TOOLS, HOME_TOOLS } from "../home/server.js";
 import { extraWords, insideArea, MapboxRoutes, metresToEdge, namesPlace } from "../home/routes.js";
 import { BATH_HOMES, BATH_ROUTE_SCENARIOS, routeFixtureKey } from "./home-routes-fixture.js";
-import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
+import { buildManifest, readSkills, secretsIn, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
 import { matchWishes, WISHES, type Wish } from "../home/wishes.js";
 import { HOME_ICONS } from "../home/icons.js";
 import { HOME_WIDGET_HTML, HOME_WIDGET_URI, homeMapLayout, homeMapProject, homePinCollisions, homePinLabel, humaniseDaysListed } from "../home/widget.js";
@@ -1256,7 +1256,7 @@ const PLUGIN = join(ROOT, "home-chatgpt-plugin");
 const MCP_URL = "https://mcp.home.co.uk/mcp";
 const HOME_ICON = { path: "./assets/logo.png", width: 310, height: 310 };
 const buildHome = () => buildManifest(JSON.parse(readFileSync(join(PLUGIN, "listing.json"), "utf8")) as Manifest, golden as GoldenSet);
-const toolNames = HOME_TOOLS.map((t) => t.name);
+const toolNames = [...HOME_TOOLS, ...HOME_ROUTE_TOOLS, ...ACCOUNT_TOOLS].map((t) => t.name);
 
 test("the Home plugin package is ready to submit: named Home, home.co.uk links, worldwide, no paid wording", () => {
   const manifest = buildHome();
@@ -1281,15 +1281,17 @@ test("the Home icon is the site's own heart app icon, byte for byte", () => {
   assert.deepEqual({ width: icon.readUInt32BE(16), height: icon.readUInt32BE(20) }, { width: HOME_ICON.width, height: HOME_ICON.height });
 });
 
-test("Home review cases: five live-checked positives that cover all three skills, three negatives", () => {
+test("Home review cases: five live-checked positives that cover every skill, wishes, commute and a viewing day, three negatives", () => {
   const cases = buildHome().extensions["com.openai"].review!.test_cases!;
   assert.deepEqual(cases.positive.map((c) => c.tools_triggered), [
-    "search_homes, render_home_listings",
-    "search_homes",
+    "calculate_mortgage, calculate_stamp_duty, search_homes, render_home_listings",
     "search_homes, get_home",
-    "search_homes, compare_homes",
+    "search_homes, compare_homes, commute_filter",
+    "search_homes, plan_viewings",
     "calculate_stamp_duty, calculate_mortgage",
   ]);
+  const reviewSearches = (golden as GoldenSet).cases.filter((c) => c.review).flatMap((c) => c.expect.calls).filter((call) => call.tool === "search_homes");
+  assert.ok(reviewSearches.some((call) => Array.isArray(call.args["wishes"]) && (call.args["wishes"] as unknown[]).length > 0), "no review case searches by wishes");
   assert.equal(cases.negative.length, 3);
   for (const c of cases.positive) assert.doesNotMatch(c.prompt, /^\(after /, "a review prompt must stand alone");
   for (const skill of readSkills(PLUGIN)) {
@@ -1299,8 +1301,10 @@ test("Home review cases: five live-checked positives that cover all three skills
 
 test("Home skills are bound to the tools the endpoint lists and held to the listing rules", () => {
   const skills = readSkills(PLUGIN);
-  assert.deepEqual(skills.map((s) => s.dir), ["buying-costs", "prepare-for-a-viewing", "shortlist-and-compare"]);
-  assert.deepEqual(validateSkills(skills, [...HOME_TOOLS], HOME_RULES, MCP_URL), []);
+  assert.deepEqual(skills.map((s) => s.dir), ["buying-costs", "plan-a-viewing-day", "prepare-for-a-viewing", "shortlist-and-compare", "what-can-i-afford"]);
+  assert.deepEqual(validateSkills(skills, [...HOME_TOOLS, ...HOME_ROUTE_TOOLS], HOME_RULES, MCP_URL), []);
+  // The route tools are listed only with a Mapbox token, so without them the skills that call them go red.
+  assert.match(validateSkills(skills, [...HOME_TOOLS], HOME_RULES, MCP_URL).join("\n"), /plan-a-viewing-day: names `plan_viewings`/);
 
   const broken = (change: (skill: Skill) => Skill) => validateSkills([change(skills[0]!)], [...HOME_TOOLS], HOME_RULES, MCP_URL).join("\n");
   assert.match(broken((s) => ({ ...s, text: s.text.replaceAll("calculate_mortgage", "mortgage_calculator") })), /names `mortgage_calculator`, which is not a tool/);
@@ -1311,6 +1315,19 @@ test("Home skills are bound to the tools the endpoint lists and held to the list
   assert.match(broken((s) => ({ ...s, text: `${s.text}\nTell them what the home is worth.\n` })), /names a valuation other than as a limit/);
   assert.match(broken((s) => ({ ...s, text: `${s.text}\nMention our free trial.\n` })), /mentions pricing or an offer/);
   assert.match(broken((s) => ({ ...s, openaiYaml: s.openaiYaml!.replace(MCP_URL, "https://mcp.homedata.co.uk/mcp") })), /agents\/openai\.yaml must depend on/);
+});
+
+test("the committed submission ZIP holds exactly what the packager builds from these sources, and no secret", () => {
+  // docs/home-chatgpt-app/home-chatgpt-plugin.zip is the file uploaded to the portal.
+  // Rebuild it with `node scripts/package-chatgpt-plugin.mjs home` after any listing, skill or review-case change.
+  const zip = join(ROOT, "docs/home-chatgpt-app/home-chatgpt-plugin.zip");
+  const names = execFileSync("unzip", ["-Z1", zip], { encoding: "utf8" }).split("\n").filter((n) => n && !n.endsWith("/")).sort();
+  const skillFiles = readSkills(PLUGIN).flatMap((s) => [`skills/${s.dir}/SKILL.md`, `skills/${s.dir}/agents/openai.yaml`]);
+  assert.deepEqual(names, ["assets/logo.png", "mcp.json", "plugin.json", ...skillFiles].sort());
+  const entry = (name: string) => execFileSync("unzip", ["-p", zip, name], { maxBuffer: 1 << 24 });
+  assert.equal(entry("plugin.json").toString("utf8"), JSON.stringify(buildHome(), null, 2) + "\n", "plugin.json is stale: rebuild the ZIP");
+  for (const name of names.filter((n) => n !== "plugin.json")) assert.ok(entry(name).equals(readFileSync(join(PLUGIN, name))), `${name} is stale: rebuild the ZIP`);
+  assert.deepEqual(secretsIn(names.map((name) => ({ path: name, bytes: entry(name) }))), []);
 });
 
 test("Home listing rules allow homes for sale but not valuations, offers or competitor names", () => {

@@ -66,7 +66,7 @@ The second runs the review packet's positive cases live and prints what came bac
 
 To check the wish searches and the seller and renter tools against live home.co.uk data (no key needed), run `node scripts/home-live-check.mjs` after `npm run build`. Each wish check reads every matched listing again on its own and fails if any quoted evidence is not in that listing's description.
 
-To refresh the light and dark route screenshots from live Bath results, build first and provide a public Mapbox token plus a local Chrome or Chromium executable:
+To refresh the submission screenshots from live Bath results, build first and provide a public Mapbox token plus a local Chrome or Chromium executable:
 
 ```sh
 HOME_MAPBOX_TOKEN=pk.example \
@@ -74,7 +74,7 @@ CHROME_PATH="/path/to/Chrome" \
 node scripts/home-widget-screenshots.mjs
 ```
 
-Instead of `HOME_MAPBOX_TOKEN`, `HOME_MAPBOX_CREDENTIALS` may name a JSON file containing a `token` field. The script refreshes `docs/home-chatgpt-app/screenshots/listings-light.jpg` and `listings-dark.jpg` with live listings, commute and viewing-route data; it contains no demo listing fixtures.
+Instead of `HOME_MAPBOX_TOKEN`, `HOME_MAPBOX_CREDENTIALS` may name a JSON file containing a `token` field. The script takes its data from the live endpoint (`search_homes`, `get_home`, `plan_viewings` and the two render tools; pass another endpoint URL as its argument) and writes `listings`, `map`, `shortlist` and `detail` shots, each `-light.jpg` and `-dark.jpg`, to `docs/home-chatgpt-app/screenshots/`. The map shot draws a live viewing route over the first four homes, attached to the rendered listings the way `render_home_listings` returns it, so it does not depend on the endpoint already running a widget that draws routes. It contains no demo listing fixtures.
 
 ## Searching by wishes
 

@@ -4,9 +4,11 @@
  *
  *   node scripts/home-review-live.mjs https://mcp.home.co.uk/mcp
  *
- * Each case's expected calls run in order. A get_home or compare_homes call
- * with no listing IDs takes them from the case's own search_homes result, the
- * way the model would. Prints what came back so the outcome text can be
+ * Each case's expected calls run in order. A call that needs listing IDs and
+ * names none takes them from the case's own search_homes result, the way the
+ * model would: get_home the first, compare_homes the first three, plan_viewings
+ * the first four, commute_filter the homes just compared (or the whole page),
+ * and render_home_listings the search's homes. Prints what came back so the outcome text can be
  * checked against it, and fails on any tool error, an empty search, a search
  * result outside the requested filters, or a calculator without figures. It
  * cannot judge the model's answer; run the golden set in developer mode for
@@ -39,6 +41,7 @@ function checkSearch(args, result) {
     if (args.max_price !== undefined && h.price > args.max_price) problems.push(`${h.id} is ${h.price}`);
     if (args.new_build && h.new_build !== true) problems.push(`${h.id} is not a new build`);
     if (!String(h.url).startsWith('https://home.co.uk/property/')) problems.push(`${h.id} has no home.co.uk link`);
+    for (const m of h.wishes_matched ?? []) if (!m.evidence) problems.push(`${h.id} matches ${m.wish} with no listing words`);
   }
   if (args.sort === 'price_asc' && homes.some((h, i) => i && h.price < homes[i - 1].price)) problems.push('not in rising price order');
   return problems;
@@ -49,17 +52,22 @@ let failed = 0;
 for (const c of set.cases.filter((c) => c.review && c.kind !== 'negative')) {
   const problems = [];
   let lastSearch = null;
+  let compared = null;
   console.log(`\n${c.id}: ${c.prompt}`);
   try {
     for (const expected of c.expect.calls) {
       const args = { ...expected.args };
       const ids = (lastSearch?.homes ?? []).map((h) => h.id);
       if (expected.tool === 'get_home' && !args.listing_id) args.listing_id = ids[0];
-      if (expected.tool === 'compare_homes' && !args.listing_ids) args.listing_ids = ids.slice(0, 3);
+      if (expected.tool === 'compare_homes' && !args.listing_ids) args.listing_ids = compared = ids.slice(0, 3);
+      if (expected.tool === 'plan_viewings' && !args.listing_ids) args.listing_ids = ids.slice(0, 4);
+      if (expected.tool === 'commute_filter' && !args.listing_ids) args.listing_ids = compared ?? ids.slice(0, 20);
+      if (expected.tool === 'render_home_listings' && !args.homes) args.homes = (lastSearch?.homes ?? []).slice(0, 20);
       const result = await call(expected.tool, args);
       if (expected.tool === 'search_homes') {
         lastSearch = result;
         problems.push(...checkSearch(args, result));
+        if (args.wishes) console.log(`  wishes ${args.wishes.join(', ')}: ${result.homes_matching_every_wish} on the first page state every one`);
         console.log(`  search_homes: ${result.total} found; first ${(result.homes ?? []).slice(0, 3).map((h) => `${h.price} ${h.bedrooms}bd ${h.address}`).join(' | ')}`);
       } else if (expected.tool === 'get_home') {
         console.log(`  get_home: ${result.address}, ${result.tenure}, ${result.construction_age_band}, ${Math.round(result.days_listed ?? 0)} days listed, ${result.photos?.length} photos, enrichment ${result.enrichment?.available ? 'available' : `unavailable (${result.enrichment?.reason})`}`);
@@ -67,6 +75,17 @@ for (const c of set.cases.filter((c) => c.review && c.kind !== 'negative')) {
       } else if (expected.tool === 'compare_homes') {
         console.log(`  compare_homes: ${(result.homes ?? []).map((h) => `${h.price} ${h.property_type} ${h.photos?.length} photos`).join(' | ')}`);
         if ((result.homes ?? []).length !== args.listing_ids.length) problems.push('compare_homes did not return every home');
+      } else if (expected.tool === 'commute_filter') {
+        console.log(`  commute_filter: ${result.summary} inside: ${(result.homes_inside ?? []).map((h) => `${h.address}${h.near_edge ? ' (near edge)' : ''}`).join(' | ') || 'none'}`);
+        if (!result.place?.name) problems.push('commute_filter measured from no place');
+        if ((result.homes_inside ?? []).length + (result.homes_outside ?? []).length !== args.listing_ids.length) problems.push('commute_filter did not place every home');
+      } else if (expected.tool === 'plan_viewings') {
+        console.log(`  plan_viewings: from ${result.start?.name ?? 'the best home'}, ${(result.stops ?? []).map((s) => `${s.stop}. ${s.address} +${s.drive_from_previous_minutes} min`).join(' | ')}; ${result.total_driving_minutes} min in all`);
+        if ((result.stops ?? []).length !== args.listing_ids.length) problems.push('plan_viewings did not order every home');
+        if (typeof result.total_driving_minutes !== 'number') problems.push('no total driving time');
+      } else if (expected.tool === 'render_home_listings') {
+        console.log(`  render_home_listings: ${result.view}, ${(result.homes ?? []).length} homes`);
+        if (result.view !== 'listings' || !(result.homes ?? []).length) problems.push('render_home_listings drew no homes');
       } else {
         console.log(`  ${expected.tool}: ${JSON.stringify(result).slice(0, 240)}`);
         if (expected.tool === 'calculate_stamp_duty' && typeof result.total_tax !== 'number') problems.push('no stamp duty figure');
