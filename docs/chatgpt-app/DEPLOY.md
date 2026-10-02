@@ -44,6 +44,12 @@ If the release is unhealthy it switches back to the previous one and exits 1.
 It keeps three releases. When `deploy/deploy.sh` changes, copy it to the box
 first.
 
+The program, release folder and health URL default to the values above and can
+be set with `DEPLOY_PROGRAM`, `DEPLOY_ROOT` and `DEPLOY_HEALTH`. The Home
+endpoint deploys with the same script and its own values; see
+[the Home running notes](../home-chatgpt-app/RUNNING.md#deploy). Do not keep an
+edited copy of the script for either endpoint.
+
 ## Slack activity
 
 To post tool calls to `#homedata-chatgpt`, create the channel, invite the

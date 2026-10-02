@@ -16,6 +16,29 @@ The Homedata key is held only by the server and enriches listing details. ChatGP
 
 The endpoint answers MCP at `HOME_MCP_PATH` and health checks at `/healthz`. It is stateless: each POST creates a fresh MCP server and no search, shortlist or user preference is retained.
 
+## Deploy
+
+Home releases with the same `deploy/deploy.sh` as the Homedata endpoint; never keep an edited copy of it. Three settings choose the endpoint, and each defaults to the Homedata value:
+
+| Setting | Home | Homedata default |
+| --- | --- | --- |
+| `DEPLOY_PROGRAM` (supervisor program) | `home-mcp` | `homedata-mcp` |
+| `DEPLOY_ROOT` (releases, `current`, `repo`) | `/home/forge/mcp.home.co.uk` | `/home/forge/mcp.homedata.co.uk` |
+| `DEPLOY_HEALTH` (checked after restart) | `http://127.0.0.1:4177/healthz` | `http://127.0.0.1:8191/healthz` |
+
+As `forge` on the box, using the same copy of `deploy/deploy.sh` that releases Homedata:
+
+```sh
+DEPLOY_PROGRAM=home-mcp \
+DEPLOY_ROOT=/home/forge/mcp.home.co.uk \
+DEPLOY_HEALTH=http://127.0.0.1:4177/healthz \
+  /home/forge/mcp.homedata.co.uk/deploy.sh origin/main
+```
+
+The script prints the program, folder and health URL it is using before it starts. Everything else is shared: a release goes live only after `npm test` passes and it is marked `.verified`, an unhealthy release is rolled back to the previous one, and the last three releases are kept.
+
+The Home supervisor program must run `dist/home/http.js` from `/home/forge/mcp.home.co.uk/current` with `PORT=4177` (and `HOME_MCP_PATH=/mcp`), so its port matches `DEPLOY_HEALTH`. The restart runs `sudo -n /usr/bin/supervisorctl restart home-mcp`, so the box's sudo rule has to allow that program as well as `homedata-mcp`.
+
 ## Checks
 
 `npm test` covers the endpoint, trimmed search cards, full-detail enrichment, metadata, the golden set and npm exclusion. Against a deployed endpoint, run:
