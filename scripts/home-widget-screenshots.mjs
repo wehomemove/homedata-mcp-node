@@ -5,7 +5,9 @@ import { pathToFileURL } from "node:url";
 
 import { chromium } from "playwright-core";
 
-import { trimCard } from "../dist/home/client.js";
+import { HomedataClient } from "../dist/client.js";
+import { HomeClient } from "../dist/home/client.js";
+import { MapboxRoutes } from "../dist/home/routes.js";
 import { matchWishes } from "../dist/home/wishes.js";
 import { HOME_WIDGET_HTML } from "../dist/home/widget.js";
 
@@ -19,13 +21,9 @@ if (typeof token !== "string" || !token.startsWith("pk.")) {
 const chromePath = process.env.CHROME_PATH;
 if (!chromePath) throw new Error("Set CHROME_PATH to a Chrome or Chromium executable");
 
-const search = await fetch("https://home.co.uk/api/for-sale/Bath/?page=1&per_page=8").then((response) => {
-  if (!response.ok) throw new Error(`Home search returned ${response.status}`);
-  return response.json();
-});
-const properties = Array.isArray(search.properties) ? search.properties.slice(0, 8) : [];
-const homes = await Promise.all(properties.map(async (property) => {
-  const home = trimCard(property);
+const homeClient = new HomeClient({ homedata: new HomedataClient({ apiKey: "unused" }) });
+const search = await homeClient.search({ location: "Bath", listing_type: "sale" });
+const homes = await Promise.all(search.homes.slice(0, 8).map(async (home) => {
   const id = String(home.id ?? "");
   if (!id) return home;
   try {
@@ -36,6 +34,12 @@ const homes = await Promise.all(properties.map(async (property) => {
     return home;
   }
 }));
+const routes = new MapboxRoutes({ token, referer: "https://mcp.home.co.uk/" });
+const routeIds = homes.map((home) => home.id).filter(Boolean).slice(0, 4);
+const [commute, route] = await Promise.all([
+  routes.commute(homeClient, { place: "Bath Spa station", place_kind: "station", minutes: 15, mode: "walk", listing_ids: homes.map((home) => home.id).filter(Boolean) }),
+  routes.viewings(homeClient, { listing_ids: routeIds, start: "BA1 1SU" }),
+]);
 
 const mapboxRoot = pathToFileURL(resolve(root, "node_modules/mapbox-gl/dist/")).href;
 const assets = `<link rel="stylesheet" href="${mapboxRoot}mapbox-gl.css"><script id="home-mapbox" src="${mapboxRoot}mapbox-gl.js"></script>`;
@@ -52,17 +56,17 @@ const browser = await chromium.launch({
 try {
   for (const theme of ["light", "dark"]) {
     const page = await browser.newPage({ viewport: { width: 1200, height: 982 }, deviceScaleFactor: 1 });
-    await page.addInitScript(({ theme, homes }) => {
+    await page.addInitScript(({ theme, homes, commute, route }) => {
       window.openai = {
         theme,
         widgetState: { shortlist: homes.slice(0, 2).map((home) => home.id) },
-        toolOutput: { view: "listings", title: "Homes for sale in Bath", homes },
+        toolOutput: { view: "listings", title: "Bath homes and viewing day", homes, commute, route },
         setWidgetState: () => undefined,
       };
-    }, { theme, homes });
+    }, { theme, homes, commute, route });
     await page.goto(pathToFileURL(temporary).href);
     await page.waitForTimeout(9_000);
-    await page.screenshot({ path: resolve(root, `docs/home-chatgpt-app/screenshots/listings-${theme}.jpg`), type: "jpeg", quality: 92 });
+    await page.screenshot({ path: resolve(root, `docs/home-chatgpt-app/screenshots/routes-${theme}.jpg`), type: "jpeg", quality: 92 });
     await page.close();
   }
 } finally {
