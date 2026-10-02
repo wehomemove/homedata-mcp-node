@@ -20,13 +20,14 @@ import { ACCOUNT_TOOLS, SAVED_SEARCH_TYPES, type AccountSettings } from "../home
 import { accountFromEnv, createHomeHttpHandler, mapboxTokenFromEnv } from "../home/http.js";
 import { HOME_RULES } from "../home/plugin.js";
 import { MAPBOX_GL_ASSET_PREFIX } from "../home/mapbox-assets.js";
+import { HOME_WIDGET_ASSETS } from "../home/widget-assets.js";
 import { buildHomeServer, HOME_ROUTE_TOOLS, HOME_TOOLS } from "../home/server.js";
 import { extraWords, insideArea, MapboxRoutes, metresToEdge, namesPlace } from "../home/routes.js";
 import { BATH_HOMES, BATH_ROUTE_SCENARIOS, routeFixtureKey } from "./home-routes-fixture.js";
 import { buildManifest, readSkills, secretsIn, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
 import { matchWishes, WISHES, type Wish } from "../home/wishes.js";
 import { HOME_ICONS } from "../home/icons.js";
-import { HOME_WIDGET_HTML, HOME_WIDGET_URI, HOME_WIDGET_VERSION, homeMapLayout, homeMapProject, homePinCollisions, homePinLabel, humaniseDaysListed } from "../home/widget.js";
+import { HOME_WIDGET_ASSET_PREFIX, HOME_WIDGET_CSS, HOME_WIDGET_HTML, HOME_WIDGET_SCRIPT, HOME_WIDGET_URI, HOME_WIDGET_VERSION, homeMapLayout, homeMapProject, homePinCollisions, homePinLabel, humaniseDaysListed } from "../home/widget.js";
 
 const ID = "b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
 const ID2 = "c9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
@@ -96,6 +97,13 @@ async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPe
   const mcp = new Client({ name: "test", version: "1" }, { capabilities: {} });
   await mcp.connect(new StreamableHTTPClientTransport(new URL(base + "/mcp")));
   return { base, mcp, requests, stop: async () => { await mcp.close(); http.closeAllConnections(); await new Promise((resolve) => http.close(resolve)); } };
+}
+
+function assertNoInlineMarkup(markup: string): void {
+  assert.doesNotMatch(markup, /<style\b/i, "inline style element");
+  assert.doesNotMatch(markup, /<script\b(?![^>]*\bsrc=)[^>]*>/i, "inline script element");
+  assert.doesNotMatch(markup, /<[^>]+\sstyle\s*=/i, "inline style attribute");
+  assert.doesNotMatch(markup, /<[^>]+\son[a-z]+\s*=/i, "inline event handler");
 }
 
 test("without account settings Home lists its no-auth read-only data and render tools and publishes no OAuth metadata", async () => {
@@ -175,8 +183,7 @@ test("listing ages are rounded into human time without exposing raw source float
 });
 
 test("the generated dependency-free widget script is valid JavaScript", () => {
-  const script = HOME_WIDGET_HTML.match(/<script>([\s\S]*)<\/script>/)?.[1];
-  assert.ok(script);
+  const script = HOME_WIDGET_SCRIPT;
   assert.doesNotThrow(() => new Function(script));
   // These are the allowlisted home-enrichment keys. Keep the producer's
   // contract and the dependency-free widget consumer in lockstep.
@@ -189,19 +196,25 @@ test("the generated dependency-free widget script is valid JavaScript", () => {
   assert.match(script, /sendFollowUpMessage/);
   assert.match(script, /method:'ui\/message'/);
   for (const stage of ["script_start", "handshake_sent", "host_answered", "data_received_openai_globals", "data_received_window_openai", "data_received_mcp_tool_input", "data_received_mcp_tool_result", "cards_drawn", "script_error", "security_policy_"]) {
-    assert.ok(HOME_WIDGET_HTML.includes(stage), stage);
+    assert.ok(HOME_WIDGET_SCRIPT.includes(stage), stage);
   }
   assert.match(HOME_WIDGET_HTML, /stage=page_parsed&amp;host=__HOME_CHECK_IN_HOST__&amp;view=__HOME_VIEW_ID__/);
   assert.doesNotMatch(script, /error\.message|error\.stack/);
   assert.match(script, /widget-check-in\?stage='\+encodeURIComponent\(stage\)\+'&host='\+encodeURIComponent\(location\.hostname\)\+'&view='\+encodeURIComponent\(viewId\)/);
 });
 
+test("the widget template and every generated view contain no inline script, handler or style attribute", () => {
+  assertNoInlineMarkup(HOME_WIDGET_HTML);
+  assert.doesNotMatch(HOME_WIDGET_SCRIPT, /["']\s(?:style|on[a-z]+)=/i);
+  assert.doesNotMatch(HOME_WIDGET_SCRIPT, /<style\b|<script\b/i);
+});
+
 test("the widget uses home.co.uk's colours: no pastel pink tints, pink outlines or grey Mapbox styles", () => {
-  const css = HOME_WIDGET_HTML.match(/<style>([\s\S]*)<\/style>/)?.[1] ?? "";
+  const css = HOME_WIDGET_CSS;
   for (const banned of ["#fdf2f8", "#fce7f3", "#ffe4e6", "#fbcfe8", "#f9a8d4", "#321d2a", "#9d174d", "#be185d", "#db2777", "#ec489955"]) {
-    assert.ok(!HOME_WIDGET_HTML.toLowerCase().includes(banned), `banned tint ${banned}`);
+    assert.ok(!`${HOME_WIDGET_HTML}${HOME_WIDGET_CSS}${HOME_WIDGET_SCRIPT}`.toLowerCase().includes(banned), `banned tint ${banned}`);
   }
-  assert.doesNotMatch(HOME_WIDGET_HTML, /light-v11|dark-v11/);
+  assert.doesNotMatch(`${HOME_WIDGET_CSS}${HOME_WIDGET_SCRIPT}`, /light-v11|dark-v11/);
   // Pink appears only in gradients, the glass pill's shadow and the selected pin: never as a border or outline.
   assert.doesNotMatch(css, /(border|outline)[^;{}]*(#ec4899|#f43f5e|236,72,153)/);
   assert.match(css, /\.card\{[^}]*border:1px solid var\(--line\)/);
@@ -234,7 +247,7 @@ test("every widget icon is the exact Phosphor SVG from @phosphor-icons/core, cre
   const source = readFileSync(fileURLToPath(new URL("../../src/home/widget.ts", import.meta.url)), "utf8");
   assert.doesNotMatch(source, /<path|<circle|<rect|<polyline|<line /);
   assert.match(HOME_WIDGET_HTML, /Phosphor Icons, https:\/\/phosphoricons\.com, MIT licence/);
-  const script = HOME_WIDGET_HTML.match(/<script>([\s\S]*)<\/script>/)?.[1] ?? "";
+  const script = HOME_WIDGET_SCRIPT;
   for (const key of Object.keys(HOME_ICONS.icons)) assert.ok(script.includes(JSON.stringify(key) + ":"), `icon ${key} reaches the widget`);
   assert.doesNotMatch(script, /<\/script/i);
 });
@@ -257,15 +270,10 @@ test("listing descriptions become clean plain-text paragraphs", () => {
 });
 
 test("the widget follows ChatGPT events, MCP host context and the system fallback for cards and live maps", async () => {
-  const source = HOME_WIDGET_HTML
-    .replace("__HOME_MAPBOX_ASSETS__", "")
-    .replace("__HOME_MAPBOX_TOKEN__", JSON.stringify("pk.test"));
-  const script = source.match(/<script>([\s\S]*)<\/script>/)?.[1];
-  if (!script) throw new Error("widget script missing");
-  const widgetScript = script;
-  assert.match(source, /@media\(prefers-color-scheme:dark\)\{:root:not\(\.light\)/);
+  const widgetScript = HOME_WIDGET_SCRIPT;
+  assert.match(HOME_WIDGET_CSS, /@media\(prefers-color-scheme:dark\)\{:root:not\(\.light\)/);
 
-  function harness(systemDark = false, openai: Record<string, unknown> | undefined = undefined, script = widgetScript) {
+  function harness(systemDark = false, openai: Record<string, unknown> | undefined = undefined, mapboxToken = "pk.test") {
     const listeners = new Map<string, Array<(event: any) => void>>();
     const timers = new Map<number, () => void>();
     let nextTimer = 0;
@@ -290,6 +298,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     };
     const classList = { toggle: (name: string, on: boolean) => on ? classes.add(name) : classes.delete(name) };
     const messages: any[] = [];
+    const checkIns: string[] = [];
     const parent = { postMessage: (message: any) => messages.push(message) };
     const window = {
       parent, openai, mapboxgl: undefined as unknown,
@@ -303,7 +312,8 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     }; pins.push(pin); return pin; };
     const mapboxListeners = new Map<string, () => void>();
     const mapboxScript = { addEventListener: (type: string, listener: () => void) => mapboxListeners.set(type, listener) };
-    const document = { getElementById: (id: string) => id === "root" ? root : id === "home-mapbox" ? mapboxScript : null, documentElement: { classList, scrollHeight: 900 }, body: { getBoundingClientRect: () => ({ height: contentHeight }) }, createElement: button };
+    const config = { dataset: { checkInOrigin: "https://mcp.home.co.uk", viewId: "0123456789abcdef01234567", mapboxToken } };
+    const document = { getElementById: (id: string) => id === "root" ? root : id === "home-mapbox" ? mapboxScript : id === "home-widget-config" ? config : null, documentElement: { classList, scrollHeight: 900 }, body: { getBoundingClientRect: () => ({ height: contentHeight }) }, createElement: button };
     const pins: Array<{ className: string; innerHTML: string }> = [];
     const layers: Array<{ id: string; type: string; paint: Record<string, unknown> }> = [];
     const mapEvents = new Map<string, () => void>();
@@ -322,7 +332,8 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     class Bounds { extend() { return this; } }
     const mapboxgl = { Map: FakeMap, Marker, LngLatBounds: Bounds, NavigationControl: class {}, accessToken: "" };
     window.mapboxgl = mapboxgl;
-    new Function("window", "document", "matchMedia", "mapboxgl", "setTimeout", "clearTimeout", script)(window, document, () => ({ matches: systemDark }), mapboxgl, (fn: () => void) => { const timer = ++nextTimer; timers.set(timer, fn); return timer; }, (timer: number) => timers.delete(timer));
+    class CheckInImage { set src(value: string) { checkIns.push(value); } }
+    new Function("window", "document", "matchMedia", "mapboxgl", "setTimeout", "clearTimeout", "Image", "location", widgetScript)(window, document, () => ({ matches: systemDark }), mapboxgl, (fn: () => void) => { const timer = ++nextTimer; timers.set(timer, fn); return timer; }, (timer: number) => timers.delete(timer), CheckInImage, { hostname: "web-sandbox.example" });
     const dispatch = (type: string, event: any) => (listeners.get(type) ?? []).forEach((listener) => listener(event));
     const render = () => dispatch("message", { source: parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [{ price: 325000, coordinates: { latitude: 51.38, longitude: -2.36 } }] } } } });
     const click = (selector: string) => {
@@ -330,11 +341,12 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
       assert.ok(control?.onclick, `${selector} is clickable`);
       control.onclick({ stopPropagation() {} });
     };
-    return { pins, layers, mapEvents, mapClasses, classes, styles, messages, parent, dispatch, render, root, window, mapboxgl, mapboxListeners, mapRemoved: () => mapRemoved, setContentHeight: (height: number) => { contentHeight = height; }, runTimers: () => { for (const fn of [...timers.values()]) fn(); timers.clear(); }, click };
+    return { pins, layers, mapEvents, mapClasses, classes, styles, messages, checkIns, parent, dispatch, render, root, window, mapboxgl, mapboxListeners, mapRemoved: () => mapRemoved, setContentHeight: (height: number) => { contentHeight = height; }, runTimers: () => { for (const fn of [...timers.values()]) fn(); timers.clear(); }, click };
   }
 
   const home = { id: "strict-home", price: 410000 };
   const toolInput = harness();
+  assert.match(toolInput.checkIns[0] ?? "", /stage=script_start&host=web-sandbox\.example&view=0123456789abcdef01234567/);
   toolInput.dispatch("message", { source: toolInput.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { title: "From input", homes: [home] } } } });
   assert.match(toolInput.root.innerHTML, /From input/);
 
@@ -499,10 +511,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   assert.match(planner.root.innerHTML, /Your viewing day/);
   assert.match(planner.root.innerHTML, /6 min driving/);
 
-  const noTokenSource = HOME_WIDGET_HTML.replace("__HOME_MAPBOX_ASSETS__", "").replace("__HOME_MAPBOX_TOKEN__", JSON.stringify(""));
-  const noTokenScript = noTokenSource.match(/<script>([\s\S]*)<\/script>/)?.[1];
-  assert.ok(noTokenScript);
-  const noRouteTool = harness(false, { widgetState: { shortlist: ["home-a", "home-b"] } }, noTokenScript);
+  const noRouteTool = harness(false, { widgetState: { shortlist: ["home-a", "home-b"] } }, "");
   noRouteTool.dispatch("message", { source: noRouteTool.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [{ id: "home-a" }, { id: "home-b" }] } } } });
   noRouteTool.click("[data-shortlist]");
   assert.doesNotMatch(noRouteTool.root.innerHTML, /Plan my viewings/);
@@ -542,6 +551,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     view: "detail", home: { enrichment: { available: false } },
   } } } });
   assert.doesNotMatch(detail.root.innerHTML, /Know before you view/);
+  for (const rendered of [toolInput, structuredResult, statuses, routes, wishes, detail]) assertNoInlineMarkup(rendered.root.innerHTML);
 });
 
 test("render tools reuse supplied homes without another search and keep text fallbacks", async () => {
@@ -563,18 +573,18 @@ test("render tools reuse supplied homes without another search and keep text fal
   } finally { await stop(); }
 });
 
-test("Home publishes a v12 MCP Apps resource without a map surface when the browser token is absent", async () => {
+test("Home publishes a v13 MCP Apps resource with only external script and stylesheet assets", async () => {
   const { mcp, stop } = await start();
   try {
     const resources = await mcp.listResources();
-    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v12.html"]);
+    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v13.html"]);
     const resource = await mcp.readResource({ uri: resources.resources[0]!.uri });
     const content = resource.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
     assert.equal(content.mimeType, "text/html;profile=mcp-app");
-    assert.match(content.text ?? "", /ui\/notifications\/tool-result/);
-    assert.match(content.text ?? "", /ui\/initialize/);
-    assert.match(content.text ?? "", /ui\/notifications\/initialized/);
-    assert.match(content.text ?? "", /@media\(max-width:700px\)/);
+    assert.match(HOME_WIDGET_SCRIPT, /ui\/notifications\/tool-result/);
+    assert.match(HOME_WIDGET_SCRIPT, /ui\/initialize/);
+    assert.match(HOME_WIDGET_SCRIPT, /ui\/notifications\/initialized/);
+    assert.match(HOME_WIDGET_CSS, /@media\(max-width:700px\)/);
     const ui = content._meta?.["ui"] as { csp?: { connectDomains?: string[]; resourceDomains?: string[] } };
     assert.deepEqual(ui.csp?.connectDomains, []);
     assert.deepEqual(ui.csp?.resourceDomains, ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://mcp.home.co.uk"]);
@@ -583,7 +593,37 @@ test("Home publishes a v12 MCP Apps resource without a map surface when the brow
     assert.ok((content.text?.match(new RegExp(pageCheckIn[1], "g")) ?? []).length >= 2, "script and HTML share the view id");
     assert.doesNotMatch(content.text ?? "", /openstreetmap|tile\.openstreetmap/i);
     assert.doesNotMatch(content.text ?? "", /mapbox-gl-js/);
-    assert.match(content.text ?? "", /mapboxToken=""/);
+    assert.match(content.text ?? "", /data-mapbox-token=""/);
+    assert.match(content.text ?? "", new RegExp(`href="https://mcp\\.home\\.co\\.uk${HOME_WIDGET_ASSET_PREFIX}/widget\\.css"`));
+    assert.match(content.text ?? "", new RegExp(`src="https://mcp\\.home\\.co\\.uk${HOME_WIDGET_ASSET_PREFIX}/widget\\.js"`));
+  } finally { await stop(); }
+});
+
+test("Home serves the integrity-pinned versioned widget JavaScript and CSS as immutable CORS assets", async () => {
+  const { base, mcp, stop } = await start();
+  try {
+    const resource = await mcp.readResource({ uri: HOME_WIDGET_URI });
+    const html = (resource.contents[0] as { text?: string }).text ?? "";
+    for (const file of ["widget.js", "widget.css"]) {
+      const path = `${HOME_WIDGET_ASSET_PREFIX}/${file}`;
+      const expected = HOME_WIDGET_ASSETS.get(path)!;
+      const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const tag = html.match(new RegExp(`(?:src|href)="https://mcp\\.home\\.co\\.uk${escapedPath}"[^>]*integrity="(sha384-[^"]+)"`));
+      assert.equal(tag?.[1], expected.integrity, `${file} integrity`);
+      const response = await fetch(base + path);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("content-type"), expected.contentType);
+      assert.equal(response.headers.get("cache-control"), "public, max-age=31536000, immutable");
+      assert.equal(response.headers.get("access-control-allow-origin"), "*");
+      assert.deepEqual(Buffer.from(await response.arrayBuffer()), expected.body);
+      const head = await fetch(base + path, { method: "HEAD" });
+      assert.equal(head.status, 200);
+      assert.equal((await head.arrayBuffer()).byteLength, 0);
+      assert.equal(head.headers.get("content-length"), String(expected.body.length));
+      const refused = await fetch(base + path, { method: "POST" });
+      assert.equal(refused.status, 405);
+      assert.equal(refused.headers.get("allow"), "GET, HEAD");
+    }
   } finally { await stop(); }
 });
 
@@ -592,7 +632,7 @@ test("Home keeps every earlier listings-and-detail template address serving the 
   try {
     const current = await mcp.readResource({ uri: HOME_WIDGET_URI });
     const expected = current.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
-    const withoutViewId = (text: string | undefined) => text?.replaceAll(/view=[a-f0-9]{24}/g, "view=<random>").replaceAll(/viewId='[a-f0-9]{24}'/g, "viewId='<random>'");
+    const withoutViewId = (text: string | undefined) => text?.replaceAll(/view=[a-f0-9]{24}/g, "view=<random>").replaceAll(/data-view-id="[a-f0-9]{24}"/g, 'data-view-id="<random>"');
 
     for (let version = 1; version <= HOME_WIDGET_VERSION; version += 1) {
       const uri = `ui://home/listings-and-detail-v${version}.html`;
@@ -633,9 +673,9 @@ test("Home serves the exact integrity-pinned Mapbox client bytes referenced by t
       assert.equal(refused.status, 405);
       assert.equal(refused.headers.get("allow"), "GET, HEAD");
     }
-    assert.match(content.text ?? "", /mapboxToken="pk\.browser-token"/);
-    assert.match(content.text ?? "", /new gl\.Map/);
-    assert.match(content.text ?? "", /NavigationControl/);
+    assert.match(content.text ?? "", /data-mapbox-token="pk\.browser-token"/);
+    assert.match(HOME_WIDGET_SCRIPT, /new gl\.Map/);
+    assert.match(HOME_WIDGET_SCRIPT, /NavigationControl/);
     const ui = content._meta?.["ui"] as { csp?: { connectDomains?: string[]; resourceDomains?: string[] } };
     assert.deepEqual(ui.csp?.connectDomains, ["https://api.mapbox.com", "https://events.mapbox.com"]);
     assert.ok(ui.csp?.resourceDomains?.includes("https://mcp.home.co.uk"));

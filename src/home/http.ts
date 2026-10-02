@@ -14,6 +14,7 @@ import { HomeClient } from "./client.js";
 import { buildHomeServer } from "./server.js";
 import { MAPBOX_GL_ASSETS } from "./mapbox-assets.js";
 import { MapboxRoutes } from "./routes.js";
+import { HOME_WIDGET_ASSETS } from "./widget-assets.js";
 
 export interface HomeHttpOptions {
   client: HomeClient;
@@ -138,17 +139,17 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
       if (req.method !== "GET" && req.method !== "HEAD") { res.setHeader("Allow", "GET, HEAD"); return void send(res, 405, { error: "method_not_allowed" }); }
       return void res.writeHead(204, { "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*", "Content-Length": "0" }).end();
     }
-    const mapboxAsset = MAPBOX_GL_ASSETS.get(requestPath);
-    if (mapboxAsset) {
+    const immutableAsset = MAPBOX_GL_ASSETS.get(requestPath) ?? HOME_WIDGET_ASSETS.get(requestPath);
+    if (immutableAsset) {
       if (req.method !== "GET" && req.method !== "HEAD") { res.setHeader("Allow", "GET, HEAD"); return void send(res, 405, { error: "method_not_allowed" }); }
       res.writeHead(200, {
-        "Content-Type": mapboxAsset.contentType,
-        "Content-Length": String(mapboxAsset.body.length),
+        "Content-Type": immutableAsset.contentType,
+        "Content-Length": String(immutableAsset.body.length),
         "Cache-Control": "public, max-age=31536000, immutable",
         "Access-Control-Allow-Origin": "*",
         "X-Content-Type-Options": "nosniff",
       });
-      return void res.end(req.method === "HEAD" ? undefined : mapboxAsset.body);
+      return void res.end(req.method === "HEAD" ? undefined : immutableAsset.body);
     }
     if (requestPath === "/healthz") return void send(res, 200, { ok: true, service: "home", version: VERSION, enrichment_cache: options.client.enrichmentCacheStats() }, { "Cache-Control": "no-store" });
     if (requestPath === "/.well-known/openai-apps-challenge") {

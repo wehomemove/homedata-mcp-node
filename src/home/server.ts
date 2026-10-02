@@ -12,6 +12,7 @@ import { ACCOUNT_TOOLS, isAccountTool, type AccountTools } from "./account.js";
 import { HomeClient, HomeError, HomeUpstreamError, type SearchArgs, type SoldArgs } from "./client.js";
 import { HOME_WIDGET_HTML, HOME_WIDGET_URI, HOME_WIDGET_VERSION } from "./widget.js";
 import { mapboxAssetTags } from "./mapbox-assets.js";
+import { homeWidgetAssetValues } from "./widget-assets.js";
 import { PLACE_KINDS, TRAVEL_MODES, type MapboxRoutes } from "./routes.js";
 import { WISHES } from "./wishes.js";
 
@@ -233,15 +234,20 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
       connectDomains: mapboxDomains,
       resourceDomains: ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", ...assetDomains, ...mapboxDomains],
     };
+    const { scriptIntegrity, cssIntegrity } = homeWidgetAssetValues();
+    const attribute = (value: string) => value.replace(/[&"<>]/g, (character) => ({ "&": "&amp;", '"': "&quot;", "<": "&lt;", ">": "&gt;" })[character]!);
     return { contents: [{
       uri: request.params.uri,
       mimeType: "text/html;profile=mcp-app",
       text: HOME_WIDGET_HTML
         .replace("__HOME_MAPBOX_ASSETS__", options.mapboxToken && options.assetOrigin ? mapboxAssetTags(options.assetOrigin) : "")
-        .replaceAll("__HOME_CHECK_IN_ORIGIN__", options.assetOrigin ?? "")
+        .replaceAll("__HOME_ASSET_ORIGIN__", attribute(options.assetOrigin ?? ""))
+        .replaceAll("__HOME_CHECK_IN_ORIGIN__", attribute(options.assetOrigin ?? ""))
         .replaceAll("__HOME_CHECK_IN_HOST__", options.assetOrigin ? new URL(options.assetOrigin).hostname : "")
         .replaceAll("__HOME_VIEW_ID__", options.widgetViewId ?? "")
-        .replace("__HOME_MAPBOX_TOKEN__", JSON.stringify(options.mapboxToken ?? "")),
+        .replace("__HOME_MAPBOX_TOKEN__", attribute(options.mapboxToken ?? ""))
+        .replace("__HOME_SCRIPT_INTEGRITY__", scriptIntegrity)
+        .replace("__HOME_CSS_INTEGRITY__", cssIntegrity),
       _meta: {
         ui: { prefersBorder: false, domain: "https://mcp.home.co.uk", csp },
         "openai/widgetDescription": "A responsive carousel, shortlist, honest listing evidence and map for chosen homes, or a photo gallery and facts for one home.",
