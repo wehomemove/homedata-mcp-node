@@ -352,9 +352,9 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
 
   const routes = harness();
   routes.dispatch("message", { source: routes.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [
-    { id: "inside", address: "Inside home", price: 1000000, coordinates: { latitude: 51.38, longitude: -2.36 } },
     { id: "outside", address: "Outside home", price: 500000, coordinates: { latitude: 51.39, longitude: -2.35 } },
-  ], commute: { homes_outside: [{ listing_id: "outside" }], reachable_area: { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [[[-2.37, 51.37], [-2.35, 51.37], [-2.35, 51.39], [-2.37, 51.37]]] } } }, route: { start: { name: "Bath Spa" }, stops: [{ stop: 1, listing_id: "inside", address: "Inside home", drive_from_previous_minutes: 4 }, { stop: 2, listing_id: "outside", address: "Outside home", drive_from_previous_minutes: 8 }], total_driving_minutes: 12, route: { type: "LineString", coordinates: [[-2.36, 51.38], [-2.35, 51.39]] } } } } } });
+    { id: "inside", address: "Inside home", price: 1000000, coordinates: { latitude: 51.38, longitude: -2.36 } },
+  ], commute: { summary: "1 of 2 homes are within 20 minutes' drive of Bath Spa.", homes_inside: [{ listing_id: "inside" }], homes_outside: [{ listing_id: "outside" }], reachable_area: { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [[[-2.37, 51.37], [-2.35, 51.37], [-2.35, 51.39], [-2.37, 51.37]]] } } }, route: { start: { name: "Bath Spa" }, stops: [{ stop: 1, listing_id: "inside", address: "Inside home", drive_from_previous_minutes: 4 }, { stop: 2, listing_id: "outside", address: "Outside home", drive_from_previous_minutes: 8 }], total_driving_minutes: 12, route: { type: "LineString", coordinates: [[-2.36, 51.38], [-2.35, 51.39]] } } } } } });
   routes.mapEvents.get("style.load")?.();
   assert.deepEqual(routes.layers.map((layer) => layer.id), ["home-buildings", "home-commute", "home-commute-area", "home-route", "home-viewing-route"]);
   assert.equal(routes.layers[2]!.paint["fill-color"], "#ec4899");
@@ -363,7 +363,22 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   assert.deepEqual(routes.layers[4]!.paint["line-gradient"], ["interpolate", ["linear"], ["line-progress"], 0, "#ec4899", 1, "#f97316"]);
   assert.match(routes.pins[0]!.className, /route-stop/);
   assert.match(routes.pins[1]!.className, /faded.*route-stop/);
-  assert.match(routes.root.innerHTML, /Start.*Bath Spa.*4 min.*Inside home.*8 min.*Outside home.*12 min driving/);
+  assert.match(routes.root.innerHTML, /1 of 2 homes within 20 minutes&#39; drive of Bath Spa/);
+  assert.ok(routes.root.innerHTML.indexOf("Inside home") < routes.root.innerHTML.indexOf("Outside home"), "cards follow stop order, not input order");
+  assert.match(routes.root.innerHTML, /class="card[^>]*[\s\S]*Inside home[\s\S]*class="card faded"[^>]*[\s\S]*Outside home/);
+  assert.match(routes.root.innerHTML, /class="card-stop" aria-label="Viewing stop 1">1<[\s\S]*class="card-stop" aria-label="Viewing stop 2">2</);
+  assert.match(routes.root.innerHTML, /Start.*start-address">Bath Spa.*4 min.*Inside home.*8 min.*Outside home.*12 min driving/);
+  assert.doesNotMatch(routes.root.innerHTML, /class="refine"/, "route views do not offer search refinements");
+
+  const commute = harness();
+  commute.dispatch("message", { source: commute.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [
+    { id: "far", address: "Far home", price: 250000, coordinates: { latitude: 51.45, longitude: -2.3 } },
+    { id: "near", address: "Near home", price: 400000, coordinates: { latitude: 51.38, longitude: -2.36 } },
+  ], commute: { summary: "1 of 2 homes are within 20 minutes' drive of Bath Spa.", homes_inside: [{ listing_id: "near" }], homes_outside: [{ listing_id: "far" }] } } } } });
+  assert.ok(commute.root.innerHTML.indexOf("Near home") < commute.root.innerHTML.indexOf("Far home"), "commute cards put reachable homes first");
+  assert.match(commute.root.innerHTML, /class="card faded"[^>]*[\s\S]*Far home/);
+  assert.doesNotMatch(commute.pins[0]!.className, /faded/);
+  assert.match(commute.pins[1]!.className, /faded/);
 
   const creative = harness(false, { widgetState: { shortlist: ["home-a", "home-b"] } });
   creative.dispatch("message", { source: creative.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", title: "Bath homes", homes: [
@@ -497,11 +512,11 @@ test("render tools reuse supplied homes without another search and keep text fal
   } finally { await stop(); }
 });
 
-test("Home publishes a v10 MCP Apps resource without a map surface when the browser token is absent", async () => {
+test("Home publishes a v11 MCP Apps resource without a map surface when the browser token is absent", async () => {
   const { mcp, stop } = await start();
   try {
     const resources = await mcp.listResources();
-    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v10.html"]);
+    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v11.html"]);
     const resource = await mcp.readResource({ uri: resources.resources[0]!.uri });
     const content = resource.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
     assert.equal(content.mimeType, "text/html;profile=mcp-app");
@@ -1727,7 +1742,7 @@ test("commute_filter walks 15 minutes from Bath Spa station and splits the homes
     assert.equal(isError, false, text);
     assert.equal(body["place"].name, "Bath Spa");
     assert.match(body["place"].address, /BA1 1SU/);
-    assert.equal(body["summary"], "1 of 6 homes are within 15 minutes' walk of Bath Spa.");
+    assert.equal(body["summary"], "1 of 6 homes within 15 minutes' walk of Bath Spa.");
     assert.deepEqual(body["homes_inside"].map((h: any) => h.listing_id), [BATH_HOMES.hallFloor]);
     assert.deepEqual(body["homes_outside"].map((h: any) => h.listing_id), [BATH_HOMES.paragon, BATH_HOMES.oldfieldPark, BATH_HOMES.twerton, BATH_HOMES.upperWeston, BATH_HOMES.peasedown]);
     assert.equal(body["homes_outside"].find((h: any) => h.listing_id === BATH_HOMES.oldfieldPark).near_edge, true, "a home within the simplification margin is borderline");
@@ -1904,7 +1919,7 @@ test("a home with no map position is skipped by commute_filter and refused by pl
   try {
     const commute = await app.call("commute_filter", scenario("walk-bath-spa"));
     assert.equal(commute.isError, false, commute.text);
-    assert.equal(commute.body["summary"], "1 of 4 homes are within 15 minutes' walk of Bath Spa.");
+    assert.equal(commute.body["summary"], "1 of 4 homes within 15 minutes' walk of Bath Spa.");
     assert.deepEqual(commute.body["homes_not_checked"], [
       { listing_id: BATH_HOMES.twerton, reason: "The listing publishes no map position." },
       { listing_id: BATH_HOMES.peasedown, reason: "This home was not found on home.co.uk." },

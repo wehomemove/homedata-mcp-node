@@ -52,11 +52,11 @@ if (homes.length < 4) throw new Error(`only ${homes.length} homes with photos ca
 const listings = await call("render_home_listings", { title: "Three-bedroom homes for sale in Bath with a garden", homes });
 const detail = await call("render_home_detail", { home: await call("get_home", { listing_id: homes[0].id }) });
 const shortlist = homes.slice(0, 3).map((h) => h.id);
-// The map shot draws a live viewing route over the first four homes. It rides
-// on the rendered listings exactly as render_home_listings returns it. (These
-// homes sit in villages outside any short walk of Bath Spa, so a commute area
-// here would only fade every pin.)
-const route = await call("plan_viewings", { listing_ids: homes.slice(0, 4).map((h) => h.id), start: "Bath Spa station", start_kind: "station" });
+const [commute, route] = await Promise.all([
+  call("commute_filter", { listing_ids: homes.map((h) => h.id), place: "Bath Spa station", place_kind: "station", minutes: 20, mode: "drive" }),
+  call("plan_viewings", { listing_ids: homes.slice(0, 4).map((h) => h.id), start: "Bath Spa station", start_kind: "station" }),
+]);
+const commuting = { ...listings, commute };
 const routed = { ...listings, route };
 console.log(`live data: ${search.total} homes, ${search.homes_matching_every_wish} stating a garden on page 1; detail ${detail.home.address}`);
 
@@ -95,7 +95,12 @@ try {
     await shot(plain, `listings-${theme}.jpg`);
     await plain.close();
 
-    const page = await open(theme, routed, { width: 1200, height: 900 });
+    const commutePage = await open(theme, commuting, { width: 1200, height: 982 });
+    await shot(commutePage, `commute-${theme}.jpg`);
+    await commutePage.close();
+
+    const page = await open(theme, routed, { width: 1200, height: 982 });
+    await shot(page, `route-${theme}.jpg`);
 
     // The whole route at its fitted zoom: stops are numbered pins, other homes hearts.
     const map = page.locator("[data-map]").first();

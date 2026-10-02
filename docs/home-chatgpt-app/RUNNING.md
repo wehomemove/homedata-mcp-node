@@ -74,7 +74,7 @@ CHROME_PATH="/path/to/Chrome" \
 node scripts/home-widget-screenshots.mjs
 ```
 
-Instead of `HOME_MAPBOX_TOKEN`, `HOME_MAPBOX_CREDENTIALS` may name a JSON file containing a `token` field. The script takes its data from the live endpoint (`search_homes`, `get_home`, `plan_viewings` and the two render tools; pass another endpoint URL as its argument) and writes `listings`, `map`, `shortlist` and `detail` shots, each `-light.jpg` and `-dark.jpg`, to `docs/home-chatgpt-app/screenshots/`. The map shot draws a live viewing route over the first four homes, attached to the rendered listings the way `render_home_listings` returns it, so it does not depend on the endpoint already running a widget that draws routes. It contains no demo listing fixtures.
+Instead of `HOME_MAPBOX_TOKEN`, `HOME_MAPBOX_CREDENTIALS` may name a JSON file containing a `token` field. The script takes its data from the live endpoint (`search_homes`, `get_home`, `commute_filter`, `plan_viewings` and the two render tools; pass another endpoint URL as its argument) and writes `listings`, `commute`, `route`, `map`, `shortlist` and `detail` shots, each `-light.jpg` and `-dark.jpg`, to `docs/home-chatgpt-app/screenshots/`. The route and commute views attach live Mapbox answers to the rendered listings just as `render_home_listings` receives them. It contains no demo listing fixtures.
 
 ## Searching by wishes
 
