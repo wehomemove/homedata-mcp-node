@@ -169,6 +169,29 @@ function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+/** Turn listing-agent HTML into safe, readable plain-text paragraphs. */
+export function cleanListingDescription(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const decoded = value
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/?(?:p|div|li|ul|ol|h[1-6]|blockquote|section|article)\b[^>]*>/gi, "\n")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&(#\d+|#x[\da-f]+|amp|lt|gt|quot|apos|nbsp);/gi, (entity, code: string) => {
+      const named: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+      if (code[0] !== "#") return named[code.toLowerCase()] ?? entity;
+      const numeric = code[1]?.toLowerCase() === "x" ? Number.parseInt(code.slice(2), 16) : Number.parseInt(code.slice(1), 10);
+      return Number.isFinite(numeric) && numeric > 0 && numeric <= 0x10ffff ? String.fromCodePoint(numeric) : entity;
+    })
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[\t\f\v ]+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+  return decoded || null;
+}
+
 function coordinate(value: unknown): string | null {
   const numeric = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(numeric) ? String(numeric) : null;
@@ -385,7 +408,7 @@ export class HomeClient {
       .filter((v) => typeof v === "string" && v.trim()).join(", ");
     return {
       ...trimCard(card),
-      description: detail["description"] ?? null,
+      description: cleanListingDescription(detail["description"]),
       reception_rooms: detail["reception_rooms"] ?? null,
       floor_area_sqm: detail["epc_floor_area"] ?? detail["predicted_floor_area"] ?? null,
       coordinates: { latitude: detail["latitude"] ?? null, longitude: detail["longitude"] ?? null },
@@ -643,7 +666,9 @@ export class HomeClient {
         scope: "area",
         postcode: area["postcode"],
         notice: "These are postcode-level area facts. They are not facts about this home.",
-        area,
+        // The standalone area tool keeps the complete source answers. The home
+        // widget gets the same small, stable buyer-facing shape as home facts.
+        area: buyerPropertyFacts(area),
       };
     } catch (error) {
       if (!(error instanceof HomeError)) throw error;

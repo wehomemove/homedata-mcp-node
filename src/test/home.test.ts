@@ -15,7 +15,7 @@ import golden from "../../docs/home-chatgpt-app/golden-prompts.json" with { type
 import { HomedataClient } from "../client.js";
 import { checkGoldenSet, type GoldenSet } from "../golden.js";
 import { TtlCache } from "../home/cache.js";
-import { HomeClient, HomeUpstreamError, type HomeClientOptions } from "../home/client.js";
+import { cleanListingDescription, HomeClient, HomeUpstreamError, type HomeClientOptions } from "../home/client.js";
 import { ACCOUNT_TOOLS, SAVED_SEARCH_TYPES, type AccountSettings } from "../home/account.js";
 import { accountFromEnv, createHomeHttpHandler, mapboxTokenFromEnv } from "../home/http.js";
 import { HOME_RULES } from "../home/plugin.js";
@@ -176,6 +176,14 @@ test("the generated dependency-free widget script is valid JavaScript", () => {
   assert.match(script, /risk\('Crime',p\.crime/);
 });
 
+test("listing descriptions become clean plain-text paragraphs", () => {
+  assert.equal(
+    cleanListingDescription('<p>A bright &amp; airy home.</p><p>Two bedrooms<br>Near the park&nbsp;&#163;.</p><script>ignore()</script>'),
+    "A bright & airy home.\n\nTwo bedrooms\n\nNear the park £.",
+  );
+  assert.equal(cleanListingDescription(" <div> </div> "), null);
+});
+
 test("the widget follows ChatGPT events, MCP host context and the system fallback for cards and live maps", () => {
   const source = HOME_WIDGET_HTML
     .replace("__HOME_MAPBOX_ASSETS__", "")
@@ -189,7 +197,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     const listeners = new Map<string, Array<(event: any) => void>>();
     const classes = new Set<string>();
     const styles: string[] = [];
-    const mapElement = { clientWidth: 600, querySelectorAll: () => [], querySelector: () => null };
+    const mapElement = { clientWidth: 600, dataset: {} as Record<string, string>, querySelectorAll: () => [], querySelector: () => null };
     const root = {
       innerHTML: "", querySelector: () => null,
       querySelectorAll: (selector: string) => selector === "[data-map]" ? [mapElement] : [],
@@ -197,7 +205,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     const classList = { toggle: (name: string, on: boolean) => on ? classes.add(name) : classes.delete(name) };
     const parent = { postMessage: () => undefined };
     const window = {
-      parent, openai,
+      parent, openai, mapboxgl: undefined as unknown,
       addEventListener: (type: string, listener: (event: any) => void) => listeners.set(type, [...(listeners.get(type) ?? []), listener]),
     };
     const button = () => ({
@@ -206,7 +214,9 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
       matches: (selector: string) => selector === "[data-index]", setAttribute: () => undefined,
       addEventListener: () => undefined,
     });
-    const document = { getElementById: () => root, documentElement: { classList }, createElement: button };
+    const mapboxListeners = new Map<string, () => void>();
+    const mapboxScript = { addEventListener: (type: string, listener: () => void) => mapboxListeners.set(type, listener) };
+    const document = { getElementById: (id: string) => id === "root" ? root : id === "home-mapbox" ? mapboxScript : null, documentElement: { classList }, createElement: button };
     class FakeMap {
       constructor(options: { style: string }) { styles.push(options.style); }
       addControl() {} jumpTo() {} fitBounds() {} remove() {}
@@ -215,10 +225,11 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     class Marker { setLngLat() { return this; } addTo() { return this; } }
     class Bounds { extend() { return this; } }
     const mapboxgl = { Map: FakeMap, Marker, LngLatBounds: Bounds, NavigationControl: class {}, accessToken: "" };
+    window.mapboxgl = mapboxgl;
     new Function("window", "document", "matchMedia", "mapboxgl", widgetScript)(window, document, () => ({ matches: systemDark }), mapboxgl);
     const dispatch = (type: string, event: any) => (listeners.get(type) ?? []).forEach((listener) => listener(event));
     const render = () => dispatch("message", { source: parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [{ price: 325000, coordinates: { latitude: 51.38, longitude: -2.36 } }] } } } });
-    return { classes, styles, parent, dispatch, render };
+    return { classes, styles, parent, dispatch, render, root, window, mapboxgl, mapboxListeners };
   }
 
   const chatgpt = harness(false, { theme: "dark" });
@@ -235,6 +246,26 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   const system = harness(true);
   system.render();
   assert.equal(system.styles[0], "mapbox://styles/mapbox/dark-v11");
+
+  const delayed = harness();
+  delayed.window.mapboxgl = undefined;
+  delayed.render();
+  assert.match(delayed.root.innerHTML, /data-map/);
+  assert.equal(delayed.styles.length, 0);
+  delayed.window.mapboxgl = delayed.mapboxgl;
+  delayed.mapboxListeners.get("load")?.();
+  assert.equal(delayed.styles[0], "mapbox://styles/mapbox/light-v11");
+
+  const detail = harness();
+  detail.dispatch("message", { source: detail.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
+    view: "detail", home: { enrichment: { scope: "area", area: { broadband: { max_download_speed: 1000 }, crime: { level: "14 recorded crimes" }, schools: [{ name: "Area Primary" }] } } },
+  } } } });
+  assert.match(detail.root.innerHTML, /Know before you view/);
+  assert.equal((detail.root.innerHTML.match(/for the area/g) ?? []).length, 3);
+  detail.dispatch("message", { source: detail.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
+    view: "detail", home: { enrichment: { available: false } },
+  } } } });
+  assert.doesNotMatch(detail.root.innerHTML, /Know before you view/);
 });
 
 test("render tools reuse supplied homes without another search and keep text fallbacks", async () => {
@@ -256,11 +287,11 @@ test("render tools reuse supplied homes without another search and keep text fal
   } finally { await stop(); }
 });
 
-test("Home publishes a v3 MCP Apps resource without a map surface when the browser token is absent", async () => {
+test("Home publishes a v4 MCP Apps resource without a map surface when the browser token is absent", async () => {
   const { mcp, stop } = await start();
   try {
     const resources = await mcp.listResources();
-    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v3.html"]);
+    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v4.html"]);
     const resource = await mcp.readResource({ uri: resources.resources[0]!.uri });
     const content = resource.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
     assert.equal(content.mimeType, "text/html;profile=mcp-app");
@@ -285,7 +316,7 @@ test("Home publishes the integrity-pinned interactive Mapbox client and CSP doma
     assert.match(content.text ?? "", /mapbox-gl-js\/v3\.15\.0/);
     assert.match(content.text ?? "", /integrity="sha384-bdNholknIOkWEb1azEKvnPJRgM0yXw3\+r2L2Hjhl0twDnzUC7WxuBpKfJdp7Fzpg" crossorigin="anonymous"/);
     assert.match(content.text ?? "", /mapboxToken="pk\.browser-token"/);
-    assert.match(content.text ?? "", /new mapboxgl\.Map/);
+    assert.match(content.text ?? "", /new gl\.Map/);
     assert.match(content.text ?? "", /NavigationControl/);
     const ui = content._meta?.["ui"] as { csp?: { connectDomains?: string[]; resourceDomains?: string[] } };
     assert.deepEqual(ui.csp?.connectDomains, ["https://api.mapbox.com", "https://events.mapbox.com"]);
@@ -425,8 +456,15 @@ test("get_home allowlists buyer facts and cannot reveal the matched core address
   } finally { await stop(); }
 });
 
-test("get_home returns clearly labelled postcode facts when no UPRN can be found", async () => {
-  const { mcp, requests, stop } = await start({ detail: { building_number: null, building_name: null } });
+test("get_home returns clearly labelled, widget-ready postcode facts when no UPRN can be found", async () => {
+  const { mcp, requests, stop } = await start({
+    detail: { building_number: null, building_name: null },
+    responseBody: {
+      "/crime/": { total_crimes: 14, latest_month: "2026-08" },
+      "/schools/nearby": { schools: [{ name: "Area Primary", distance_km: 0.5, ofsted: { rating: "Good" } }] },
+      "/broadband/": { max_download_speed: 1000 },
+    },
+  });
   try {
     const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
     const enrichment = (answer.structuredContent as Record<string, unknown>)["enrichment"] as Record<string, unknown>;
@@ -434,7 +472,11 @@ test("get_home returns clearly labelled postcode facts when no UPRN can be found
     assert.equal(enrichment["scope"], "area");
     assert.match(String(enrichment["notice"]), /not facts about this home/i);
     const area = enrichment["area"] as Record<string, unknown>;
-    assert.deepEqual(Object.keys(area), ["postcode", "crime", "schools", "broadband", "deprivation", "price_growth"]);
+    assert.deepEqual(area, {
+      broadband: { max_download_speed: 1000 },
+      schools: [{ name: "Area Primary", distance_km: 0.5, ofsted_rating: "Good" }],
+      crime: { level: "14 recorded crimes (2026-08)", total: 14, period: "2026-08" },
+    });
     assert.equal(requests.some((url) => url.pathname === "/address/find/" || url.pathname.includes("/core/")), false);
     assert.ok(requests.some((url) => url.pathname === "/schools/nearby"));
     assert.ok(requests.some((url) => url.pathname === "/price-growth/BA2/"));
