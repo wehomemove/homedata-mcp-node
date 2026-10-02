@@ -86,6 +86,19 @@ function enrichmentUnits(call: ToolCall): number {
   return Array.isArray(ids) ? Math.max(1, ids.length) : 1;
 }
 
+/** Turns the transport's 200 into a 401 with WWW-Authenticate once a call's token was refused. */
+function challengeOnRefusal(res: ServerResponse, challenge: () => string | undefined): void {
+  const writeHead = res.writeHead.bind(res) as (status: number, ...rest: unknown[]) => ServerResponse;
+  res.writeHead = ((status: number, ...rest: unknown[]) => {
+    const header = challenge();
+    if (header !== undefined && status === 200) {
+      res.setHeader("WWW-Authenticate", header);
+      status = 401;
+    }
+    return writeHead(status, ...rest);
+  }) as typeof res.writeHead;
+}
+
 /**
  * The same stateless Streamable HTTP shape as the Homedata app. Search tools
  * are no-auth; the account tools need a home.co.uk sign-in, which atlas checks.
@@ -123,7 +136,13 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
         (enrichmentCount && !enrichmentLimits.take(caller, enrichmentCount))) {
       return void send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" });
     }
-    const server = buildHomeServer(options.client, account ? { tools: account, token: bearerToken(req) } : undefined);
+    // When atlas refuses the caller's token, the tool result carries the challenge
+    // and the HTTP answer becomes a 401 with it, which is what makes ChatGPT ask
+    // the user to reconnect. An unsigned call keeps a 200 with the challenge in
+    // the result, as on the Homedata endpoint.
+    let refused: string | undefined;
+    challengeOnRefusal(res, () => refused);
+    const server = buildHomeServer(options.client, account ? { tools: account, token: bearerToken(req), onRefused: (challenge) => { refused ??= challenge; } } : undefined);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });
     await server.connect(transport);
