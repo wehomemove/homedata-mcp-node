@@ -1,11 +1,18 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  CallToolRequestSchema,
+  ListResourcesRequestSchema,
+  ListToolsRequestSchema,
+  ReadResourceRequestSchema,
+  type CallToolResult,
+} from "@modelcontextprotocol/sdk/types.js";
 
 import { VERSION } from "../index.js";
 import { HomeClient, HomeError, HomeUpstreamError, type SearchArgs, type SoldArgs } from "./client.js";
+import { HOME_WIDGET_HTML, HOME_WIDGET_URI } from "./widget.js";
 
 type Schema = Record<string, unknown>;
-type Tool = { name: string; title: string; description: string; inputSchema: Schema };
+type Tool = { name: string; title: string; description: string; inputSchema: Schema; outputSchema?: Schema; _meta?: Record<string, unknown> };
 const obj = (properties: Schema, required: string[] = []): Schema => ({
   type: "object", properties, additionalProperties: false, ...(required.length ? { required } : {}),
 });
@@ -15,6 +22,7 @@ const string = (description: string, values?: string[]): Schema => ({ type: "str
 export const HOME_INSTRUCTIONS = [
   "Home helps people buying, renting, selling or letting homes across the United Kingdom using home.co.uk.",
   "Start with search_homes. Keep the listing IDs it returns: get_home gives every photo, the full description, agent and Homedata checks; compare_homes gives the same depth side by side.",
+  "After choosing search results, call render_home_listings with those home objects to show cards and a map. Call render_home_detail with the get_home result to show its gallery and key facts. A refinement can pass a subset of the homes already returned to render_home_listings without searching again.",
   "Use area_insights for schools, broadband, recorded crime, deprivation and local price growth. Use the two calculators only when the user supplies their assumptions.",
   "Property enrichment is labelled with scope home. When no UPRN can be found, enrichment labelled with scope area contains postcode-level facts only: never present those as facts about the home.",
   "For sellers and landlords: sold_prices shows what nearby homes actually sold for and when, find_agents ranks local agents by the homes they are selling or letting in the area, and typical_rents gives current asking rents. Sold prices are evidence about other homes, never a valuation of the user's home.",
@@ -90,6 +98,26 @@ export const HOME_TOOLS: readonly Tool[] = [
     description: "Estimate monthly mortgage repayments from price, deposit, annual interest rate and term. Use this for affordability scenarios; do not present it as an offer or eligibility decision.",
     inputSchema: obj({ price: number("Purchase price in pounds.", 1), deposit: number("Deposit in pounds."), rate: number("Annual interest rate as a percentage."), term: number("Mortgage term in years.", 1) }, ["price", "deposit", "rate", "term"]),
   },
+  {
+    name: "render_home_listings", title: "Show home cards and map",
+    description: "Render home objects already returned by search_homes as a photo-card carousel and a map. Always call search_homes first, choose or refine its results, then pass those home objects here. For a follow-up refinement, re-render the earlier homes without searching again when they contain enough information.",
+    inputSchema: obj({
+      title: string("A short heading that describes this chosen set of homes."),
+      homes: { type: "array", minItems: 1, maxItems: 20, items: { type: "object", additionalProperties: true }, description: "One to twenty complete home card objects returned by search_homes." },
+    }, ["homes"]),
+    outputSchema: obj({
+      view: { type: "string", const: "listings" }, title: { type: "string" },
+      homes: { type: "array", minItems: 1, maxItems: 20, items: { type: "object", additionalProperties: true } },
+    }, ["view", "title", "homes"]),
+    _meta: { ui: { resourceUri: HOME_WIDGET_URI }, "openai/outputTemplate": HOME_WIDGET_URI, "openai/toolInvocation/invoking": "Drawing homes…", "openai/toolInvocation/invoked": "Homes ready" },
+  },
+  {
+    name: "render_home_detail", title: "Show home detail",
+    description: "Render one complete home object as a photo gallery with key facts. Always call get_home first and pass its complete result here; this tool does not fetch listing data.",
+    inputSchema: obj({ home: { type: "object", additionalProperties: true, description: "The complete home object returned by get_home." } }, ["home"]),
+    outputSchema: obj({ view: { type: "string", const: "detail" }, home: { type: "object", additionalProperties: true } }, ["view", "home"]),
+    _meta: { ui: { resourceUri: HOME_WIDGET_URI }, "openai/outputTemplate": HOME_WIDGET_URI, "openai/toolInvocation/invoking": "Opening home…", "openai/toolInvocation/invoked": "Home ready" },
+  },
 ] as const;
 
 const metadata = {
@@ -101,6 +129,20 @@ const metadata = {
 function result(body: unknown, isError = false): CallToolResult {
   const structuredContent = body !== null && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : { data: body };
   return { content: [{ type: "text", text: JSON.stringify(body, null, 2) }], structuredContent, ...(isError ? { isError: true } : {}) };
+}
+
+function renderListings(args: Record<string, unknown>): CallToolResult {
+  if (!Array.isArray(args["homes"]) || args["homes"].length < 1 || args["homes"].length > 20 || !args["homes"].every((home) => home !== null && typeof home === "object" && !Array.isArray(home))) {
+    throw new HomeError("homes must contain one to twenty home objects returned by search_homes");
+  }
+  const title = typeof args["title"] === "string" && args["title"].trim() ? args["title"].trim().slice(0, 120) : "Homes";
+  return result({ view: "listings", title, homes: args["homes"] });
+}
+
+function renderDetail(args: Record<string, unknown>): CallToolResult {
+  const home = args["home"];
+  if (home === null || typeof home !== "object" || Array.isArray(home)) throw new HomeError("home must be the complete object returned by get_home");
+  return result({ view: "detail", home });
 }
 
 function finite(args: Record<string, unknown>, name: string): number {
@@ -116,9 +158,32 @@ function positive(args: Record<string, unknown>, name: string, allowZero = false
 }
 
 export function buildHomeServer(client: HomeClient): Server {
-  const server = new Server({ name: "home", version: VERSION }, { capabilities: { tools: {} }, instructions: HOME_INSTRUCTIONS });
+  const server = new Server({ name: "home", version: VERSION }, { capabilities: { tools: {}, resources: {} }, instructions: HOME_INSTRUCTIONS });
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: [{ uri: HOME_WIDGET_URI, name: "Home listings and detail", description: "Responsive listing carousel, map and home gallery.", mimeType: "text/html;profile=mcp-app" }],
+  }));
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    if (request.params.uri !== HOME_WIDGET_URI) throw new Error("Unknown Home UI resource");
+    const csp = {
+      connectDomains: [],
+      resourceDomains: ["https://home.co.uk", "https://cdn.home.co.uk", "https://tile.openstreetmap.org"],
+    };
+    return { contents: [{
+      uri: HOME_WIDGET_URI,
+      mimeType: "text/html;profile=mcp-app",
+      text: HOME_WIDGET_HTML,
+      _meta: {
+        ui: { prefersBorder: false, domain: "https://mcp.home.co.uk", csp },
+        "openai/widgetDescription": "A responsive carousel and map for chosen homes, or a photo gallery and facts for one home.",
+        "openai/widgetPrefersBorder": false,
+        "openai/widgetDomain": "https://mcp.home.co.uk",
+        "openai/widgetCSP": { connect_domains: [], resource_domains: csp.resourceDomains, redirect_domains: ["https://home.co.uk"] },
+        "openai/ui": { availableDisplayModes: ["inline", "fullscreen"] },
+      },
+    }] };
+  });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: HOME_TOOLS.map((tool) => ({ ...tool, outputSchema: { type: "object", additionalProperties: true }, ...metadata })),
+    tools: HOME_TOOLS.map((tool) => ({ ...tool, outputSchema: tool.outputSchema ?? { type: "object", additionalProperties: true }, ...metadata, _meta: { ...metadata._meta, ...tool._meta } })),
   }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
@@ -148,6 +213,8 @@ export function buildHomeServer(client: HomeClient): Server {
           if (deposit >= price) throw new HomeError("deposit must be less than price");
           return result(await client.calculator("mortgage", { price: String(price), deposit: String(deposit), rate: String(positive(args, "rate", true)), term: String(positive(args, "term")) }));
         }
+        case "render_home_listings": return renderListings(args);
+        case "render_home_detail": return renderDetail(args);
         default: return result({ error: "unknown_tool", detail: request.params.name }, true);
       }
     } catch (error) {

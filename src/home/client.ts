@@ -87,7 +87,7 @@ function absoluteHomeUrl(value: unknown): string | null {
   try { return new URL(path, DEFAULT_HOME_URL).toString(); } catch { return null; }
 }
 
-/** Only fields useful on a search card. Never return card_html, boundaries or map pins. */
+/** Only fields useful on a search card. Never return card_html, boundaries or pre-rendered map pins. */
 export function trimCard(value: unknown): JsonObject {
   const p = object(value);
   const images = Array.isArray(p["images"]) ? p["images"] : [];
@@ -105,6 +105,7 @@ export function trimCard(value: unknown): JsonObject {
     status: p["latest_status"] ?? p["status_label"] ?? null,
     tenure: p["ownership"] ?? null,
     new_build: p["is_new_build"] ?? p["new_build"] ?? false,
+    new_listing: p["is_new"] ?? false,
     construction_age_band: p["construction_age_band"] ?? null,
     added_date: p["added_date"] ?? null,
     days_listed: p["days_listed"] ?? null,
@@ -112,6 +113,10 @@ export function trimCard(value: unknown): JsonObject {
     under_offer_date: p["first_offer_date"] ?? null,
     image: absoluteHomeUrl(object(primary)["thumbnail_cdn_url"] ?? object(primary)["cdn_url"] ?? p["main_image"]),
     agent: p["agent_name"] ?? null,
+    coordinates: {
+      latitude: p["latitude"] ?? object(p["coordinates"])["latitude"] ?? null,
+      longitude: p["longitude"] ?? object(p["coordinates"])["longitude"] ?? null,
+    },
   };
 }
 
