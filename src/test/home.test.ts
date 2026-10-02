@@ -158,10 +158,12 @@ test("map pins use the same measured pixel coordinate system as map tiles", () =
   }
 });
 
-test("rental map pins show exact prices rather than rounded thousands", () => {
+test("rental map pins show exact prices and sale prices use millions above seven figures", () => {
   assert.equal(homePinLabel(1500, "pcm"), "£1,500");
   assert.equal(homePinLabel(450, "pw"), "£450");
   assert.equal(homePinLabel(325000, null), "£325k");
+  assert.equal(homePinLabel(1000000, null), "£1m");
+  assert.equal(homePinLabel(1250000, null), "£1.3m");
 });
 
 test("listing ages are rounded into human time without exposing raw source floats", () => {
@@ -257,7 +259,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   const widgetScript = script;
   assert.match(source, /@media\(prefers-color-scheme:dark\)\{:root:not\(\.light\)/);
 
-  function harness(systemDark = false, openai: Record<string, unknown> | undefined = undefined) {
+  function harness(systemDark = false, openai: Record<string, unknown> | undefined = undefined, script = widgetScript) {
     const listeners = new Map<string, Array<(event: any) => void>>();
     const classes = new Set<string>();
     const styles: string[] = [];
@@ -269,7 +271,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
       innerHTML: "", querySelector: () => null,
       querySelectorAll(selector: string) {
         if (selector === "[data-map]" || selector === "[data-map]:not([data-drawn])" && !mapElement.dataset.drawn) return [mapElement];
-        const attribute = ({ "[data-shortlist]": "data-shortlist", "[data-all]": "data-all", "[data-compare]": "data-compare" } as Record<string, string>)[selector];
+        const attribute = ({ "[data-shortlist]": "data-shortlist", "[data-all]": "data-all", "[data-compare]": "data-compare", "[data-plan]": "data-plan" } as Record<string, string>)[selector];
         if (!attribute || !this.innerHTML.includes(attribute)) return [];
         if (controls.has(selector)) return [controls.get(selector)!];
         const control = { dataset: {} as Record<string, string>, onclick: undefined as ((event: any) => void) | undefined };
@@ -310,7 +312,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     class Bounds { extend() { return this; } }
     const mapboxgl = { Map: FakeMap, Marker, LngLatBounds: Bounds, NavigationControl: class {}, accessToken: "" };
     window.mapboxgl = mapboxgl;
-    new Function("window", "document", "matchMedia", "mapboxgl", widgetScript)(window, document, () => ({ matches: systemDark }), mapboxgl);
+    new Function("window", "document", "matchMedia", "mapboxgl", script)(window, document, () => ({ matches: systemDark }), mapboxgl);
     const dispatch = (type: string, event: any) => (listeners.get(type) ?? []).forEach((listener) => listener(event));
     const render = () => dispatch("message", { source: parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [{ price: 325000, coordinates: { latitude: 51.38, longitude: -2.36 } }] } } } });
     const click = (selector: string) => {
@@ -347,6 +349,21 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   assert.match(statuses.root.innerHTML, /<span class="card-tag"><i class="card-tag-dot"><\/i>New<\/span>/);
   assert.match(statuses.root.innerHTML, /<span class="card-tag card-tag-dark">Under offer<\/span>/);
   assert.match(statuses.root.innerHTML, /<span class="glass">New build<\/span>/);
+
+  const routes = harness();
+  routes.dispatch("message", { source: routes.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [
+    { id: "inside", address: "Inside home", price: 1000000, coordinates: { latitude: 51.38, longitude: -2.36 } },
+    { id: "outside", address: "Outside home", price: 500000, coordinates: { latitude: 51.39, longitude: -2.35 } },
+  ], commute: { homes_outside: [{ listing_id: "outside" }], reachable_area: { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [[[-2.37, 51.37], [-2.35, 51.37], [-2.35, 51.39], [-2.37, 51.37]]] } } }, route: { start: { name: "Bath Spa" }, stops: [{ stop: 1, listing_id: "inside", address: "Inside home", drive_from_previous_minutes: 4 }, { stop: 2, listing_id: "outside", address: "Outside home", drive_from_previous_minutes: 8 }], total_driving_minutes: 12, route: { type: "LineString", coordinates: [[-2.36, 51.38], [-2.35, 51.39]] } } } } } });
+  routes.mapEvents.get("style.load")?.();
+  assert.deepEqual(routes.layers.map((layer) => layer.id), ["home-buildings", "home-commute", "home-commute-area", "home-route", "home-viewing-route"]);
+  assert.equal(routes.layers[2]!.paint["fill-color"], "#ec4899");
+  assert.equal(routes.layers[2]!.paint["fill-opacity"], .16);
+  assert.equal(routes.layers[2]!.paint["fill-outline-color"], undefined);
+  assert.deepEqual(routes.layers[4]!.paint["line-gradient"], ["interpolate", ["linear"], ["line-progress"], 0, "#ec4899", 1, "#f97316"]);
+  assert.match(routes.pins[0]!.className, /route-stop/);
+  assert.match(routes.pins[1]!.className, /faded.*route-stop/);
+  assert.match(routes.root.innerHTML, /Start.*Bath Spa.*4 min.*Inside home.*8 min.*Outside home.*12 min driving/);
 
   const creative = harness(false, { widgetState: { shortlist: ["home-a", "home-b"] } });
   creative.dispatch("message", { source: creative.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", title: "Bath homes", homes: [
@@ -405,6 +422,25 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   assert.match(compare.root.innerHTML, /Original Bath results/);
   assert.match(compare.root.innerHTML, /Original C/);
 
+  const plannerCalls: Array<[string, Record<string, unknown>]> = [];
+  const planner = harness(false, { widgetState: { shortlist: ["home-a", "home-b"] }, callTool: async (name: string, args: Record<string, unknown>) => {
+    plannerCalls.push([name, args]); return { structuredContent: { stops: [{ stop: 1, listing_id: "home-b", address: "B" }, { stop: 2, listing_id: "home-a", address: "A", drive_from_previous_minutes: 6 }], total_driving_minutes: 6, route: { type: "LineString", coordinates: [] } } };
+  } });
+  planner.dispatch("message", { source: planner.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [{ id: "home-a" }, { id: "home-b" }] } } } });
+  planner.click("[data-shortlist]"); planner.click("[data-plan]");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(plannerCalls, [["plan_viewings", { listing_ids: ["home-a", "home-b"] }]]);
+  assert.match(planner.root.innerHTML, /Your viewing day/);
+  assert.match(planner.root.innerHTML, /6 min driving/);
+
+  const noTokenSource = HOME_WIDGET_HTML.replace("__HOME_MAPBOX_ASSETS__", "").replace("__HOME_MAPBOX_TOKEN__", JSON.stringify(""));
+  const noTokenScript = noTokenSource.match(/<script>([\s\S]*)<\/script>/)?.[1];
+  assert.ok(noTokenScript);
+  const noRouteTool = harness(false, { widgetState: { shortlist: ["home-a", "home-b"] } }, noTokenScript);
+  noRouteTool.dispatch("message", { source: noRouteTool.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [{ id: "home-a" }, { id: "home-b" }] } } } });
+  noRouteTool.click("[data-shortlist]");
+  assert.doesNotMatch(noRouteTool.root.innerHTML, /Plan my viewings/);
+
   const mcp = harness();
   mcp.dispatch("message", { source: mcp.parent, data: { jsonrpc: "2.0", id: "home-ui-init", result: { hostContext: { theme: "dark" } } } });
   assert.ok(mcp.classes.has("dark"));
@@ -461,11 +497,11 @@ test("render tools reuse supplied homes without another search and keep text fal
   } finally { await stop(); }
 });
 
-test("Home publishes a v9 MCP Apps resource without a map surface when the browser token is absent", async () => {
+test("Home publishes a v10 MCP Apps resource without a map surface when the browser token is absent", async () => {
   const { mcp, stop } = await start();
   try {
     const resources = await mcp.listResources();
-    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v9.html"]);
+    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v10.html"]);
     const resource = await mcp.readResource({ uri: resources.resources[0]!.uri });
     const content = resource.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
     assert.equal(content.mimeType, "text/html;profile=mcp-app");
@@ -1654,7 +1690,10 @@ test("commute and viewing tools are listed read-only only when a Mapbox token is
     for (const name of ["commute_filter", "plan_viewings"]) {
       const tool = tools.find((t) => t.name === name)!;
       assert.deepEqual(tool.annotations, { readOnlyHint: true, destructiveHint: false, openWorldHint: true }, name);
-      assert.equal(tool._meta?.["ui"], undefined, `${name} draws no widget in this release`);
+      if (name === "plan_viewings") {
+        assert.equal(tool._meta?.["openai/widgetAccessible"], true);
+        assert.deepEqual(tool._meta?.["ui"], { visibility: ["model", "app"] });
+      } else assert.equal(tool._meta?.["ui"], undefined, `${name} is not called by the widget`);
     }
     const commute = tools.find((t) => t.name === "commute_filter")!.inputSchema.properties as Record<string, any>;
     assert.deepEqual(commute["mode"].enum, ["walk", "cycle", "drive"]);

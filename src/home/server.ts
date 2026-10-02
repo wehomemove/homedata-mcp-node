@@ -35,7 +35,7 @@ export const HOME_INSTRUCTIONS = [
 ].join(" ");
 
 /** Added to the instructions only when the Mapbox route tools are listed. */
-export const HOME_ROUTE_INSTRUCTIONS = "For commute questions (homes within a walk, cycle or drive of a station, office, school or postcode), call commute_filter with the place, minutes, mode and the listing IDs from search_homes; describe homes_inside as within that journey and any near_edge home as borderline. For a viewing day, call plan_viewings with two to six listing IDs and the user's start point if they gave one; give the stops in its order with each leg's minutes and the total. Both give Mapbox travel estimates without live traffic or timetables: never promise an arrival time.";
+export const HOME_ROUTE_INSTRUCTIONS = "For commute questions (homes within a walk, cycle or drive of a station, office, school or postcode), call commute_filter with the place, minutes, mode and the listing IDs from search_homes; describe homes_inside as within that journey and any near_edge home as borderline. Pass its complete result as commute alongside the original home objects to render_home_listings so the widget draws the reachable area. For a viewing day, call plan_viewings with two to six listing IDs and the user's start point if they gave one; give the stops in its order with each leg's minutes and the total, then pass its complete result as route to render_home_listings so the widget draws the itinerary. Both give Mapbox travel estimates without live traffic or timetables: never promise an arrival time.";
 
 /** Added to the instructions only when the account tools are listed. */
 export const HOME_ACCOUNT_INSTRUCTIONS = "Signed-in users can keep saved searches (list_saved_searches, create_saved_search, pause_saved_search, delete_saved_search, get_saved_search_new_results) and price alerts on single homes (list_price_alerts, create_price_alert, pause_price_alert, delete_price_alert) on their own home.co.uk account. Confirm the details before creating anything and before deleting, which cannot be undone; use the ids the list tools return.";
@@ -117,10 +117,13 @@ export const HOME_TOOLS: readonly Tool[] = [
     inputSchema: obj({
       title: string("A short heading that describes this chosen set of homes."),
       homes: { type: "array", minItems: 1, maxItems: 20, items: { type: "object", additionalProperties: true }, description: "One to twenty complete home card objects returned by search_homes." },
+      commute: { type: "object", additionalProperties: true, description: "Optional complete commute_filter result to draw as a reachable area and fade homes outside it." },
+      route: { type: "object", additionalProperties: true, description: "Optional complete plan_viewings result to draw as an ordered route with stops and leg times." },
     }, ["homes"]),
     outputSchema: obj({
       view: { type: "string", const: "listings" }, title: { type: "string" },
       homes: { type: "array", minItems: 1, maxItems: 20, items: { type: "object", additionalProperties: true } },
+      commute: { type: "object", additionalProperties: true }, route: { type: "object", additionalProperties: true },
     }, ["view", "title", "homes"]),
     _meta: { ui: { resourceUri: HOME_WIDGET_URI }, "openai/outputTemplate": HOME_WIDGET_URI, "openai/toolInvocation/invoking": "Drawing homes…", "openai/toolInvocation/invoked": "Homes ready" },
   },
@@ -156,6 +159,7 @@ export const HOME_ROUTE_TOOLS: readonly Tool[] = [
       start: string("Where the day starts, if the user said: an address, station or full UK postcode with its town. Leave out to let the route start at whichever home is best."),
       start_kind: placeKind("What the start is, when known."),
     }, ["listing_ids"]),
+    _meta: { "openai/widgetAccessible": true, ui: { visibility: ["model", "app"] } },
   },
 ] as const;
 
@@ -191,7 +195,8 @@ function renderListings(args: Record<string, unknown>): CallToolResult {
     throw new HomeError("homes must contain one to twenty home objects returned by search_homes");
   }
   const title = typeof args["title"] === "string" && args["title"].trim() ? args["title"].trim().slice(0, 120) : "Homes";
-  return result({ view: "listings", title, homes: args["homes"] });
+  const optional = (name: "commute" | "route") => args[name] !== undefined && args[name] !== null && typeof args[name] === "object" && !Array.isArray(args[name]) ? { [name]: args[name] } : {};
+  return result({ view: "listings", title, homes: args["homes"], ...optional("commute"), ...optional("route") });
 }
 
 function renderDetail(args: Record<string, unknown>): CallToolResult {

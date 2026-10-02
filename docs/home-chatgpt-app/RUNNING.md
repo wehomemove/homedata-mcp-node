@@ -66,7 +66,7 @@ The second runs the review packet's positive cases live and prints what came bac
 
 To check the wish searches and the seller and renter tools against live home.co.uk data (no key needed), run `node scripts/home-live-check.mjs` after `npm run build`. Each wish check reads every matched listing again on its own and fails if any quoted evidence is not in that listing's description.
 
-To refresh the light and dark listing screenshots from live Bath results, build first and provide a public Mapbox token plus a local Chrome or Chromium executable:
+To refresh the light and dark route screenshots from live Bath results, build first and provide a public Mapbox token plus a local Chrome or Chromium executable:
 
 ```sh
 HOME_MAPBOX_TOKEN=pk.example \
@@ -74,7 +74,7 @@ CHROME_PATH="/path/to/Chrome" \
 node scripts/home-widget-screenshots.mjs
 ```
 
-Instead of `HOME_MAPBOX_TOKEN`, `HOME_MAPBOX_CREDENTIALS` may name a JSON file containing a `token` field. The script writes both `docs/home-chatgpt-app/screenshots/listings-light.jpg` and `listings-dark.jpg`; it contains no demo listing fixtures.
+Instead of `HOME_MAPBOX_TOKEN`, `HOME_MAPBOX_CREDENTIALS` may name a JSON file containing a `token` field. The script refreshes `docs/home-chatgpt-app/screenshots/listings-light.jpg` and `listings-dark.jpg` with live listings, commute and viewing-route data; it contains no demo listing fixtures.
 
 ## Searching by wishes
 
@@ -100,7 +100,7 @@ One-home and comparison responses first use `property_uprn` from property detail
 
 ## Commutes and viewing days
 
-`commute_filter` and `plan_viewings` are listed only when `MAPBOX_PUBLIC_TOKEN` is set. They call Mapbox from the server; the widget is unchanged. Each home's position comes from `/api/property-details/{id}` (the trusted listing lane, as for wishes) and is kept for an hour. Neither tool uses the Homedata key or the enrichment limit. The token goes only to `api.mapbox.com`, with `Referer: <HOME_MCP_RESOURCE>/` so a URL restriction on the token still admits the server, and it is never logged.
+`commute_filter` and `plan_viewings` are listed only when `MAPBOX_PUBLIC_TOKEN` is set. They call Mapbox from the server. Pass their complete answers to `render_home_listings` as `commute` or `route`; the widget draws the reachable area or ordered viewing route. Each home's position comes from `/api/property-details/{id}` (the trusted listing lane, as for wishes) and is kept for an hour. Neither tool uses the Homedata key or the enrichment limit. The token goes only to `api.mapbox.com`, with `Referer: <HOME_MCP_RESOURCE>/` so a URL restriction on the token still admits the server, and it is never logged.
 
 - **Places** come from the Search Box API (`/search/searchbox/v1/forward`, UK only, five candidates, biased towards the homes). Search Box always answers something: `zzqxv nowhere` came back as Norwich City Council, an unknown postcode as a neighbour (`BA1 9ZZ` as `GU2 9ZZ`), and "King Edward's School, Bath" sits among Bath Theatre School and Bath Guitar School. So:
   - a full postcode must come back as exactly that postcode;
