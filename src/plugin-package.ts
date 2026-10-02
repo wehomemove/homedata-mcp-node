@@ -5,9 +5,14 @@
  *
  * validatePackage() holds the manifest to OpenAI's submission limits
  * (https://developers.openai.com/plugins/deploy/submission#manifest-fields) and
- * to Homedata's own listing rules. It runs in npm test and before every ZIP.
+ * to the listing rules of the plugin being built (HOMEDATA_RULES by default; the
+ * Home app passes its own). validateSkills() holds bundled skills to the tools
+ * the endpoint really lists. Both run in npm test and before every ZIP.
  */
-import type { GoldenSet } from "./golden.js";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import type { GoldenSet, ListedTool } from "./golden.js";
 
 export interface Manifest {
   name: string;
@@ -75,31 +80,49 @@ export function contrast(a: string, b: string): number {
  */
 const BANNED_LISTING_TEXT: Array<[RegExp, string]> = [
   [/£|\$|\b\d+(?:\.\d+)?\s*(?:p|pence|pounds?|dollars?|tokens?|credits?)\b|\bprice[sd]? (from|at)\b|\btokens?\b|\bcredits?\b|\bfree\b|\btrial\b|\bdiscount|\bsubscri|\bupgrade\b|\bcheap/i, "pricing or an offer"],
-  [/\brightmove\b|\bzoopla\b|\bonthemarket\b|\bOTM\b/i, "a competitor portal"],
-  [/\bscrap(e|ed|ing)\b|\bVOA\b|\bloki\b|\bthor\b/i, "an internal detail"],
+  [/\brightmove\b|\bzoopla\b|\bonthemarket\b|\bOTM\b|\bprimelocation\b|\bpurplebricks\b|\bopenrent\b|\bspareroom\b/i, "a competitor portal"],
+  [/\bscrap(e|ed|ing)\b|\bVOA\b|\bloki\b|\bthor\b|\batlas\b/i, "an internal detail"],
 ];
 
 /** The one paid-credit disclosure approved for the public listing. */
 export const APPROVED_PAID_CREDIT_DISCLOSURE = "Lookups consume paid credits from your Homedata account.";
 
-/** Remove only the exact approved sentence before applying the pricing rules. */
-function withoutApprovedPaidCreditDisclosure(text: string): string {
-  return text.split(APPROVED_PAID_CREDIT_DISCLOSURE).join("");
+/** What one plugin's listing may and must say, beyond OpenAI's own limits. */
+export interface PackageRules {
+  /** The one sentence about paid use the listing must carry once, or null when it may say nothing about paying. */
+  paidDisclosure: string | null;
+  /** review.commerce_description, word for word. */
+  commerceDescription: string;
+  /** Claims the plugin cannot make; a sentence may name them only to rule them out. */
+  outOfScope: RegExp;
+  outOfScopeLabel: string;
 }
 
 /**
  * Homedata does not value homes or search homes for sale, so text the model or
- * a user reads may name either only to rule it out. Each sentence that does
- * must carry a negation. Sentences end at ". " or a line break.
+ * a user reads may name either only to rule it out.
  */
-const OUT_OF_SCOPE = /\bvalu(e|es|ed|ing|ation|ations)\b|\bworth\b|\bfor sale\b|\blistings?\b/i;
+export const HOMEDATA_RULES: PackageRules = {
+  paidDisclosure: APPROVED_PAID_CREDIT_DISCLOSURE,
+  commerceDescription:
+    "Lookups consume paid credits from the connected account. Credits are bought outside ChatGPT, and the plugin takes no payments.",
+  outOfScope: /\bvalu(e|es|ed|ing|ation|ations)\b|\bworth\b|\bfor sale\b|\blistings?\b/i,
+  outOfScopeLabel: "a valuation or homes for sale",
+};
+
+/** Remove only the exact approved sentence before applying the pricing rules. */
+function withoutDisclosure(text: string, disclosure: string | null): string {
+  return disclosure ? text.split(disclosure).join("") : text;
+}
+
+/** Each sentence naming an out-of-scope claim must carry a negation. Sentences end at ". " or a line break. */
 const NEGATED = /\b(not|never|no)\b|n't\b/i;
 
-/** Sentences that offer a valuation or homes for sale instead of stating the limit. */
-export function outOfScopeClaims(text: string): string[] {
+/** Sentences that offer an out-of-scope claim instead of stating the limit. */
+export function outOfScopeClaims(text: string, pattern: RegExp = HOMEDATA_RULES.outOfScope): string[] {
   return text
     .split(/(?<=\.)\s+|\n+/)
-    .filter((sentence) => OUT_OF_SCOPE.test(sentence) && !NEGATED.test(sentence));
+    .filter((sentence) => pattern.test(sentence) && !NEGATED.test(sentence));
 }
 
 const MAX = { displayName: 30, shortDescription: 30, longDescription: 4000, developerName: 80, prompt: 128 };
@@ -111,7 +134,7 @@ export interface Asset {
 }
 
 /** Problems that would fail submission or break Homedata's rules; empty means ready. */
-export function validatePackage(manifest: Manifest, toolNames: string[], assets: Asset[]): string[] {
+export function validatePackage(manifest: Manifest, toolNames: string[], assets: Asset[], rules: PackageRules = HOMEDATA_RULES): string[] {
   const problems: string[] = [];
   const ui = manifest.extensions["com.openai"].interface as Record<string, any>;
   const text = (v: unknown) => (typeof v === "string" ? v : "");
@@ -166,28 +189,20 @@ export function validatePackage(manifest: Manifest, toolNames: string[], assets:
   ]
     .map(text)
     .join("\n");
-  if (text(manifest["description"]).split(APPROVED_PAID_CREDIT_DISCLOSURE).length !== 2) {
-    problems.push("description must contain the approved paid-credit disclosure exactly once");
+  if (rules.paidDisclosure) {
+    if (text(manifest["description"]).split(rules.paidDisclosure).length !== 2) {
+      problems.push("description must contain the approved paid-credit disclosure exactly once");
+    }
+    if (text(ui["longDescription"]).split(rules.paidDisclosure).length !== 2) {
+      problems.push("interface.longDescription must contain the approved paid-credit disclosure exactly once");
+    }
   }
-  if (text(ui["longDescription"]).split(APPROVED_PAID_CREDIT_DISCLOSURE).length !== 2) {
-    problems.push("interface.longDescription must contain the approved paid-credit disclosure exactly once");
-  }
-  const guardedListingText = withoutApprovedPaidCreditDisclosure(listingText);
-  for (const [pattern, why] of BANNED_LISTING_TEXT) {
-    const hit = pattern.exec(guardedListingText);
-    if (hit) problems.push(`listing text mentions ${why}: "${hit[0]}"`);
-  }
-  for (const sentence of outOfScopeClaims(listingText)) {
-    problems.push(`listing text names a valuation or homes for sale other than as a limit: "${sentence}"`);
-  }
+  problems.push(...listingTextProblems(withoutDisclosure(listingText, rules.paidDisclosure), rules, "listing text"));
 
   const openai = manifest.extensions["com.openai"];
   if (openai.review?.["commerce"] !== false) problems.push("review.commerce must be false");
-  if (
-    openai.review?.["commerce_description"] !==
-    "Lookups consume paid credits from the connected account. Credits are bought outside ChatGPT, and the plugin takes no payments."
-  ) {
-    problems.push("review.commerce_description must carry the approved paid-credit and no-payments disclosure");
+  if (openai.review?.["commerce_description"] !== rules.commerceDescription) {
+    problems.push("review.commerce_description must carry the approved no-payments disclosure word for word");
   }
   const cases = openai.review?.test_cases;
   if (cases?.positive.length !== 5) problems.push(`review: ${cases?.positive.length ?? 0} positive cases; initial review needs exactly 5`);
@@ -204,5 +219,94 @@ export function validatePackage(manifest: Manifest, toolNames: string[], assets:
   const countries = openai.publication?.["countries"];
   if (!Array.isArray(countries) || countries.some((c) => !/^[A-Z]{2}$/.test(String(c)))) problems.push("publication.countries must list uppercase country codes");
 
+  return problems;
+}
+
+/** Pricing, competitor, internal and out-of-scope wording in text a user or the model reads. */
+function listingTextProblems(text: string, rules: PackageRules, where: string): string[] {
+  const problems: string[] = [];
+  for (const [pattern, why] of BANNED_LISTING_TEXT) {
+    const hit = pattern.exec(text);
+    if (hit) problems.push(`${where} mentions ${why}: "${hit[0]}"`);
+  }
+  for (const sentence of outOfScopeClaims(text, rules.outOfScope)) {
+    problems.push(`${where} names ${rules.outOfScopeLabel} other than as a limit: "${sentence}"`);
+  }
+  return problems;
+}
+
+/** One bundled skill: skills/<dir>/SKILL.md and, when present, agents/openai.yaml. */
+export interface Skill {
+  dir: string;
+  text: string;
+  openaiYaml?: string;
+}
+
+/** Every skills/<dir>/ under a plugin source folder; none when it has no skills folder. */
+export function readSkills(pluginDir: string): Skill[] {
+  const root = join(pluginDir, "skills");
+  let dirs: string[];
+  try {
+    dirs = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+  } catch {
+    return [];
+  }
+  return dirs.map((dir) => {
+    const read = (path: string) => {
+      try { return readFileSync(join(root, dir, path), "utf8"); } catch { return undefined; }
+    };
+    return { dir, text: read("SKILL.md") ?? "", openaiYaml: read("agents/openai.yaml") };
+  });
+}
+
+/**
+ * Skills teach the model a workflow over the endpoint's tools, so each must
+ * name real tools: every `snake_case` word in backticks has to be a listed
+ * tool, one of its arguments or one of its allowed values, and at least one has
+ * to be a tool. A renamed tool turns a skill red here instead of leaving the
+ * model to call a name that does not exist. Skill text is held to the same
+ * listing rules as the directory text, and a declared MCP dependency must point
+ * at the server the package ships.
+ */
+export function validateSkills(skills: Skill[], tools: ListedTool[], rules: PackageRules, mcpUrl: string): string[] {
+  const problems: string[] = [];
+  const toolNames = new Set(tools.map((t) => t.name));
+  const known = new Set<string>(toolNames);
+  for (const tool of tools) {
+    for (const [arg, schema] of Object.entries(tool.inputSchema.properties ?? {})) {
+      known.add(arg);
+      for (const value of schema.enum ?? []) known.add(String(value));
+    }
+  }
+
+  for (const skill of skills) {
+    const at = `skill ${skill.dir}`;
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(skill.dir) || skill.dir.length > 64) problems.push(`${at}: folder name must be lowercase words joined by single hyphens, at most 64`);
+    const front = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(skill.text);
+    if (!front) {
+      problems.push(`${at}: SKILL.md must start with name and description front matter`);
+      continue;
+    }
+    const field = (name: string) => new RegExp(`^${name}:[ \\t]*(.+)$`, "m").exec(front[1]!)?.[1]?.trim() ?? "";
+    const name = field("name");
+    const description = field("description");
+    const body = front[2]!;
+    if (name !== skill.dir) problems.push(`${at}: name "${name}" must match its folder`);
+    if (!description) problems.push(`${at}: description is required; it decides when the model uses the skill`);
+    if (description.length > 1024) problems.push(`${at}: description is ${description.length} characters; the limit is 1024`);
+    if (!body.trim()) problems.push(`${at}: the body must hold the workflow`);
+
+    const named = [...body.matchAll(/`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`/g)].map((m) => m[1]!);
+    for (const word of new Set(named)) {
+      if (!known.has(word)) problems.push(`${at}: names \`${word}\`, which is not a tool, argument or value the endpoint lists`);
+    }
+    if (!named.some((word) => toolNames.has(word))) problems.push(`${at}: names no tool the endpoint lists`);
+    problems.push(...listingTextProblems(`${description}\n${body}`, rules, at));
+
+    if (skill.openaiYaml !== undefined) {
+      const url = /^\s*url:\s*"?([^"\s]+)"?\s*$/m.exec(skill.openaiYaml)?.[1];
+      if (url !== mcpUrl) problems.push(`${at}: agents/openai.yaml must depend on ${mcpUrl}, not ${url ?? "nothing"}`);
+    }
+  }
   return problems;
 }

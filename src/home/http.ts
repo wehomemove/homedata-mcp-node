@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 
 import { HomedataClient } from "../client.js";
 import { isMain } from "../entry.js";
-import { checkCallsPerMinute, noStoreOnErrors } from "../http.js";
+import { checkAppsChallenge, checkCallsPerMinute, noStoreOnErrors } from "../http.js";
 import { VERSION } from "../index.js";
 import { MinuteLimiter } from "../limiter.js";
 import { HomeClient } from "./client.js";
@@ -18,6 +18,8 @@ export interface HomeHttpOptions {
   enrichmentsPerMinute?: number;
   /** A proxy header trusted only when the deployment strips caller-supplied copies. */
   clientIpHeader?: string;
+  /** The plugin portal's domain token, served at /.well-known/openai-apps-challenge; unset answers 404. */
+  appsChallenge?: string;
   now?: () => number;
 }
 const send = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => res.writeHead(status, { "Content-Type": "application/json", ...headers }).end(JSON.stringify(body));
@@ -81,6 +83,11 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
     noStoreOnErrors(res);
     const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
     if (requestPath === "/healthz") return void send(res, 200, { ok: true, service: "home", version: VERSION });
+    if (requestPath === "/.well-known/openai-apps-challenge") {
+      if (!options.appsChallenge) return void send(res, 404, { error: "not_found" });
+      // Exactly the token: OpenAI rejects JSON, a list or a trailing newline.
+      return void res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" }).end(options.appsChallenge);
+    }
     if (requestPath !== path) return void send(res, 404, { error: "not_found" });
     if (req.method !== "POST") { res.setHeader("Allow", "POST"); return void send(res, 405, { error: "method_not_allowed" }); }
     let body: unknown;
@@ -113,6 +120,7 @@ async function main(): Promise<void> {
     callsPerMinute: checkCallsPerMinute(process.env["MCP_CALLS_PER_MINUTE"]),
     enrichmentsPerMinute: checkCallsPerMinute(process.env["HOME_ENRICHMENTS_PER_MINUTE"] || "4"),
     clientIpHeader: (process.env["HOME_CLIENT_IP_HEADER"] ?? "").trim() || undefined,
+    appsChallenge: checkAppsChallenge(process.env["OPENAI_APPS_CHALLENGE"]),
   });
   const port = Number(process.env["PORT"] || 4177); const host = process.env["HOST"] || "127.0.0.1";
   createServer((req, res) => void handler(req, res).catch((error) => { console.error("[home-mcp-http] request failed:", error); if (!res.headersSent) send(res, 500, { error: "internal_error" }); })).listen(port, host, () => console.error(`home-mcp-http ${VERSION} listening on http://${host}:${port}`));

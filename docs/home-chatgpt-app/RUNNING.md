@@ -14,7 +14,7 @@ The Homedata key is held only by the server and enriches listing details. ChatGP
 
 `MCP_CALLS_PER_MINUTE` defaults to 30 per caller. `HOME_ENRICHMENTS_PER_MINUTE` separately defaults to four homes per caller because those lookups use the server-held Homedata key; a four-home comparison consumes all four units. A home with a UPRN uses one Homedata request, an exact address match uses two, and the postcode fallback uses five (or six after an unsuccessful address match). The default therefore caps the worst case at 24 Homedata requests per caller per minute. Coordinate-to-postcode recovery uses Home's reverse-geocode endpoint and does not use the Homedata key. Set `HOME_CLIENT_IP_HEADER=cf-connecting-ip` only behind the trusted proxy configuration that removes caller-supplied copies of that header. Without it, limits use the direct socket address. Invalid limit values prevent startup rather than silently removing the cap.
 
-The endpoint answers MCP at `HOME_MCP_PATH` and health checks at `/healthz`. It is stateless: each POST creates a fresh MCP server and no search, shortlist or user preference is retained.
+The endpoint answers MCP at `HOME_MCP_PATH` and health checks at `/healthz`. Set `OPENAI_APPS_CHALLENGE` to the plugin portal's domain token to serve it at `/.well-known/openai-apps-challenge`; unset, that path answers 404. It is stateless: each POST creates a fresh MCP server and no search, shortlist or user preference is retained.
 
 ## Deploy
 
@@ -45,7 +45,10 @@ The Home supervisor program must run `dist/home/http.js` from `/home/forge/mcp.h
 
 ```sh
 node scripts/home-golden-check.mjs https://mcp.home.co.uk/mcp
+node scripts/home-review-live.mjs https://mcp.home.co.uk/mcp
 ```
+
+The second runs the review packet's positive cases live and prints what came back. It uses four enrichment units in one minute, the default cap, so wait a minute before running it twice.
 
 To check the seller and renter tools against live home.co.uk data (no key needed), run `node scripts/home-live-check.mjs` after `npm run build`.
 
