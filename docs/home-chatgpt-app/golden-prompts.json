@@ -1,14 +1,20 @@
 {
   "about": "Golden prompts for the separate home.co.uk Home ChatGPT app. Run these after changing tool names, descriptions, schemas, instructions or skills. The review packet (review: true) is five positive and three negative cases, each run live against https://mcp.home.co.uk/mcp before its outcome was written; the positive outcomes name figures and filters a reviewer can check.",
-  "version": "2026-10-02-routes",
+  "version": "2026-10-02-submission",
   "cases": [
     {
-      "id": "search-family-home", "kind": "indirect", "review": true,
+      "id": "afford-two-beds-with-garden", "kind": "indirect", "review": true,
+      "prompt": "I'm a first-time buyer with a £40,000 deposit and can pay £1,600 a month at 4.5% over 25 years. What price can I go up to? Show me two-bedroom homes for sale in Bath with a garden in that budget.",
+      "expect": {"calls": [{"tool": "calculate_mortgage", "args": {"price": 327000, "deposit": 40000, "rate": 4.5, "term": 25}}, {"tool": "calculate_stamp_duty", "args": {"price": 327000, "buyer_type": "first_time"}}, {"tool": "search_homes", "args": {"location": "Bath", "listing_type": "sale", "min_beds": 2, "max_price": 327000, "wishes": ["garden"]}}, {"tool": "render_home_listings", "args": {}}],
+        "outcome": "Uses the what-can-i-afford skill: tries prices with calculate_mortgage until the repayment is just under £1,600 a month (live on 2 October 2026, £327,000 with a £287,000 loan came to £1,595.24 a month and £328,000 to £1,600.80), finds stamp duty of £1,350 with first-time buyer relief, then calls search_homes for Bath with two or more bedrooms, at most £327,000 and the garden wish, and shows the results with render_home_listings. The sum comes first, labelled as an estimate to confirm with a broker. Every home shown has two or more bedrooms and costs £327,000 or less. A garden is claimed only with the listing's own words (18 homes on the first page stated one). No lender or product is named and nothing is said about whether the user can borrow it."}
+    },
+    {
+      "id": "search-family-home", "kind": "indirect", "review": false,
       "prompt": "Find me three-bedroom houses for sale in Bath up to £500,000, newest first.",
       "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "sale", "min_beds": 3, "max_price": 500000, "sort": "newest"}}, {"tool": "render_home_listings", "args": {}}], "outcome": "Calls search_homes once with Bath, sale, at least three bedrooms, at most £500,000 and newest first, then passes the chosen results to render_home_listings for cards and a map without another search. Every home shown has three or more bedrooms and an asking price of £500,000 or less."}
     },
     {
-      "id": "new-build-search", "kind": "indirect", "review": true,
+      "id": "new-build-search", "kind": "indirect", "review": false,
       "prompt": "Show me new-build homes for sale in Bristol, cheapest first.",
       "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bristol", "listing_type": "sale", "new_build": true, "sort": "price_asc"}}], "outcome": "Calls search_homes once with Bristol, sale, new-build only and lowest price first, then lists the new-build homes in rising price order with a home.co.uk link for each."}
     },
@@ -18,9 +24,21 @@
       "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "sale", "min_beds": 3, "max_price": 500000, "sort": "newest"}}, {"tool": "get_home", "args": {}}], "allowed": [{"tool": "area_insights", "args": {}}], "outcome": "Uses the prepare-for-a-viewing skill: opens the newest result with get_home, then gives a checklist drawn from that home's tenure, age band, time on market and any reduction, reports the Homedata checks that came back and says plainly which were unavailable, ends with five questions for the agent and the listing link, and gives no estimate of what the home is worth."}
     },
     {
-      "id": "compare-rentals", "kind": "indirect", "review": true,
+      "id": "compare-rentals", "kind": "indirect", "review": false,
       "prompt": "Find two-bedroom homes to rent in Bath and compare the three newest side by side.",
       "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "rent", "min_beds": 2, "max_beds": 2, "sort": "newest"}}, {"tool": "compare_homes", "args": {}}], "outcome": "Uses the shortlist-and-compare skill: passes the first three listing IDs from the search to compare_homes, then sets the three homes side by side by rent, property type, photos and the facts in each description, marking any fact a home does not publish as not available."}
+    },
+    {
+      "id": "compare-rentals-commute", "kind": "indirect", "review": true,
+      "prompt": "Find two-bedroom homes to rent in Bath, compare the three newest side by side, and tell me which are within a 20-minute walk of Bath Spa station.",
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "rent", "min_beds": 2, "max_beds": 2, "sort": "newest"}}, {"tool": "compare_homes", "args": {}}, {"tool": "commute_filter", "args": {"place": "Bath Spa station", "place_kind": "station", "minutes": 20, "mode": "walk"}}], "allowed": [{"tool": "render_home_listings", "args": {}}],
+        "outcome": "Uses the shortlist-and-compare skill: passes the first three listing IDs from the search to compare_homes, then the same IDs to commute_filter with Bath Spa station, 20 minutes and walk. Sets the three homes side by side by rent, property type and the facts in each description, names only the homes in homes_inside as within the walk, calls any near_edge home borderline, and says the time is a typical walking estimate. Live on 2 October 2026 the three newest were £1,300, £1,850 and £2,000 a month, and only the Sydney Road flat was inside the 20-minute walk."}
+    },
+    {
+      "id": "viewing-day-plan", "kind": "indirect", "review": true,
+      "prompt": "Find the four newest homes for sale in Bath with at least three bedrooms and plan the quickest order to view them on Saturday, starting from Bath Spa station.",
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "sale", "min_beds": 3, "sort": "newest"}}, {"tool": "plan_viewings", "args": {"start": "Bath Spa station", "start_kind": "station"}}], "allowed": [{"tool": "get_home", "args": {}}, {"tool": "render_home_listings", "args": {}}],
+        "outcome": "Uses the plan-a-viewing-day skill: passes the first four listing IDs from the search and Bath Spa station as the start to plan_viewings, then lists the homes in its stop order with each drive in minutes, the running total and the total driving time, giving each address exactly as returned. Says the times leave out traffic, parking and the viewings themselves, and promises no arrival time. Live on 2 October 2026 the four stops came to 66 minutes of driving, starting 20 minutes from the station at Knightstone Close, Peasedown St. John."}
     },
     {
       "id": "buying-costs", "kind": "indirect", "review": true,

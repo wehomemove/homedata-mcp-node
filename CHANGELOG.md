@@ -84,10 +84,12 @@ identifiers remain unavailable.
 The Home app has its own ChatGPT plugin package beside Homedata's
 (`node scripts/package-chatgpt-plugin.mjs home`): the Home listing, the site's
 heart icon, worldwide availability, five positive and three negative review
-cases from the Home golden set, and three skills (prepare for a viewing,
+cases from the Home golden set (covering wishes, commute and a viewing day),
+and five skills (what can I afford, prepare for a viewing, plan a viewing day,
 shortlist and compare, buying costs) checked against the tools the endpoint
-lists. The Home endpoint serves the portal's domain challenge
-(`OPENAI_APPS_CHALLENGE`).
+lists. The packager refuses any file holding a key or token, and the ZIP to
+upload is committed at `docs/home-chatgpt-app/home-chatgpt-plugin.zip`. The
+Home endpoint serves the portal's domain challenge (`OPENAI_APPS_CHALLENGE`).
 
 The property tiers (`property_discovery`, `property_address`, `property_base`,
 `property_core`, `property_complete`, `property_custom`), property attributes,

@@ -1,3 +1,17 @@
+/**
+ * Submission screenshots of the Home widget from live data, light and dark:
+ *
+ *   npm run build
+ *   HOME_MAPBOX_CREDENTIALS=… CHROME_PATH=… node scripts/home-widget-screenshots.mjs [Home MCP endpoint URL]
+ *
+ * The data comes from the Home endpoint itself (https://mcp.home.co.uk/mcp by
+ * default): search_homes for three-bedroom homes for sale in Bath with a
+ * garden, render_home_listings and render_home_detail for the widget's own
+ * tool output, get_home for the first result, and plan_viewings for the
+ * map's viewing route. Nothing is sample data.
+ * Writes listings, map, detail and shortlist shots, each -light and -dark, to
+ * docs/home-chatgpt-app/screenshots/.
+ */
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -5,13 +19,11 @@ import { pathToFileURL } from "node:url";
 
 import { chromium } from "playwright-core";
 
-import { HomedataClient } from "../dist/client.js";
-import { HomeClient } from "../dist/home/client.js";
-import { MapboxRoutes } from "../dist/home/routes.js";
-import { matchWishes } from "../dist/home/wishes.js";
 import { HOME_WIDGET_HTML } from "../dist/home/widget.js";
 
 const root = resolve(import.meta.dirname, "..");
+const out = (name) => resolve(root, "docs/home-chatgpt-app/screenshots", name);
+const endpoint = process.argv[2] ?? "https://mcp.home.co.uk/mcp";
 const credentialsPath = process.env.HOME_MAPBOX_CREDENTIALS;
 const credentials = credentialsPath ? JSON.parse(await readFile(credentialsPath, "utf8")) : {};
 const token = process.env.HOME_MAPBOX_TOKEN ?? credentials.token;
@@ -21,31 +33,36 @@ if (typeof token !== "string" || !token.startsWith("pk.")) {
 const chromePath = process.env.CHROME_PATH;
 if (!chromePath) throw new Error("Set CHROME_PATH to a Chrome or Chromium executable");
 
-const homeClient = new HomeClient({ homedata: new HomedataClient({ apiKey: "unused" }) });
-const search = await homeClient.search({ location: "Bath", listing_type: "sale" });
-const homes = await Promise.all(search.homes.slice(0, 8).map(async (home) => {
-  const id = String(home.id ?? "");
-  if (!id) return home;
-  try {
-    const detail = await fetch(`https://home.co.uk/api/property-details/${encodeURIComponent(id)}`).then((response) => response.ok ? response.json() : null);
-    const matches = matchWishes(detail?.description, ["garden"]);
-    return matches.length ? { ...home, wishes_matched: matches } : home;
-  } catch {
-    return home;
-  }
-}));
-const routes = new MapboxRoutes({ token, referer: "https://mcp.home.co.uk/" });
-const routeIds = homes.map((home) => home.id).filter(Boolean).slice(0, 4);
-const [commute, route] = await Promise.all([
-  routes.commute(homeClient, { place: "Bath Spa station", place_kind: "station", minutes: 15, mode: "walk", listing_ids: homes.map((home) => home.id).filter(Boolean) }),
-  routes.viewings(homeClient, { listing_ids: routeIds, start: "BA1 1SU" }),
-]);
+let rpcId = 0;
+async function call(name, args) {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method: "tools/call", params: { name, arguments: args } }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !body?.result || body.result.isError) throw new Error(`${name}: HTTP ${response.status} ${JSON.stringify(body?.result?.structuredContent ?? body).slice(0, 200)}`);
+  return body.result.structuredContent;
+}
 
-const mapboxRoot = pathToFileURL(resolve(root, "node_modules/mapbox-gl/dist/")).href;
+const search = await call("search_homes", { location: "Bath", listing_type: "sale", min_beds: 3, max_price: 600000, wishes: ["garden"] });
+// Homes whose listing states the wish come first; show those with photos.
+const homes = search.homes.filter((h) => h.image && h.coordinates).slice(0, 8);
+if (homes.length < 4) throw new Error(`only ${homes.length} homes with photos came back`);
+const listings = await call("render_home_listings", { title: "Three-bedroom homes for sale in Bath with a garden", homes });
+const detail = await call("render_home_detail", { home: await call("get_home", { listing_id: homes[0].id }) });
+const shortlist = homes.slice(0, 3).map((h) => h.id);
+// The map shot draws a live viewing route over the first four homes. It rides
+// on the rendered listings exactly as render_home_listings returns it. (These
+// homes sit in villages outside any short walk of Bath Spa, so a commute area
+// here would only fade every pin.)
+const route = await call("plan_viewings", { listing_ids: homes.slice(0, 4).map((h) => h.id), start: "Bath Spa station", start_kind: "station" });
+const routed = { ...listings, route };
+console.log(`live data: ${search.total} homes, ${search.homes_matching_every_wish} stating a garden on page 1; detail ${detail.home.address}`);
+
+const mapboxRoot = `${pathToFileURL(resolve(root, "node_modules/mapbox-gl/dist")).href}/`;
 const assets = `<link rel="stylesheet" href="${mapboxRoot}mapbox-gl.css"><script id="home-mapbox" src="${mapboxRoot}mapbox-gl.js"></script>`;
-const html = HOME_WIDGET_HTML
-  .replace("__HOME_MAPBOX_ASSETS__", assets)
-  .replace("__HOME_MAPBOX_TOKEN__", JSON.stringify(token));
+const html = HOME_WIDGET_HTML.replace("__HOME_MAPBOX_ASSETS__", assets).replace("__HOME_MAPBOX_TOKEN__", JSON.stringify(token));
 const temporary = join(tmpdir(), `home-widget-${process.pid}.html`);
 await writeFile(temporary, html);
 
@@ -53,21 +70,49 @@ const browser = await chromium.launch({
   executablePath: chromePath,
   args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--allow-file-access-from-files"],
 });
+
+/** Open the widget as a host would, with this tool output and saved shortlist. */
+async function open(theme, toolOutput, viewport) {
+  const page = await browser.newPage({ viewport, deviceScaleFactor: 2 });
+  page.on("console", (message) => { if (message.type() === "error") console.error(`widget (${theme}): ${message.text().slice(0, 300)}`); });
+  await page.addInitScript(({ theme, toolOutput, shortlist }) => {
+    window.openai = { theme, toolOutput, widgetState: { shortlist }, setWidgetState: () => undefined, callTool: () => new Promise(() => undefined) };
+  }, { theme, toolOutput, shortlist });
+  await page.goto(pathToFileURL(temporary).href);
+  // Mapbox tiles and listing photos need real time to load; virtual time never fetches tiles.
+  await page.waitForTimeout(9_000);
+  return page;
+}
+
+const shot = async (target, name) => {
+  await target.screenshot({ path: out(name), type: "jpeg", quality: 90 });
+  console.log(`wrote docs/home-chatgpt-app/screenshots/${name}`);
+};
+
 try {
   for (const theme of ["light", "dark"]) {
-    const page = await browser.newPage({ viewport: { width: 1200, height: 982 }, deviceScaleFactor: 1 });
-    await page.addInitScript(({ theme, homes, commute, route }) => {
-      window.openai = {
-        theme,
-        widgetState: { shortlist: homes.slice(0, 2).map((home) => home.id) },
-        toolOutput: { view: "listings", title: "Bath homes and viewing day", homes, commute, route },
-        setWidgetState: () => undefined,
-      };
-    }, { theme, homes, commute, route });
-    await page.goto(pathToFileURL(temporary).href);
-    await page.waitForTimeout(9_000);
-    await page.screenshot({ path: resolve(root, `docs/home-chatgpt-app/screenshots/listings-${theme}.jpg`), type: "jpeg", quality: 92 });
+    const plain = await open(theme, listings, { width: 1200, height: 900 });
+    await shot(plain, `listings-${theme}.jpg`);
+    await plain.close();
+
+    const page = await open(theme, routed, { width: 1200, height: 900 });
+
+    // The whole route at its fitted zoom: stops are numbered pins, other homes hearts.
+    const map = page.locator("[data-map]").first();
+    await map.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(2_000);
+    await shot(map, `map-${theme}.jpg`);
     await page.close();
+
+    const saved = await open(theme, listings, { width: 1200, height: 900 });
+    await saved.click("[data-shortlist]");
+    await saved.waitForTimeout(5_000);
+    await shot(saved, `shortlist-${theme}.jpg`);
+    await saved.close();
+
+    const one = await open(theme, detail, { width: 430, height: 1300 });
+    await shot(one, `detail-${theme}.jpg`);
+    await one.close();
   }
 } finally {
   await browser.close();

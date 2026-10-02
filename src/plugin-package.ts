@@ -310,3 +310,36 @@ export function validateSkills(skills: Skill[], tools: ListedTool[], rules: Pack
   }
   return problems;
 }
+
+/** Shapes of keys and tokens that must never ship in a plugin ZIP. */
+const SECRET_SHAPES: Array<[RegExp, string]> = [
+  [/\bpk\.ey[A-Za-z0-9_-]{20,}/, "a Mapbox token"],
+  [/\bsk\.ey[A-Za-z0-9_-]{20,}/, "a Mapbox secret token"],
+  [/\bsk-[A-Za-z0-9_-]{20,}/, "an API secret key"],
+  [/\bgh[pousr]_[A-Za-z0-9]{30,}/, "a GitHub token"],
+  [/\bAKIA[0-9A-Z]{16}\b/, "an AWS access key"],
+  [new RegExp(["-----BEGIN [A-Z ]*PRIVATE", "KEY-----"].join(" ")), "a private key"],
+  [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/, "a JSON web token"],
+  [/\bBearer\s+[A-Za-z0-9._~+/-]{16,}/i, "a bearer token"],
+  [/\b[A-Z][A-Z0-9_]*(?:KEY|SECRET|TOKEN|PASSWORD)\s*=\s*\S+/, "an environment secret"],
+];
+
+/**
+ * Secrets in the files a package would ship, as "path: what" lines; empty
+ * means none. Text files are scanned for key and token shapes, and an .env or
+ * key file is refused by name whatever it holds. Binary files (images) are
+ * judged by name only.
+ */
+export function secretsIn(files: Array<{ path: string; bytes: Buffer }>): string[] {
+  const problems: string[] = [];
+  for (const { path, bytes } of files) {
+    const name = path.split("/").pop() ?? path;
+    if (/^\.env(\..*)?$|\.(pem|key|p8|p12)$|^credentials?(\..*)?$/i.test(name)) problems.push(`${path}: a secrets file must never be packaged`);
+    if (/\.(png|jpe?g|gif|webp|ico)$/i.test(name)) continue;
+    const text = bytes.toString("utf8");
+    for (const [shape, what] of SECRET_SHAPES) {
+      if (shape.test(text)) problems.push(`${path}: contains ${what}`);
+    }
+  }
+  return problems;
+}

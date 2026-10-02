@@ -8,7 +8,8 @@
  * chatgpt-plugin/; home writes dist-plugin/home-chatgpt-plugin.zip from
  * home-chatgpt-plugin/. Each holds plugin.json (built from listing.json plus
  * the golden set's review cases), mcp.json, the icons and any skills. Refuses
- * to write a ZIP that fails validatePackage() or validateSkills(). Reviewer
+ * to write a ZIP that fails validatePackage() or validateSkills(), or whose
+ * staged files hold anything secretsIn() recognises as a key or token. Reviewer
  * credentials never go in the package: they are entered in the portal's Review
  * details form.
  */
@@ -20,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { HOME_RULES } from '../dist/home/plugin.js';
 import { ACCOUNT_TOOLS } from '../dist/home/account.js';
 import { HOME_ROUTE_TOOLS, HOME_TOOLS } from '../dist/home/server.js';
-import { buildManifest, HOMEDATA_RULES, readSkills, validatePackage, validateSkills } from '../dist/plugin-package.js';
+import { buildManifest, HOMEDATA_RULES, readSkills, secretsIn, validatePackage, validateSkills } from '../dist/plugin-package.js';
 import { PROFILES } from '../dist/profile.js';
 import { profileTools } from '../dist/server.js';
 
@@ -70,5 +71,14 @@ writeFileSync(join(STAGE, 'plugin.json'), JSON.stringify(manifest, null, 2) + '\
 cpSync(join(SRC, 'mcp.json'), join(STAGE, 'mcp.json'));
 cpSync(join(SRC, 'assets'), join(STAGE, 'assets'), { recursive: true });
 if (existsSync(join(SRC, 'skills'))) cpSync(join(SRC, 'skills'), join(STAGE, 'skills'), { recursive: true });
+const staged = (dir, prefix = '') => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+  e.isDirectory() ? staged(join(dir, e.name), `${prefix}${e.name}/`) : [{ path: `${prefix}${e.name}`, bytes: readFileSync(join(dir, e.name)) }]);
+const secrets = secretsIn(staged(STAGE));
+if (secrets.length) {
+  for (const p of secrets) console.error(`- ${p}`);
+  rmSync(STAGE, { recursive: true, force: true });
+  console.error('package refused: secrets never go in the ZIP');
+  process.exit(1);
+}
 execFileSync('zip', ['-qrX', `../${ZIP}`, '.'], { cwd: STAGE });
 console.log(`wrote dist-plugin/${ZIP}`);
