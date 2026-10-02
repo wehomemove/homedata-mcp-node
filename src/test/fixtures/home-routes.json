@@ -1,0 +1,6510 @@
+{
+ "recorded_at": "2026-10-02",
+ "responses": {
+  "home.co.uk/api/property-details/e8e714fb-cbb4-407c-a5e7-6798764868d4": {
+   "status": 200,
+   "body": {
+    "id": "e8e714fb-cbb4-407c-a5e7-6798764868d4",
+    "latitude": 51.3793848,
+    "longitude": -2.4054228,
+    "postcode": "BA2 1SA",
+    "building_name": null,
+    "building_number": "11",
+    "street_name": "Cameley Green",
+    "locality": "Twerton",
+    "town_name": "Bath"
+   }
+  },
+  "home.co.uk/api/property-details/e00bc8f0-7f18-4a22-9506-39db58508669": {
+   "status": 200,
+   "body": {
+    "id": "e00bc8f0-7f18-4a22-9506-39db58508669",
+    "latitude": 51.377295,
+    "longitude": -2.3713526,
+    "postcode": "BA2 3HP",
+    "building_name": null,
+    "building_number": "44",
+    "street_name": "Lower Oldfield Park",
+    "locality": "Oldfield Park",
+    "town_name": "Bath"
+   }
+  },
+  "home.co.uk/api/property-details/8d060aea-00ac-40fd-9cd6-7f182d135d68": {
+   "status": 200,
+   "body": {
+    "id": "8d060aea-00ac-40fd-9cd6-7f182d135d68",
+    "latitude": 51.385887,
+    "longitude": -2.361695,
+    "postcode": null,
+    "building_name": null,
+    "building_number": null,
+    "street_name": null,
+    "locality": null,
+    "town_name": null
+   }
+  },
+  "home.co.uk/api/property-details/4f91b30b-99c9-4f23-bd3a-3fa842ce6014": {
+   "status": 200,
+   "body": {
+    "id": "4f91b30b-99c9-4f23-bd3a-3fa842ce6014",
+    "latitude": 51.3875728,
+    "longitude": -2.3597522,
+    "postcode": "BA1 5LY",
+    "building_name": null,
+    "building_number": "26",
+    "street_name": "The Paragon",
+    "locality": "Walcot",
+    "town_name": "Bath"
+   }
+  },
+  "home.co.uk/api/property-details/639e066f-95f7-485b-b0b9-778db067566d": {
+   "status": 200,
+   "body": {
+    "id": "639e066f-95f7-485b-b0b9-778db067566d",
+    "latitude": 51.3941247,
+    "longitude": -2.3888658,
+    "postcode": "BA1 4BW",
+    "building_name": null,
+    "building_number": "19",
+    "street_name": "Manor Road",
+    "locality": "Upper Weston",
+    "town_name": "Bath"
+   }
+  },
+  "home.co.uk/api/property-details/b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b": {
+   "status": 200,
+   "body": {
+    "id": "b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b",
+    "latitude": 51.3157686,
+    "longitude": -2.4178759,
+    "postcode": "BA2 8TJ",
+    "building_name": null,
+    "building_number": "12",
+    "street_name": "Heritage Close",
+    "locality": "Peasedown St John",
+    "town_name": "Bath"
+   }
+  },
+  "api.mapbox.com/search/searchbox/v1/forward?country=gb&language=en&limit=5&poi_category=railway_station%2Clight_rail_station%2Cpublic_transportation_station&proximity=-2.38416%2C51.37334&q=Bath+Spa+station&types=poi": {
+   "status": 200,
+   "body": {
+    "type": "FeatureCollection",
+    "features": [],
+    "attribution": "© 2026 Mapbox and its suppliers. All rights reserved. Use of this data is subject to the Mapbox Terms of Service. (https://www.mapbox.com/about/maps/)",
+    "response_id": "dvOsuPxXi66rMTotPSVuv-BpZJ9xTHgOSiD6hHRJi7Vq6iqyseZYVix0YuI84FZixi9fCQyNUDTgvMz1Bdlu0pQ3q58vTlsSaXc="
+   }
+  },
+  "api.mapbox.com/search/searchbox/v1/forward?country=gb&language=en&limit=5&poi_category=railway_station%2Clight_rail_station%2Cpublic_transportation_station&proximity=-2.38416%2C51.37334&q=Bath+Spa&types=poi": {
+   "status": 200,
+   "body": {
+    "type": "FeatureCollection",
+    "features": [
+     {
+      "type": "Feature",
+      "geometry": {
+       "coordinates": [
+        -2.35697763,
+        51.37776016
+       ],
+       "type": "Point"
+      },
+      "properties": {
+       "name": "Bath Spa",
+       "mapbox_id": "dXJuOm1ieHBvaTo4MmJmZDgxYS1jNWI1LTRiZmQtYTEwNi0zNmUwZGI1ZjRmOTU",
+       "feature_type": "poi",
+       "address": "Bath",
+       "full_address": "Bath, BA1 1SU, United Kingdom",
+       "place_formatted": "BA1 1SU, United Kingdom",
+       "context": {
+        "country": {
+         "name": "United Kingdom",
+         "country_code": "GB",
+         "country_code_alpha_3": "GBR"
+        },
+        "postcode": {
+         "id": "dXJuOm1ieHBsYzpJV05PVHc",
+         "name": "BA1 1SU"
+        },
+        "place": {
+         "id": "dXJuOm1ieHBsYzpEbWhQ",
+         "name": "Bath"
+        },
+        "neighborhood": {
+         "id": "dXJuOm1ieHBsYzpBeHhzVHc",
+         "name": "Widcombe"
+        }
+       },
+       "coordinates": {
+        "latitude": 51.37776016,
+        "longitude": -2.35697763,
+        "routable_points": [
+         {
+          "name": "POI",
+          "latitude": 51.37781453514261,
+          "longitude": -2.356979776387208
+         }
+        ]
+       },
+       "language": "",
+       "maki": "bus",
+       "poi_category": [
+        "public transit station",
+        "transportation"
+       ],
+       "poi_category_ids": [
+        "public_transportation_station",
+        "transportation"
+       ],
+       "external_ids": {
+        "dataplor": "779fa918-b85a-4351-96da-3a7575111061"
+       },
+       "metadata": {
+        "website": "https://www.gwr.com/plan-journey/stations-and-routes/bath-spa"
+       },
+       "distance": 1950
+      }
+     }
+    ],
+    "attribution": "© 2026 Mapbox and its suppliers. All rights reserved. Use of this data is subject to the Mapbox Terms of Service. (https://www.mapbox.com/about/maps/)",
+    "response_id": "dvOsuPxXi66rMTotPSVuv-BpZJ9xTHgOSiD6hHRJi7Vq6iqyseZYV0Vrb5U18yMJuzQqdnyMLF2OzlFUAUEHDRhqup5NROvUHXs="
+   }
+  },
+  "api.mapbox.com/isochrone/v1/mapbox/walking/-2.35698,51.37776?contours_minutes=15&denoise=1&generalize=25&polygons=true": {
+   "status": 200,
+   "body": {
+    "features": [
+     {
+      "properties": {
+       "fill-opacity": 0.33,
+       "fillColor": "#bf4040",
+       "opacity": 0.33,
+       "fill": "#bf4040",
+       "fillOpacity": 0.33,
+       "color": "#bf4040",
+       "contour": 15,
+       "metric": "time"
+      },
+      "geometry": {
+       "coordinates": [
+        [
+         [
+          -2.35598,
+          51.387039
+         ],
+         [
+          -2.358189,
+          51.386969
+         ],
+         [
+          -2.35898,
+          51.386414
+         ],
+         [
+          -2.35998,
+          51.386554
+         ],
+         [
+          -2.36098,
+          51.386193
+         ],
+         [
+          -2.36198,
+          51.386421
+         ],
+         [
+          -2.36398,
+          51.38549
+         ],
+         [
+          -2.36498,
+          51.385669
+         ],
+         [
+          -2.368481,
+          51.38476
+         ],
+         [
+          -2.371113,
+          51.38376
+         ],
+         [
+          -2.371281,
+          51.38276
+         ],
+         [
+          -2.372725,
+          51.38076
+         ],
+         [
+          -2.371671,
+          51.37776
+         ],
+         [
+          -2.369592,
+          51.375148
+         ],
+         [
+          -2.367871,
+          51.374869
+         ],
+         [
+          -2.36698,
+          51.374305
+         ],
+         [
+          -2.36598,
+          51.374293
+         ],
+         [
+          -2.36498,
+          51.375107
+         ],
+         [
+          -2.363199,
+          51.374541
+         ],
+         [
+          -2.36212,
+          51.37462
+         ],
+         [
+          -2.361512,
+          51.374228
+         ],
+         [
+          -2.358621,
+          51.374119
+         ],
+         [
+          -2.358172,
+          51.373568
+         ],
+         [
+          -2.35652,
+          51.37322
+         ],
+         [
+          -2.356236,
+          51.37276
+         ],
+         [
+          -2.356294,
+          51.372074
+         ],
+         [
+          -2.357337,
+          51.37176
+         ],
+         [
+          -2.35598,
+          51.371556
+         ],
+         [
+          -2.35498,
+          51.370515
+         ],
+         [
+          -2.35398,
+          51.370377
+         ],
+         [
+          -2.352495,
+          51.371275
+         ],
+         [
+          -2.35198,
+          51.372077
+         ],
+         [
+          -2.351586,
+          51.37076
+         ],
+         [
+          -2.35098,
+          51.370707
+         ],
+         [
+          -2.350427,
+          51.371207
+         ],
+         [
+          -2.34898,
+          51.371154
+         ],
+         [
+          -2.346919,
+          51.371699
+         ],
+         [
+          -2.347283,
+          51.373063
+         ],
+         [
+          -2.346846,
+          51.37376
+         ],
+         [
+          -2.347516,
+          51.37576
+         ],
+         [
+          -2.344966,
+          51.37676
+         ],
+         [
+          -2.345415,
+          51.37776
+         ],
+         [
+          -2.346711,
+          51.37876
+         ],
+         [
+          -2.346352,
+          51.37976
+         ],
+         [
+          -2.34698,
+          51.381426
+         ],
+         [
+          -2.34898,
+          51.382928
+         ],
+         [
+          -2.34998,
+          51.382566
+         ],
+         [
+          -2.350727,
+          51.384013
+         ],
+         [
+          -2.352486,
+          51.384254
+         ],
+         [
+          -2.353314,
+          51.385426
+         ],
+         [
+          -2.354827,
+          51.385913
+         ],
+         [
+          -2.35598,
+          51.387039
+         ]
+        ]
+       ],
+       "type": "Polygon"
+      },
+      "type": "Feature"
+     }
+    ],
+    "type": "FeatureCollection"
+   }
+  },
+  "api.mapbox.com/search/searchbox/v1/forward?country=gb&language=en&limit=5&poi_category=school%2Celementary_school%2Chigh_school%2Ceducation&proximity=-2.39298%2C51.36921&q=King+Edward%27s+School%2C+Bath&types=poi": {
+   "status": 200,
+   "body": {
+    "type": "FeatureCollection",
+    "features": [
+     {
+      "type": "Feature",
+      "geometry": {
+       "coordinates": [
+        -2.34237726,
+        51.38628423
+       ],
+       "type": "Point"
+      },
+      "properties": {
+       "name": "King Edward's School",
+       "mapbox_id": "dXJuOm1ieHBvaTo0MjliMDQzZS02NTk2LTRhNzMtODIxNy01OGQwMzYzMGY5ZGE",
+       "feature_type": "poi",
+       "address": "North Rd",
+       "full_address": "North Rd, Bath, BA2 6HX, United Kingdom",
+       "place_formatted": "Bath, BA2 6HX, United Kingdom",
+       "context": {
+        "country": {
+         "name": "United Kingdom",
+         "country_code": "GB",
+         "country_code_alpha_3": "GBR"
+        },
+        "postcode": {
+         "id": "dXJuOm1ieHBsYzpBK1Z4Yms4",
+         "name": "BA2 6HX"
+        },
+        "place": {
+         "id": "dXJuOm1ieHBsYzpEbWhQ",
+         "name": "Bath"
+        },
+        "street": {
+         "name": "North Rd"
+        }
+       },
+       "coordinates": {
+        "latitude": 51.38628423,
+        "longitude": -2.34237726,
+        "routable_points": [
+         {
+          "name": "POI",
+          "latitude": 51.38601471384615,
+          "longitude": -2.342223250769228
+         }
+        ]
+       },
+       "language": "",
+       "maki": "school",
+       "poi_category": [
+        "education",
+        "school"
+       ],
+       "poi_category_ids": [
+        "education",
+        "school"
+       ],
+       "external_ids": {
+        "dataplor": "3d816d06-5902-469f-a073-4582ae1c95b9"
+       },
+       "metadata": {
+        "phone": "+441225464313",
+        "website": "http://www.kesbath.com/",
+        "open_hours": {
+         "periods": [
+          {
+           "open": {
+            "day": 1,
+            "time": "0830"
+           },
+           "close": {
+            "day": 1,
+            "time": "1600"
+           }
+          },
+          {
+           "open": {
+            "day": 2,
+            "time": "0830"
+           },
+           "close": {
+            "day": 2,
+            "time": "1600"
+           }
+          },
+          {
+           "open": {
+            "day": 3,
+            "time": "0830"
+           },
+           "close": {
+            "day": 3,
+            "time": "1600"
+           }
+          },
+          {
+           "open": {
+            "day": 4,
+            "time": "0830"
+           },
+           "close": {
+            "day": 4,
+            "time": "1600"
+           }
+          },
+          {
+           "open": {
+            "day": 5,
+            "time": "0830"
+           },
+           "close": {
+            "day": 5,
+            "time": "1600"
+           }
+          }
+         ]
+        }
+       },
+       "distance": 3992
+      }
+     },
+     {
+      "type": "Feature",
+      "geometry": {
+       "coordinates": [
+        -2.38365047,
+        51.39053161
+       ],
+       "type": "Point"
+      },
+      "properties": {
+       "name": "King Edward's Pre-Prep & Nursery School",
+       "mapbox_id": "dXJuOm1ieHBvaTplNTI5NjRkZS04ODA0LTRmNTktOTQwNC04N2E1NmNkYzIyNzE",
+       "feature_type": "poi",
+       "address": "Weston Lane",
+       "full_address": "Weston Lane, Bath, BA1 4AQ, United Kingdom",
+       "place_formatted": "Bath, BA1 4AQ, United Kingdom",
+       "context": {
+        "country": {
+         "name": "United Kingdom",
+         "country_code": "GB",
+         "country_code_alpha_3": "GBR"
+        },
+        "postcode": {
+         "id": "dXJuOm1ieHBsYzpJeXZPVHc",
+         "name": "BA1 4AQ"
+        },
+        "place": {
+         "id": "dXJuOm1ieHBsYzpEbWhQ",
+         "name": "Bath"
+        },
+        "neighborhood": {
+         "id": "dXJuOm1ieHBsYzpBdzFzVHc",
+         "name": "Weston Park"
+        },
+        "street": {
+         "name": "Weston Lane"
+        }
+       },
+       "coordinates": {
+        "latitude": 51.39053161,
+        "longitude": -2.38365047,
+        "routable_points": [
+         {
+          "name": "POI",
+          "latitude": 51.390534,
+          "longitude": -2.383292
+         }
+        ]
+       },
+       "language": "",
+       "maki": "school",
+       "poi_category": [
+        "education",
+        "kindergarten",
+        "school"
+       ],
+       "poi_category_ids": [
+        "education",
+        "kindergarten",
+        "school"
+       ],
+       "external_ids": {
+        "dataplor": "e73b7392-dcb2-45b8-a860-28e56d7baef3"
+       },
+       "metadata": {
+        "phone": "+441225421681",
+        "website": "http://www.kesbath.com/",
+        "open_hours": {
+         "periods": [
+          {
+           "open": {
+            "day": 1,
+            "time": "0830"
+           },
+           "close": {
+            "day": 1,
+            "time": "1630"
+           }
+          },
+          {
+           "open": {
+            "day": 2,
+            "time": "0830"
+           },
+           "close": {
+            "day": 2,
+            "time": "1630"
+           }
+          },
+          {
+           "open": {
+            "day": 3,
+            "time": "0830"
+           },
+           "close": {
+            "day": 3,
+            "time": "1630"
+           }
+          },
+          {
+           "open": {
+            "day": 4,
+            "time": "0830"
+           },
+           "close": {
+            "day": 4,
+            "time": "1630"
+           }
+          },
+          {
+           "open": {
+            "day": 5,
+            "time": "0830"
+           },
+           "close": {
+            "day": 5,
+            "time": "1630"
+           }
+          }
+         ]
+        }
+       },
+       "distance": 2458
+      }
+     },
+     {
+      "type": "Feature",
+      "geometry": {
+       "coordinates": [
+        -2.36035564,
+        51.37217093
+       ],
+       "type": "Point"
+      },
+      "properties": {
+       "name": "Bath Theatre School",
+       "mapbox_id": "dXJuOm1ieHBvaTpjNmVmNDhhZi1lMjM1LTRlMzAtYTA5NS00N2NmZjVhMGRlYWU",
+       "feature_type": "poi",
+       "address": "Alexandra Park",
+       "full_address": "Alexandra Park, Bath, BA2 4LL, United Kingdom",
+       "place_formatted": "Bath, BA2 4LL, United Kingdom",
+       "context": {
+        "country": {
+         "name": "United Kingdom",
+         "country_code": "GB",
+         "country_code_alpha_3": "GBR"
+        },
+        "postcode": {
+         "id": "dXJuOm1ieHBsYzpKWUZ1VHc",
+         "name": "BA2 4LL"
+        },
+        "place": {
+         "id": "dXJuOm1ieHBsYzpEbWhQ",
+         "name": "Bath"
+        },
+        "neighborhood": {
+         "id": "dXJuOm1ieHBsYzpMd3hQ",
+         "name": "Beechen Cliff"
+        }
+       },
+       "coordinates": {
+        "latitude": 51.37217093,
+        "longitude": -2.36035564,
+        "routable_points": [
+         {
+          "name": "POI",
+          "latitude": 51.37212977915238,
+          "longitude": -2.360364281678001
+         }
+        ]
+       },
+       "language": "",
+       "maki": "school",
+       "poi_category": [
+        "education"
+       ],
+       "poi_category_ids": [
+        "education"
+       ],
+       "external_ids": {
+        "dataplor": "7d738f03-049b-4aed-bb5f-93247c45b129"
+       },
+       "metadata": {
+        "phone": "+441225640046",
+        "website": "http://www.baththeatreschool.com/",
+        "open_hours": {
+         "periods": [
+          {
+           "open": {
+            "day": 1,
+            "time": "0900"
+           },
+           "close": {
+            "day": 1,
+            "time": "1700"
+           }
+          },
+          {
+           "open": {
+            "day": 2,
+            "time": "0900"
+           },
+           "close": {
+            "day": 2,
+            "time": "1700"
+           }
+          },
+          {
+           "open": {
+            "day": 3,
+            "time": "0900"
+           },
+           "close": {
+            "day": 3,
+            "time": "1700"
+           }
+          },
+          {
+           "open": {
+            "day": 4,
+            "time": "0900"
+           },
+           "close": {
+            "day": 4,
+            "time": "1700"
+           }
+          },
+          {
+           "open": {
+            "day": 5,
+            "time": "0900"
+           },
+           "close": {
+            "day": 5,
+            "time": "1700"
+           }
+          },
+          {
+           "open": {
+            "day": 6,
+            "time": "0930"
+           },
+           "close": {
+            "day": 6,
+            "time": "1630"
+           }
+          }
+         ]
+        }
+       },
+       "distance": 2288
+      }
+     },
+     {
+      "type": "Feature",
+      "geometry": {
+       "coordinates": [
+        -2.35487409,
+        51.39081952
+       ],
+       "type": "Point"
+      },
+      "properties": {
+       "name": "Bath Guitar School",
+       "mapbox_id": "dXJuOm1ieHBvaTplNTFjMjI2Yi1mZjRmLTQ0ZmYtOGUxNS03ZjkyODIyMGVlYjQ",
+       "feature_type": "poi",
+       "address": "5",
+       "full_address": "5, undefined, Bath, BA1 6AD, United Kingdom",
+       "place_formatted": "undefined, Bath, BA1 6AD, United Kingdom",
+       "context": {
+        "country": {
+         "name": "United Kingdom",
+         "country_code": "GB",
+         "country_code_alpha_3": "GBR"
+        },
+        "postcode": {
+         "id": "dXJuOm1ieHBsYzpJNzhPVHc",
+         "name": "BA1 6AD"
+        },
+        "place": {
+         "id": "dXJuOm1ieHBsYzpEbWhQ",
+         "name": "Bath"
+        },
+        "neighborhood": {
+         "id": "dXJuOm1ieHBsYzpBdStNVHc",
+         "name": "Walcot"
+        }
+       },
+       "coordinates": {
+        "latitude": 51.39081952,
+        "longitude": -2.35487409,
+        "routable_points": [
+         {
+          "name": "POI",
+          "latitude": 51.390883654655084,
+          "longitude": -2.3548980682719436
+         }
+        ]
+       },
+       "language": "",
+       "maki": "school",
+       "poi_category": [
+        "education",
+        "music school",
+        "school"
+       ],
+       "poi_category_ids": [
+        "education",
+        "music_school",
+        "school"
+       ],
+       "external_ids": {
+        "dataplor": "d517fe8d-8571-4046-9635-2130a4fe39b1"
+       },
+       "metadata": {
+        "phone": "+447977580129",
+        "website": "http://www.bathguitarschool.com/",
+        "open_hours": {
+         "periods": [
+          {
+           "open": {
+            "day": 1,
+            "time": "1200"
+           },
+           "close": {
+            "day": 1,
+            "time": "2000"
+           }
+          },
+          {
+           "open": {
+            "day": 2,
+            "time": "1200"
+           },
+           "close": {
+            "day": 2,
+            "time": "2000"
+           }
+          },
+          {
+           "open": {
+            "day": 3,
+            "time": "1200"
+           },
+           "close": {
+            "day": 3,
+            "time": "2000"
+           }
+          },
+          {
+           "open": {
+            "day": 4,
+            "time": "1200"
+           },
+           "close": {
+            "day": 4,
+            "time": "2000"
+           }
+          },
+          {
+           "open": {
+            "day": 5,
+            "time": "1200"
+           },
+           "close": {
+            "day": 5,
+            "time": "2000"
+           }
+          },
+          {
+           "open": {
+            "day": 6,
+            "time": "1000"
+           },
+           "close": {
+            "day": 6,
+            "time": "1500"
+           }
+          }
+         ]
+        }
+       },
+       "distance": 3573
+      }
+     },
+     {
+      "type": "Feature",
+      "geometry": {
+       "coordinates": [
+        -2.32658514,
+        51.37957088
+       ],
+       "type": "Point"
+      },
+      "properties": {
+       "name": "Team Bath School of Sports Massage and Soft Tissue Therapy",
+       "name_preferred": "Team Bath School of Sports Massage and Soft Tissue Therapy",
+       "mapbox_id": "dXJuOm1ieHBvaTpmZDhhOWEzMy0xZDljLTQyNDktODRmMS02NjhhN2E0NDU0ZWY",
+       "feature_type": "poi",
+       "address": "University of Bath",
+       "full_address": "University of Bath, Bath, BA2 7JP, United Kingdom",
+       "place_formatted": "Bath, BA2 7JP, United Kingdom",
+       "context": {
+        "country": {
+         "name": "United Kingdom",
+         "country_code": "GB",
+         "country_code_alpha_3": "GBR"
+        },
+        "postcode": {
+         "id": "dXJuOm1ieHBsYzpBMUtqems4",
+         "name": "BA2 7JP"
+        },
+        "place": {
+         "id": "dXJuOm1ieHBsYzpEbWhQ",
+         "name": "Bath"
+        },
+        "street": {
+         "name": "University Of Bath Convocation Ave"
+        }
+       },
+       "coordinates": {
+        "latitude": 51.37957088,
+        "longitude": -2.32658514,
+        "routable_points": [
+         {
+          "name": "POI",
+          "latitude": 51.379531,
+          "longitude": -2.326725
+         }
+        ]
+       },
+       "language": "",
+       "maki": "school",
+       "poi_category": [
+        "education"
+       ],
+       "poi_category_ids": [
+        "education"
+       ],
+       "external_ids": {
+        "dataplor": "e6f6a15d-9033-4649-8683-fb52774dab63"
+       },
+       "metadata": {
+        "phone": "+441225384186",
+        "website": "https://www.teambath.com/vocational-courses/",
+        "open_hours": {
+         "periods": [
+          {
+           "open": {
+            "day": 1,
+            "time": "0900"
+           },
+           "close": {
+            "day": 1,
+            "time": "1700"
+           }
+          },
+          {
+           "open": {
+            "day": 2,
+            "time": "0900"
+           },
+           "close": {
+            "day": 2,
+            "time": "1700"
+           }
+          },
+          {
+           "open": {
+            "day": 3,
+            "time": "0900"
+           },
+           "close": {
+            "day": 3,
+            "time": "1700"
+           }
+          },
+          {
+           "open": {
+            "day": 4,
+            "time": "0900"
+           },
+           "close": {
+            "day": 4,
+            "time": "1700"
+           }
+          },
+          {
+           "open": {
+            "day": 5,
+            "time": "0900"
+           },
+           "close": {
+            "day": 5,
+            "time": "1700"
+           }
+          }
+         ]
+        }
+       },
+       "distance": 4750
+      }
+     }
+    ],
+    "attribution": "© 2026 Mapbox and its suppliers. All rights reserved. Use of this data is subject to the Mapbox Terms of Service. (https://www.mapbox.com/about/maps/)",
+    "response_id": "dvOsuPxXi66rMTotPSVuv-BpZJ9xTHgOSiD6hHRJi7Vq6iqyseZYV0EKB_BIli0Gvl0oGHHgUzfgy9DiRIs8AFvluRZxepYRKTY="
+   }
+  },
+  "api.mapbox.com/isochrone/v1/mapbox/driving/-2.34238,51.38628?contours_minutes=10&denoise=1&generalize=150&polygons=true": {
+   "status": 200,
+   "body": {
+    "features": [
+     {
+      "properties": {
+       "fill-opacity": 0.33,
+       "fillColor": "#bf4040",
+       "opacity": 0.33,
+       "fill": "#bf4040",
+       "fillOpacity": 0.33,
+       "color": "#bf4040",
+       "contour": 10,
+       "metric": "time"
+      },
+      "geometry": {
+       "coordinates": [
+        [
+         [
+          -2.32338,
+          51.404889
+         ],
+         [
+          -2.331759,
+          51.40128
+         ],
+         [
+          -2.32738,
+          51.401698
+         ],
+         [
+          -2.328705,
+          51.397955
+         ],
+         [
+          -2.32438,
+          51.39865
+         ],
+         [
+          -2.324203,
+          51.397103
+         ],
+         [
+          -2.33138,
+          51.39414
+         ],
+         [
+          -2.333814,
+          51.397714
+         ],
+         [
+          -2.335296,
+          51.392196
+         ],
+         [
+          -2.33938,
+          51.391165
+         ],
+         [
+          -2.349663,
+          51.39128
+         ],
+         [
+          -2.33775,
+          51.39728
+         ],
+         [
+          -2.34338,
+          51.397931
+         ],
+         [
+          -2.34437,
+          51.40129
+         ],
+         [
+          -2.34738,
+          51.399756
+         ],
+         [
+          -2.34738,
+          51.401829
+         ],
+         [
+          -2.35038,
+          51.402222
+         ],
+         [
+          -2.363088,
+          51.398988
+         ],
+         [
+          -2.372508,
+          51.403408
+         ],
+         [
+          -2.371639,
+          51.39528
+         ],
+         [
+          -2.376505,
+          51.393405
+         ],
+         [
+          -2.375323,
+          51.39128
+         ],
+         [
+          -2.37338,
+          51.392853
+         ],
+         [
+          -2.371077,
+          51.391583
+         ],
+         [
+          -2.370135,
+          51.389035
+         ],
+         [
+          -2.381416,
+          51.39028
+         ],
+         [
+          -2.37838,
+          51.387481
+         ],
+         [
+          -2.373079,
+          51.387581
+         ],
+         [
+          -2.376337,
+          51.38628
+         ],
+         [
+          -2.371981,
+          51.385679
+         ],
+         [
+          -2.367545,
+          51.38128
+         ],
+         [
+          -2.372616,
+          51.38028
+         ],
+         [
+          -2.37138,
+          51.374335
+         ],
+         [
+          -2.36638,
+          51.373234
+         ],
+         [
+          -2.365966,
+          51.37628
+         ],
+         [
+          -2.36338,
+          51.37659
+         ],
+         [
+          -2.35538,
+          51.374568
+         ],
+         [
+          -2.356057,
+          51.371957
+         ],
+         [
+          -2.359529,
+          51.371131
+         ],
+         [
+          -2.353039,
+          51.36962
+         ],
+         [
+          -2.35338,
+          51.367424
+         ],
+         [
+          -2.34838,
+          51.367864
+         ],
+         [
+          -2.347145,
+          51.370515
+         ],
+         [
+          -2.348436,
+          51.364224
+         ],
+         [
+          -2.346231,
+          51.364429
+         ],
+         [
+          -2.342837,
+          51.35928
+         ],
+         [
+          -2.33838,
+          51.361388
+         ],
+         [
+          -2.33338,
+          51.35859
+         ],
+         [
+          -2.331994,
+          51.35928
+         ],
+         [
+          -2.3346,
+          51.3625
+         ],
+         [
+          -2.329166,
+          51.361066
+         ],
+         [
+          -2.32738,
+          51.36351
+         ],
+         [
+          -2.32023,
+          51.36443
+         ],
+         [
+          -2.31938,
+          51.363032
+         ],
+         [
+          -2.325646,
+          51.362546
+         ],
+         [
+          -2.330257,
+          51.35628
+         ],
+         [
+          -2.325316,
+          51.355216
+         ],
+         [
+          -2.32374,
+          51.35764
+         ],
+         [
+          -2.317202,
+          51.358458
+         ],
+         [
+          -2.31838,
+          51.355788
+         ],
+         [
+          -2.32165,
+          51.35628
+         ],
+         [
+          -2.31597,
+          51.35369
+         ],
+         [
+          -2.317736,
+          51.346924
+         ],
+         [
+          -2.311931,
+          51.35528
+         ],
+         [
+          -2.311687,
+          51.362587
+         ],
+         [
+          -2.305963,
+          51.366863
+         ],
+         [
+          -2.300743,
+          51.37828
+         ],
+         [
+          -2.30338,
+          51.377013
+         ],
+         [
+          -2.30589,
+          51.38177
+         ],
+         [
+          -2.314505,
+          51.385155
+         ],
+         [
+          -2.316512,
+          51.391412
+         ],
+         [
+          -2.310818,
+          51.39628
+         ],
+         [
+          -2.31538,
+          51.400856
+         ],
+         [
+          -2.317119,
+          51.398019
+         ],
+         [
+          -2.321594,
+          51.398066
+         ],
+         [
+          -2.32068,
+          51.40128
+         ],
+         [
+          -2.324547,
+          51.403113
+         ],
+         [
+          -2.32338,
+          51.40377
+         ],
+         [
+          -2.32338,
+          51.404889
+         ]
+        ]
+       ],
+       "type": "Polygon"
+      },
+      "type": "Feature"
+     }
+    ],
+    "type": "FeatureCollection"
+   }
+  },
+  "api.mapbox.com/search/searchbox/v1/forward?country=gb&language=en&limit=5&q=BA1+1SU&types=postcode": {
+   "status": 200,
+   "body": {
+    "type": "FeatureCollection",
+    "features": [
+     {
+      "type": "Feature",
+      "geometry": {
+       "coordinates": [
+        -2.357119,
+        51.377702
+       ],
+       "type": "Point"
+      },
+      "properties": {
+       "name": "BA1 1SU",
+       "mapbox_id": "dXJuOm1ieHBsYzpJV05PVHc",
+       "feature_type": "postcode",
+       "place_formatted": "Bath, Bath and North East Somerset, England, United Kingdom",
+       "context": {
+        "country": {
+         "id": "dXJuOm1ieHBsYzpJazg",
+         "name": "United Kingdom",
+         "country_code": "GB",
+         "country_code_alpha_3": "GBR"
+        },
+        "region": {
+         "id": "dXJuOm1ieHBsYzpKRTg",
+         "name": "England",
+         "region_code": "ENG",
+         "region_code_full": "GB-ENG"
+        },
+        "district": {
+         "id": "dXJuOm1ieHBsYzpBWVpQ",
+         "name": "Bath and North East Somerset"
+        },
+        "place": {
+         "id": "dXJuOm1ieHBsYzpEbWhQ",
+         "name": "Bath"
+        }
+       },
+       "coordinates": {
+        "latitude": 51.377702,
+        "longitude": -2.357119
+       },
+       "bbox": [
+        -2.357244,
+        51.377556,
+        -2.35574,
+        51.378067
+       ],
+       "language": "en",
+       "maki": "marker",
+       "metadata": {}
+      }
+     }
+    ],
+    "attribution": "© 2026 Mapbox and its suppliers. All rights reserved. Use of this data is subject to the Mapbox Terms of Service. (https://www.mapbox.com/about/maps/)",
+    "response_id": "dvOsuPxXi66rMTotPSVuv-BpZJ9xTHgOSiD6hHRJi7Vq6iqyseZYVzZiAJMo6VUGwzUtBXqBXlbupWwdmaCdCrA4dRSpRw_bnes="
+   }
+  },
+  "api.mapbox.com/isochrone/v1/mapbox/cycling/-2.35712,51.3777?contours_minutes=20&denoise=1&generalize=75&polygons=true": {
+   "status": 200,
+   "body": {
+    "features": [
+     {
+      "properties": {
+       "fill-opacity": 0.33,
+       "fillColor": "#bf4040",
+       "opacity": 0.33,
+       "fill": "#bf4040",
+       "fillOpacity": 0.33,
+       "color": "#bf4040",
+       "contour": 20,
+       "metric": "time"
+      },
+      "geometry": {
+       "coordinates": [
+        [
+         [
+          -2.34512,
+          51.413727
+         ],
+         [
+          -2.346559,
+          51.4137
+         ],
+         [
+          -2.344791,
+          51.4107
+         ],
+         [
+          -2.34612,
+          51.410406
+         ],
+         [
+          -2.34812,
+          51.413368
+         ],
+         [
+          -2.35217,
+          51.41375
+         ],
+         [
+          -2.34881,
+          51.41201
+         ],
+         [
+          -2.343994,
+          51.405826
+         ],
+         [
+          -2.347025,
+          51.402605
+         ],
+         [
+          -2.351258,
+          51.403562
+         ],
+         [
+          -2.354742,
+          51.408078
+         ],
+         [
+          -2.359293,
+          51.409873
+         ],
+         [
+          -2.353946,
+          51.404526
+         ],
+         [
+          -2.35812,
+          51.405782
+         ],
+         [
+          -2.36212,
+          51.404445
+         ],
+         [
+          -2.36412,
+          51.40546
+         ],
+         [
+          -2.366689,
+          51.404269
+         ],
+         [
+          -2.365987,
+          51.400567
+         ],
+         [
+          -2.367873,
+          51.400453
+         ],
+         [
+          -2.370839,
+          51.403981
+         ],
+         [
+          -2.37412,
+          51.404927
+         ],
+         [
+          -2.37412,
+          51.40187
+         ],
+         [
+          -2.37212,
+          51.402022
+         ],
+         [
+          -2.370841,
+          51.4007
+         ],
+         [
+          -2.376234,
+          51.4007
+         ],
+         [
+          -2.37512,
+          51.394573
+         ],
+         [
+          -2.376257,
+          51.3947
+         ],
+         [
+          -2.37712,
+          51.398417
+         ],
+         [
+          -2.381179,
+          51.3987
+         ],
+         [
+          -2.378915,
+          51.396905
+         ],
+         [
+          -2.38012,
+          51.394563
+         ],
+         [
+          -2.382689,
+          51.398131
+         ],
+         [
+          -2.38725,
+          51.39757
+         ],
+         [
+          -2.385735,
+          51.398315
+         ],
+         [
+          -2.385809,
+          51.400011
+         ],
+         [
+          -2.388254,
+          51.399566
+         ],
+         [
+          -2.388594,
+          51.401226
+         ],
+         [
+          -2.39334,
+          51.40248
+         ],
+         [
+          -2.39612,
+          51.405695
+         ],
+         [
+          -2.40201,
+          51.40481
+         ],
+         [
+          -2.404292,
+          51.405872
+         ],
+         [
+          -2.405393,
+          51.4057
+         ],
+         [
+          -2.404378,
+          51.404442
+         ],
+         [
+          -2.401727,
+          51.4027
+         ],
+         [
+          -2.401844,
+          51.3997
+         ],
+         [
+          -2.40412,
+          51.398259
+         ],
+         [
+          -2.406597,
+          51.3987
+         ],
+         [
+          -2.406287,
+          51.397533
+         ],
+         [
+          -2.40212,
+          51.397037
+         ],
+         [
+          -2.40012,
+          51.397933
+         ],
+         [
+          -2.398696,
+          51.396124
+         ],
+         [
+          -2.395944,
+          51.3957
+         ],
+         [
+          -2.398717,
+          51.395297
+         ],
+         [
+          -2.403001,
+          51.392581
+         ],
+         [
+          -2.40612,
+          51.394495
+         ],
+         [
+          -2.40712,
+          51.393506
+         ],
+         [
+          -2.41012,
+          51.395464
+         ],
+         [
+          -2.414346,
+          51.395474
+         ],
+         [
+          -2.41612,
+          51.397201
+         ],
+         [
+          -2.422625,
+          51.3957
+         ],
+         [
+          -2.411951,
+          51.393869
+         ],
+         [
+          -2.411605,
+          51.391215
+         ],
+         [
+          -2.409959,
+          51.3907
+         ],
+         [
+          -2.41212,
+          51.389532
+         ],
+         [
+          -2.41312,
+          51.390526
+         ],
+         [
+          -2.42412,
+          51.391406
+         ],
+         [
+          -2.42512,
+          51.392372
+         ],
+         [
+          -2.433533,
+          51.3927
+         ],
+         [
+          -2.416868,
+          51.3887
+         ],
+         [
+          -2.42312,
+          51.388277
+         ],
+         [
+          -2.428351,
+          51.386469
+         ],
+         [
+          -2.42212,
+          51.386093
+         ],
+         [
+          -2.42112,
+          51.387044
+         ],
+         [
+          -2.413309,
+          51.387889
+         ],
+         [
+          -2.41212,
+          51.385979
+         ],
+         [
+          -2.40912,
+          51.386932
+         ],
+         [
+          -2.405025,
+          51.384795
+         ],
+         [
+          -2.40612,
+          51.383537
+         ],
+         [
+          -2.40912,
+          51.383362
+         ],
+         [
+          -2.41012,
+          51.386208
+         ],
+         [
+          -2.411706,
+          51.3847
+         ],
+         [
+          -2.410795,
+          51.3827
+         ],
+         [
+          -2.413549,
+          51.381129
+         ],
+         [
+          -2.413965,
+          51.379545
+         ],
+         [
+          -2.41712,
+          51.381476
+         ],
+         [
+          -2.423183,
+          51.381763
+         ],
+         [
+          -2.421404,
+          51.3797
+         ],
+         [
+          -2.423331,
+          51.3787
+         ],
+         [
+          -2.421662,
+          51.378158
+         ],
+         [
+          -2.421804,
+          51.3767
+         ],
+         [
+          -2.418747,
+          51.376073
+         ],
+         [
+          -2.41726,
+          51.37456
+         ],
+         [
+          -2.41512,
+          51.377952
+         ],
+         [
+          -2.41212,
+          51.37791
+         ],
+         [
+          -2.407919,
+          51.374901
+         ],
+         [
+          -2.405882,
+          51.3727
+         ],
+         [
+          -2.406407,
+          51.3697
+         ],
+         [
+          -2.40812,
+          51.370721
+         ],
+         [
+          -2.41012,
+          51.369281
+         ],
+         [
+          -2.416023,
+          51.3687
+         ],
+         [
+          -2.40912,
+          51.368081
+         ],
+         [
+          -2.405624,
+          51.366196
+         ],
+         [
+          -2.40712,
+          51.364241
+         ],
+         [
+          -2.40812,
+          51.365149
+         ],
+         [
+          -2.410398,
+          51.3647
+         ],
+         [
+          -2.40712,
+          51.361206
+         ],
+         [
+          -2.403402,
+          51.362982
+         ],
+         [
+          -2.40012,
+          51.362244
+         ],
+         [
+          -2.39312,
+          51.363891
+         ],
+         [
+          -2.392604,
+          51.361216
+         ],
+         [
+          -2.38912,
+          51.362105
+         ],
+         [
+          -2.385972,
+          51.359848
+         ],
+         [
+          -2.383887,
+          51.3557
+         ],
+         [
+          -2.384933,
+          51.354513
+         ],
+         [
+          -2.38712,
+          51.353337
+         ],
+         [
+          -2.39456,
+          51.3527
+         ],
+         [
+          -2.389796,
+          51.352024
+         ],
+         [
+          -2.392994,
+          51.3497
+         ],
+         [
+          -2.39112,
+          51.348946
+         ],
+         [
+          -2.387833,
+          51.350987
+         ],
+         [
+          -2.38925,
+          51.34757
+         ],
+         [
+          -2.38612,
+          51.34931
+         ],
+         [
+          -2.383556,
+          51.3477
+         ],
+         [
+          -2.38341,
+          51.34999
+         ],
+         [
+          -2.38112,
+          51.349224
+         ],
+         [
+          -2.37012,
+          51.355894
+         ],
+         [
+          -2.364868,
+          51.3547
+         ],
+         [
+          -2.364898,
+          51.352478
+         ],
+         [
+          -2.36912,
+          51.352124
+         ],
+         [
+          -2.369523,
+          51.3507
+         ],
+         [
+          -2.36712,
+          51.347927
+         ],
+         [
+          -2.366538,
+          51.349118
+         ],
+         [
+          -2.365359,
+          51.3487
+         ],
+         [
+          -2.36412,
+          51.346061
+         ],
+         [
+          -2.36112,
+          51.351294
+         ],
+         [
+          -2.34912,
+          51.348423
+         ],
+         [
+          -2.349023,
+          51.348797
+         ],
+         [
+          -2.350741,
+          51.349079
+         ],
+         [
+          -2.35012,
+          51.3503
+         ],
+         [
+          -2.34812,
+          51.349073
+         ],
+         [
+          -2.347111,
+          51.3497
+         ],
+         [
+          -2.34812,
+          51.350953
+         ],
+         [
+          -2.351461,
+          51.351359
+         ],
+         [
+          -2.350913,
+          51.352907
+         ],
+         [
+          -2.35412,
+          51.353194
+         ],
+         [
+          -2.35512,
+          51.352296
+         ],
+         [
+          -2.361366,
+          51.3557
+         ],
+         [
+          -2.35712,
+          51.358034
+         ],
+         [
+          -2.35312,
+          51.356362
+         ],
+         [
+          -2.350429,
+          51.3567
+         ],
+         [
+          -2.353242,
+          51.3587
+         ],
+         [
+          -2.35012,
+          51.358675
+         ],
+         [
+          -2.348294,
+          51.360874
+         ],
+         [
+          -2.347049,
+          51.3607
+         ],
+         [
+          -2.347977,
+          51.358843
+         ],
+         [
+          -2.34512,
+          51.359163
+         ],
+         [
+          -2.34212,
+          51.3566
+         ],
+         [
+          -2.34012,
+          51.359852
+         ],
+         [
+          -2.339561,
+          51.358259
+         ],
+         [
+          -2.33712,
+          51.357914
+         ],
+         [
+          -2.335578,
+          51.358158
+         ],
+         [
+          -2.335311,
+          51.359891
+         ],
+         [
+          -2.33412,
+          51.355969
+         ],
+         [
+          -2.33212,
+          51.357913
+         ],
+         [
+          -2.32712,
+          51.358461
+         ],
+         [
+          -2.32412,
+          51.35608
+         ],
+         [
+          -2.322479,
+          51.3597
+         ],
+         [
+          -2.32378,
+          51.36104
+         ],
+         [
+          -2.32744,
+          51.36038
+         ],
+         [
+          -2.325968,
+          51.361548
+         ],
+         [
+          -2.327376,
+          51.3637
+         ],
+         [
+          -2.32612,
+          51.363016
+         ],
+         [
+          -2.32312,
+          51.364058
+         ],
+         [
+          -2.322897,
+          51.365923
+         ],
+         [
+          -2.32412,
+          51.365359
+         ],
+         [
+          -2.32512,
+          51.366301
+         ],
+         [
+          -2.32912,
+          51.364455
+         ],
+         [
+          -2.33112,
+          51.365472
+         ],
+         [
+          -2.33212,
+          51.364492
+         ],
+         [
+          -2.33312,
+          51.365473
+         ],
+         [
+          -2.33512,
+          51.364518
+         ],
+         [
+          -2.334388,
+          51.3667
+         ],
+         [
+          -2.33612,
+          51.36841
+         ],
+         [
+          -2.33912,
+          51.363548
+         ],
+         [
+          -2.339429,
+          51.367391
+         ],
+         [
+          -2.342846,
+          51.367426
+         ],
+         [
+          -2.343036,
+          51.365616
+         ],
+         [
+          -2.345189,
+          51.36563
+         ],
+         [
+          -2.34517,
+          51.36975
+         ],
+         [
+          -2.344958,
+          51.368862
+         ],
+         [
+          -2.342287,
+          51.368867
+         ],
+         [
+          -2.344196,
+          51.372776
+         ],
+         [
+          -2.34206,
+          51.37276
+         ],
+         [
+          -2.340917,
+          51.370903
+         ],
+         [
+          -2.33812,
+          51.369825
+         ],
+         [
+          -2.336557,
+          51.3737
+         ],
+         [
+          -2.33512,
+          51.369537
+         ],
+         [
+          -2.334459,
+          51.372039
+         ],
+         [
+          -2.33112,
+          51.372182
+         ],
+         [
+          -2.32912,
+          51.374022
+         ],
+         [
+          -2.325796,
+          51.373024
+         ],
+         [
+          -2.32512,
+          51.371399
+         ],
+         [
+          -2.32212,
+          51.372428
+         ],
+         [
+          -2.320126,
+          51.3717
+         ],
+         [
+          -2.32112,
+          51.37292
+         ],
+         [
+          -2.324473,
+          51.373347
+         ],
+         [
+          -2.32412,
+          51.376831
+         ],
+         [
+          -2.32712,
+          51.376397
+         ],
+         [
+          -2.331278,
+          51.377542
+         ],
+         [
+          -2.33412,
+          51.380652
+         ],
+         [
+          -2.33612,
+          51.379355
+         ],
+         [
+          -2.338284,
+          51.380536
+         ],
+         [
+          -2.338293,
+          51.381873
+         ],
+         [
+          -2.336046,
+          51.382626
+         ],
+         [
+          -2.3358,
+          51.38502
+         ],
+         [
+          -2.34012,
+          51.383528
+         ],
+         [
+          -2.340383,
+          51.387437
+         ],
+         [
+          -2.34221,
+          51.3877
+         ],
+         [
+          -2.333359,
+          51.389939
+         ],
+         [
+          -2.33312,
+          51.390814
+         ],
+         [
+          -2.326006,
+          51.390814
+         ],
+         [
+          -2.32512,
+          51.388703
+         ],
+         [
+          -2.32312,
+          51.390854
+         ],
+         [
+          -2.32112,
+          51.388959
+         ],
+         [
+          -2.317973,
+          51.388847
+         ],
+         [
+          -2.318423,
+          51.385397
+         ],
+         [
+          -2.315919,
+          51.384901
+         ],
+         [
+          -2.314261,
+          51.382559
+         ],
+         [
+          -2.30912,
+          51.38099
+         ],
+         [
+          -2.309044,
+          51.381776
+         ],
+         [
+          -2.313919,
+          51.383901
+         ],
+         [
+          -2.316344,
+          51.3887
+         ],
+         [
+          -2.315731,
+          51.391089
+         ],
+         [
+          -2.318297,
+          51.3917
+         ],
+         [
+          -2.31272,
+          51.3923
+         ],
+         [
+          -2.312304,
+          51.394884
+         ],
+         [
+          -2.310414,
+          51.3957
+         ],
+         [
+          -2.313363,
+          51.399943
+         ],
+         [
+          -2.309508,
+          51.4027
+         ],
+         [
+          -2.315514,
+          51.406306
+         ],
+         [
+          -2.31912,
+          51.410456
+         ],
+         [
+          -2.32049,
+          51.40933
+         ],
+         [
+          -2.320678,
+          51.411142
+         ],
+         [
+          -2.323946,
+          51.405526
+         ],
+         [
+          -2.33712,
+          51.403498
+         ],
+         [
+          -2.341278,
+          51.407542
+         ],
+         [
+          -2.342889,
+          51.412931
+         ],
+         [
+          -2.34512,
+          51.413727
+         ]
+        ]
+       ],
+       "type": "Polygon"
+      },
+      "type": "Feature"
+     }
+    ],
+    "type": "FeatureCollection"
+   }
+  },
+  "home.co.uk/api/property-details/16d50fe0-5b66-4ad1-a9df-c176e71ff85c": {
+   "status": 200,
+   "body": {
+    "id": "16d50fe0-5b66-4ad1-a9df-c176e71ff85c",
+    "latitude": 51.382651,
+    "longitude": -2.3944286,
+    "postcode": "BA1 3EG",
+    "building_name": null,
+    "building_number": "5",
+    "street_name": "Avondale Road",
+    "locality": "Newbridge",
+    "town_name": "Bath"
+   }
+  },
+  "home.co.uk/api/property-details/36d23aa4-ae79-48a8-901b-733491863e67": {
+   "status": 200,
+   "body": {
+    "id": "36d23aa4-ae79-48a8-901b-733491863e67",
+    "latitude": 51.3928108,
+    "longitude": -2.3492725,
+    "postcode": "BA1 6AP",
+    "building_name": null,
+    "building_number": "16",
+    "street_name": "Kensington Place",
+    "locality": "Walcot",
+    "town_name": "Bath"
+   }
+  },
+  "api.mapbox.com/search/searchbox/v1/forward?country=gb&language=en&limit=5&proximity=-2.3687%2C51.38508&q=BA1+1SU&types=postcode": {
+   "status": 200,
+   "body": {
+    "type": "FeatureCollection",
+    "features": [
+     {
+      "type": "Feature",
+      "geometry": {
+       "coordinates": [
+        -2.357119,
+        51.377702
+       ],
+       "type": "Point"
+      },
+      "properties": {
+       "name": "BA1 1SU",
+       "mapbox_id": "dXJuOm1ieHBsYzpJV05PVHc",
+       "feature_type": "postcode",
+       "place_formatted": "Bath, Bath and North East Somerset, England, United Kingdom",
+       "context": {
+        "country": {
+         "id": "dXJuOm1ieHBsYzpJazg",
+         "name": "United Kingdom",
+         "country_code": "GB",
+         "country_code_alpha_3": "GBR"
+        },
+        "region": {
+         "id": "dXJuOm1ieHBsYzpKRTg",
+         "name": "England",
+         "region_code": "ENG",
+         "region_code_full": "GB-ENG"
+        },
+        "district": {
+         "id": "dXJuOm1ieHBsYzpBWVpQ",
+         "name": "Bath and North East Somerset"
+        },
+        "place": {
+         "id": "dXJuOm1ieHBsYzpEbWhQ",
+         "name": "Bath"
+        }
+       },
+       "coordinates": {
+        "latitude": 51.377702,
+        "longitude": -2.357119
+       },
+       "bbox": [
+        -2.357244,
+        51.377556,
+        -2.35574,
+        51.378067
+       ],
+       "language": "en",
+       "maki": "marker",
+       "metadata": {},
+       "distance": 1148
+      }
+     }
+    ],
+    "attribution": "© 2026 Mapbox and its suppliers. All rights reserved. Use of this data is subject to the Mapbox Terms of Service. (https://www.mapbox.com/about/maps/)",
+    "response_id": "dvOsuPxXi66rMTotPSVuv-BpZJ9xTHgOSiD6hHRJi7Vq6iqyseZYVz50b5I8kVoCpy9fdgvgIiGGrxW0-YcaOcXzJJrqFwsqbrM="
+   }
+  },
+  "api.mapbox.com/optimized-trips/v1/mapbox/driving/-2.35712,51.3777;-2.3944286,51.382651;-2.3713526,51.377295;-2.3597522,51.3875728;-2.3492725,51.3928108?destination=last&geometries=geojson&overview=simplified&roundtrip=false&source=first": {
+   "status": 200,
+   "body": {
+    "code": "Ok",
+    "waypoints": [
+     {
+      "distance": 24.397705288579196,
+      "name": "Dorchester Street",
+      "location": [
+       -2.357158,
+       51.377918
+      ],
+      "waypoint_index": 0,
+      "trips_index": 0
+     },
+     {
+      "distance": 10.380633021448984,
+      "name": "Avondale Road",
+      "location": [
+       -2.39428,
+       51.382654
+      ],
+      "waypoint_index": 2,
+      "trips_index": 0
+     },
+     {
+      "distance": 14.523960184136124,
+      "name": "Lower Oldfield Park",
+      "location": [
+       -2.371321,
+       51.377166
+      ],
+      "waypoint_index": 1,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.864319502445586,
+      "name": "The Paragon",
+      "location": [
+       -2.359994,
+       51.387567
+      ],
+      "waypoint_index": 3,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.450920487331693,
+      "name": "Kensington Place",
+      "location": [
+       -2.349394,
+       51.392938
+      ],
+      "waypoint_index": 4,
+      "trips_index": 0
+     }
+    ],
+    "trips": [
+     {
+      "geometry": {
+       "coordinates": [
+        [
+         -2.357158,
+         51.377918
+        ],
+        [
+         -2.359641,
+         51.378023
+        ],
+        [
+         -2.360327,
+         51.377815
+        ],
+        [
+         -2.360462,
+         51.377412
+        ],
+        [
+         -2.359591,
+         51.377139
+        ],
+        [
+         -2.359877,
+         51.376997
+        ],
+        [
+         -2.361365,
+         51.377164
+        ],
+        [
+         -2.361645,
+         51.377536
+        ],
+        [
+         -2.364749,
+         51.378321
+        ],
+        [
+         -2.368444,
+         51.378909
+        ],
+        [
+         -2.368793,
+         51.377897
+        ],
+        [
+         -2.369534,
+         51.377366
+        ],
+        [
+         -2.371321,
+         51.377166
+        ],
+        [
+         -2.372283,
+         51.377092
+        ],
+        [
+         -2.373019,
+         51.377587
+        ],
+        [
+         -2.376472,
+         51.378343
+        ],
+        [
+         -2.376527,
+         51.378983
+        ],
+        [
+         -2.375896,
+         51.379368
+        ],
+        [
+         -2.374463,
+         51.381126
+        ],
+        [
+         -2.381244,
+         51.382137
+        ],
+        [
+         -2.381057,
+         51.383699
+        ],
+        [
+         -2.381745,
+         51.38459
+        ],
+        [
+         -2.383876,
+         51.384187
+        ],
+        [
+         -2.384502,
+         51.383353
+        ],
+        [
+         -2.385021,
+         51.383164
+        ],
+        [
+         -2.388552,
+         51.382813
+        ],
+        [
+         -2.391763,
+         51.382843
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.39432,
+         51.383455
+        ],
+        [
+         -2.39428,
+         51.382654
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.394457,
+         51.384355
+        ],
+        [
+         -2.390682,
+         51.384258
+        ],
+        [
+         -2.386771,
+         51.384522
+        ],
+        [
+         -2.384013,
+         51.384175
+        ],
+        [
+         -2.379815,
+         51.385383
+        ],
+        [
+         -2.37843,
+         51.385561
+        ],
+        [
+         -2.375502,
+         51.385195
+        ],
+        [
+         -2.372931,
+         51.384318
+        ],
+        [
+         -2.367051,
+         51.383219
+        ],
+        [
+         -2.363189,
+         51.383825
+        ],
+        [
+         -2.363468,
+         51.384609
+        ],
+        [
+         -2.360766,
+         51.385206
+        ],
+        [
+         -2.360059,
+         51.38639
+        ],
+        [
+         -2.359994,
+         51.387567
+        ],
+        [
+         -2.359679,
+         51.388583
+        ],
+        [
+         -2.358223,
+         51.389745
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.349394,
+         51.392938
+        ]
+       ],
+       "type": "LineString"
+      },
+      "legs": [
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 309.8,
+        "duration": 244.2,
+        "distance": 1356
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1055.9,
+        "duration": 593.7,
+        "distance": 2860.3
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 905.3,
+        "duration": 587.2,
+        "distance": 3151.7
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 345.6,
+        "duration": 250.5,
+        "distance": 1067.2
+       }
+      ],
+      "weight_name": "routability",
+      "weight": 2616.6,
+      "duration": 1675.6000000000001,
+      "distance": 8435.2
+     }
+    ]
+   }
+  },
+  "api.mapbox.com/optimized-trips/v1/mapbox/driving/-2.35712,51.3777;-2.3492725,51.3928108;-2.3944286,51.382651;-2.3713526,51.377295;-2.3597522,51.3875728?destination=last&geometries=geojson&overview=simplified&roundtrip=false&source=first": {
+   "status": 200,
+   "body": {
+    "code": "Ok",
+    "waypoints": [
+     {
+      "distance": 24.397705288579196,
+      "name": "Dorchester Street",
+      "location": [
+       -2.357158,
+       51.377918
+      ],
+      "waypoint_index": 0,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.450920487331693,
+      "name": "Kensington Place",
+      "location": [
+       -2.349394,
+       51.392938
+      ],
+      "waypoint_index": 3,
+      "trips_index": 0
+     },
+     {
+      "distance": 10.380633021448984,
+      "name": "Avondale Road",
+      "location": [
+       -2.39428,
+       51.382654
+      ],
+      "waypoint_index": 2,
+      "trips_index": 0
+     },
+     {
+      "distance": 14.523960184136124,
+      "name": "Lower Oldfield Park",
+      "location": [
+       -2.371321,
+       51.377166
+      ],
+      "waypoint_index": 1,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.864319502445586,
+      "name": "The Paragon",
+      "location": [
+       -2.359994,
+       51.387567
+      ],
+      "waypoint_index": 4,
+      "trips_index": 0
+     }
+    ],
+    "trips": [
+     {
+      "geometry": {
+       "coordinates": [
+        [
+         -2.357158,
+         51.377918
+        ],
+        [
+         -2.359641,
+         51.378023
+        ],
+        [
+         -2.360327,
+         51.377815
+        ],
+        [
+         -2.360462,
+         51.377412
+        ],
+        [
+         -2.359591,
+         51.377139
+        ],
+        [
+         -2.359877,
+         51.376997
+        ],
+        [
+         -2.361365,
+         51.377164
+        ],
+        [
+         -2.361645,
+         51.377536
+        ],
+        [
+         -2.364749,
+         51.378321
+        ],
+        [
+         -2.368444,
+         51.378909
+        ],
+        [
+         -2.368793,
+         51.377897
+        ],
+        [
+         -2.369534,
+         51.377366
+        ],
+        [
+         -2.371321,
+         51.377166
+        ],
+        [
+         -2.372283,
+         51.377092
+        ],
+        [
+         -2.373019,
+         51.377587
+        ],
+        [
+         -2.376472,
+         51.378343
+        ],
+        [
+         -2.376527,
+         51.378983
+        ],
+        [
+         -2.375896,
+         51.379368
+        ],
+        [
+         -2.374463,
+         51.381126
+        ],
+        [
+         -2.381244,
+         51.382137
+        ],
+        [
+         -2.381057,
+         51.383699
+        ],
+        [
+         -2.381745,
+         51.38459
+        ],
+        [
+         -2.383876,
+         51.384187
+        ],
+        [
+         -2.384502,
+         51.383353
+        ],
+        [
+         -2.385021,
+         51.383164
+        ],
+        [
+         -2.388552,
+         51.382813
+        ],
+        [
+         -2.391763,
+         51.382843
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.39432,
+         51.383455
+        ],
+        [
+         -2.39428,
+         51.382654
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.394457,
+         51.384355
+        ],
+        [
+         -2.390682,
+         51.384258
+        ],
+        [
+         -2.386771,
+         51.384522
+        ],
+        [
+         -2.384013,
+         51.384175
+        ],
+        [
+         -2.379815,
+         51.385383
+        ],
+        [
+         -2.37843,
+         51.385561
+        ],
+        [
+         -2.375502,
+         51.385195
+        ],
+        [
+         -2.372931,
+         51.384318
+        ],
+        [
+         -2.367051,
+         51.383219
+        ],
+        [
+         -2.363189,
+         51.383825
+        ],
+        [
+         -2.363468,
+         51.384609
+        ],
+        [
+         -2.360766,
+         51.385206
+        ],
+        [
+         -2.360012,
+         51.386545
+        ],
+        [
+         -2.359978,
+         51.388153
+        ],
+        [
+         -2.358423,
+         51.389636
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.349394,
+         51.392938
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.358223,
+         51.389745
+        ],
+        [
+         -2.359679,
+         51.388583
+        ],
+        [
+         -2.359994,
+         51.387567
+        ]
+       ],
+       "type": "LineString"
+      },
+      "legs": [
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 309.8,
+        "duration": 244.2,
+        "distance": 1356
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1055.9,
+        "duration": 593.7,
+        "distance": 2860.3
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1250.9,
+        "duration": 837.7,
+        "distance": 4219
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 316.5,
+        "duration": 254,
+        "distance": 1066.8
+       }
+      ],
+      "weight_name": "routability",
+      "weight": 2933.1000000000004,
+      "duration": 1929.6000000000001,
+      "distance": 9502.099999999999
+     }
+    ]
+   }
+  },
+  "api.mapbox.com/optimized-trips/v1/mapbox/driving/-2.35712,51.3777;-2.3492725,51.3928108;-2.3944286,51.382651;-2.3597522,51.3875728;-2.3713526,51.377295?destination=last&geometries=geojson&overview=simplified&roundtrip=false&source=first": {
+   "status": 200,
+   "body": {
+    "code": "Ok",
+    "waypoints": [
+     {
+      "distance": 24.397705288579196,
+      "name": "Dorchester Street",
+      "location": [
+       -2.357158,
+       51.377918
+      ],
+      "waypoint_index": 0,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.450920487331693,
+      "name": "Kensington Place",
+      "location": [
+       -2.349394,
+       51.392938
+      ],
+      "waypoint_index": 1,
+      "trips_index": 0
+     },
+     {
+      "distance": 10.380633021448984,
+      "name": "Avondale Road",
+      "location": [
+       -2.39428,
+       51.382654
+      ],
+      "waypoint_index": 3,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.864319502445586,
+      "name": "The Paragon",
+      "location": [
+       -2.359994,
+       51.387567
+      ],
+      "waypoint_index": 2,
+      "trips_index": 0
+     },
+     {
+      "distance": 14.523960184136124,
+      "name": "Lower Oldfield Park",
+      "location": [
+       -2.371321,
+       51.377166
+      ],
+      "waypoint_index": 4,
+      "trips_index": 0
+     }
+    ],
+    "trips": [
+     {
+      "geometry": {
+       "coordinates": [
+        [
+         -2.357158,
+         51.377918
+        ],
+        [
+         -2.359641,
+         51.378023
+        ],
+        [
+         -2.360397,
+         51.377772
+        ],
+        [
+         -2.360497,
+         51.377474
+        ],
+        [
+         -2.359365,
+         51.377035
+        ],
+        [
+         -2.356945,
+         51.376765
+        ],
+        [
+         -2.353936,
+         51.376986
+        ],
+        [
+         -2.352079,
+         51.377527
+        ],
+        [
+         -2.351078,
+         51.378711
+        ],
+        [
+         -2.35149,
+         51.385184
+        ],
+        [
+         -2.35178,
+         51.385582
+        ],
+        [
+         -2.351542,
+         51.386633
+        ],
+        [
+         -2.354219,
+         51.387919
+        ],
+        [
+         -2.356778,
+         51.390125
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.349394,
+         51.392938
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.358223,
+         51.389745
+        ],
+        [
+         -2.359679,
+         51.388583
+        ],
+        [
+         -2.359994,
+         51.387567
+        ],
+        [
+         -2.360059,
+         51.38639
+        ],
+        [
+         -2.360766,
+         51.385206
+        ],
+        [
+         -2.363468,
+         51.384609
+        ],
+        [
+         -2.36298,
+         51.383214
+        ],
+        [
+         -2.363754,
+         51.383028
+        ],
+        [
+         -2.364346,
+         51.383628
+        ],
+        [
+         -2.367145,
+         51.383201
+        ],
+        [
+         -2.372931,
+         51.384318
+        ],
+        [
+         -2.375502,
+         51.385195
+        ],
+        [
+         -2.37843,
+         51.385561
+        ],
+        [
+         -2.379815,
+         51.385383
+        ],
+        [
+         -2.383876,
+         51.384187
+        ],
+        [
+         -2.384635,
+         51.383282
+        ],
+        [
+         -2.386483,
+         51.382983
+        ],
+        [
+         -2.391763,
+         51.382843
+        ],
+        [
+         -2.394668,
+         51.382419
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395256,
+         51.383443
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.39432,
+         51.383455
+        ],
+        [
+         -2.39428,
+         51.382654
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.394457,
+         51.384355
+        ],
+        [
+         -2.390682,
+         51.384258
+        ],
+        [
+         -2.386771,
+         51.384522
+        ],
+        [
+         -2.384013,
+         51.384175
+        ],
+        [
+         -2.38162,
+         51.38476
+        ],
+        [
+         -2.381057,
+         51.383699
+        ],
+        [
+         -2.38122,
+         51.382375
+        ],
+        [
+         -2.380855,
+         51.382089
+        ],
+        [
+         -2.374055,
+         51.381113
+        ],
+        [
+         -2.376527,
+         51.378983
+        ],
+        [
+         -2.376472,
+         51.378343
+        ],
+        [
+         -2.373019,
+         51.377587
+        ],
+        [
+         -2.372283,
+         51.377092
+        ],
+        [
+         -2.371321,
+         51.377166
+        ]
+       ],
+       "type": "LineString"
+      },
+      "legs": [
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 834.1,
+        "duration": 648,
+        "distance": 3164.6
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 316.5,
+        "duration": 254,
+        "distance": 1066.8
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1226.6,
+        "duration": 721.4,
+        "distance": 3387.6
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 858.1,
+        "duration": 532.2,
+        "distance": 2809.5
+       }
+      ],
+      "weight_name": "routability",
+      "weight": 3235.2999999999997,
+      "duration": 2155.6000000000004,
+      "distance": 10428.5
+     }
+    ]
+   }
+  },
+  "api.mapbox.com/optimized-trips/v1/mapbox/driving/-2.35712,51.3777;-2.3492725,51.3928108;-2.3713526,51.377295;-2.3597522,51.3875728;-2.3944286,51.382651?destination=last&geometries=geojson&overview=simplified&roundtrip=false&source=first": {
+   "status": 200,
+   "body": {
+    "code": "Ok",
+    "waypoints": [
+     {
+      "distance": 24.397705288579196,
+      "name": "Dorchester Street",
+      "location": [
+       -2.357158,
+       51.377918
+      ],
+      "waypoint_index": 0,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.450920487331693,
+      "name": "Kensington Place",
+      "location": [
+       -2.349394,
+       51.392938
+      ],
+      "waypoint_index": 1,
+      "trips_index": 0
+     },
+     {
+      "distance": 14.523960184136124,
+      "name": "Lower Oldfield Park",
+      "location": [
+       -2.371321,
+       51.377166
+      ],
+      "waypoint_index": 3,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.864319502445586,
+      "name": "The Paragon",
+      "location": [
+       -2.359994,
+       51.387567
+      ],
+      "waypoint_index": 2,
+      "trips_index": 0
+     },
+     {
+      "distance": 10.380633021448984,
+      "name": "Avondale Road",
+      "location": [
+       -2.39428,
+       51.382654
+      ],
+      "waypoint_index": 4,
+      "trips_index": 0
+     }
+    ],
+    "trips": [
+     {
+      "geometry": {
+       "coordinates": [
+        [
+         -2.357158,
+         51.377918
+        ],
+        [
+         -2.359641,
+         51.378023
+        ],
+        [
+         -2.360397,
+         51.377772
+        ],
+        [
+         -2.360497,
+         51.377474
+        ],
+        [
+         -2.359365,
+         51.377035
+        ],
+        [
+         -2.356945,
+         51.376765
+        ],
+        [
+         -2.353936,
+         51.376986
+        ],
+        [
+         -2.352079,
+         51.377527
+        ],
+        [
+         -2.351078,
+         51.378711
+        ],
+        [
+         -2.35149,
+         51.385184
+        ],
+        [
+         -2.35178,
+         51.385582
+        ],
+        [
+         -2.351542,
+         51.386633
+        ],
+        [
+         -2.354219,
+         51.387919
+        ],
+        [
+         -2.356778,
+         51.390125
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.349394,
+         51.392938
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.358223,
+         51.389745
+        ],
+        [
+         -2.359679,
+         51.388583
+        ],
+        [
+         -2.359994,
+         51.387567
+        ],
+        [
+         -2.360059,
+         51.38639
+        ],
+        [
+         -2.360766,
+         51.385206
+        ],
+        [
+         -2.363488,
+         51.384587
+        ],
+        [
+         -2.363003,
+         51.383162
+        ],
+        [
+         -2.364793,
+         51.382782
+        ],
+        [
+         -2.366267,
+         51.381021
+        ],
+        [
+         -2.367374,
+         51.381234
+        ],
+        [
+         -2.370709,
+         51.379998
+        ],
+        [
+         -2.370679,
+         51.379676
+        ],
+        [
+         -2.368444,
+         51.378909
+        ],
+        [
+         -2.368793,
+         51.377897
+        ],
+        [
+         -2.369534,
+         51.377366
+        ],
+        [
+         -2.371321,
+         51.377166
+        ],
+        [
+         -2.372283,
+         51.377092
+        ],
+        [
+         -2.373019,
+         51.377587
+        ],
+        [
+         -2.376472,
+         51.378343
+        ],
+        [
+         -2.376527,
+         51.378983
+        ],
+        [
+         -2.375896,
+         51.379368
+        ],
+        [
+         -2.374463,
+         51.381126
+        ],
+        [
+         -2.381244,
+         51.382137
+        ],
+        [
+         -2.381057,
+         51.383699
+        ],
+        [
+         -2.381745,
+         51.38459
+        ],
+        [
+         -2.383876,
+         51.384187
+        ],
+        [
+         -2.384502,
+         51.383353
+        ],
+        [
+         -2.385021,
+         51.383164
+        ],
+        [
+         -2.388552,
+         51.382813
+        ],
+        [
+         -2.391763,
+         51.382843
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.39432,
+         51.383455
+        ],
+        [
+         -2.39428,
+         51.382654
+        ]
+       ],
+       "type": "LineString"
+      },
+      "legs": [
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 834.1,
+        "duration": 648,
+        "distance": 3164.6
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 316.5,
+        "duration": 254,
+        "distance": 1066.8
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 631.4,
+        "duration": 411.3,
+        "distance": 1889.1
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1055.9,
+        "duration": 593.7,
+        "distance": 2860.3
+       }
+      ],
+      "weight_name": "routability",
+      "weight": 2837.9,
+      "duration": 1907,
+      "distance": 8980.8
+     }
+    ]
+   }
+  },
+  "api.mapbox.com/optimized-trips/v1/mapbox/driving/-2.3492725,51.3928108;-2.3944286,51.382651;-2.3713526,51.377295;-2.3597522,51.3875728;-2.3888658,51.3941247?geometries=geojson&overview=simplified&roundtrip=true": {
+   "status": 200,
+   "body": {
+    "code": "Ok",
+    "waypoints": [
+     {
+      "distance": 16.450920487331693,
+      "name": "Kensington Place",
+      "location": [
+       -2.349394,
+       51.392938
+      ],
+      "waypoint_index": 0,
+      "trips_index": 0
+     },
+     {
+      "distance": 10.380633021448984,
+      "name": "Avondale Road",
+      "location": [
+       -2.39428,
+       51.382654
+      ],
+      "waypoint_index": 3,
+      "trips_index": 0
+     },
+     {
+      "distance": 14.523960184136124,
+      "name": "Lower Oldfield Park",
+      "location": [
+       -2.371321,
+       51.377166
+      ],
+      "waypoint_index": 2,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.864319502445586,
+      "name": "The Paragon",
+      "location": [
+       -2.359994,
+       51.387567
+      ],
+      "waypoint_index": 1,
+      "trips_index": 0
+     },
+     {
+      "distance": 12.719168055873869,
+      "name": "Manor Road",
+      "location": [
+       -2.388705,
+       51.394179
+      ],
+      "waypoint_index": 4,
+      "trips_index": 0
+     }
+    ],
+    "trips": [
+     {
+      "geometry": {
+       "coordinates": [
+        [
+         -2.349394,
+         51.392938
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.358223,
+         51.389745
+        ],
+        [
+         -2.359679,
+         51.388583
+        ],
+        [
+         -2.359994,
+         51.387567
+        ],
+        [
+         -2.360059,
+         51.38639
+        ],
+        [
+         -2.360766,
+         51.385206
+        ],
+        [
+         -2.363488,
+         51.384587
+        ],
+        [
+         -2.363003,
+         51.383162
+        ],
+        [
+         -2.364793,
+         51.382782
+        ],
+        [
+         -2.366267,
+         51.381021
+        ],
+        [
+         -2.367374,
+         51.381234
+        ],
+        [
+         -2.370709,
+         51.379998
+        ],
+        [
+         -2.370679,
+         51.379676
+        ],
+        [
+         -2.368444,
+         51.378909
+        ],
+        [
+         -2.368793,
+         51.377897
+        ],
+        [
+         -2.369534,
+         51.377366
+        ],
+        [
+         -2.371321,
+         51.377166
+        ],
+        [
+         -2.372283,
+         51.377092
+        ],
+        [
+         -2.373019,
+         51.377587
+        ],
+        [
+         -2.376472,
+         51.378343
+        ],
+        [
+         -2.376527,
+         51.378983
+        ],
+        [
+         -2.375896,
+         51.379368
+        ],
+        [
+         -2.374463,
+         51.381126
+        ],
+        [
+         -2.381244,
+         51.382137
+        ],
+        [
+         -2.381057,
+         51.383699
+        ],
+        [
+         -2.381745,
+         51.38459
+        ],
+        [
+         -2.383876,
+         51.384187
+        ],
+        [
+         -2.384502,
+         51.383353
+        ],
+        [
+         -2.385021,
+         51.383164
+        ],
+        [
+         -2.388552,
+         51.382813
+        ],
+        [
+         -2.391763,
+         51.382843
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.39432,
+         51.383455
+        ],
+        [
+         -2.39428,
+         51.382654
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.394457,
+         51.384355
+        ],
+        [
+         -2.388665,
+         51.384339
+        ],
+        [
+         -2.389414,
+         51.387893
+        ],
+        [
+         -2.388447,
+         51.393001
+        ],
+        [
+         -2.389909,
+         51.39502
+        ],
+        [
+         -2.391619,
+         51.3962
+        ],
+        [
+         -2.391047,
+         51.396182
+        ],
+        [
+         -2.38979,
+         51.395598
+        ],
+        [
+         -2.388705,
+         51.394179
+        ],
+        [
+         -2.389302,
+         51.394869
+        ],
+        [
+         -2.389441,
+         51.394394
+        ],
+        [
+         -2.388447,
+         51.393001
+        ],
+        [
+         -2.38519,
+         51.391163
+        ],
+        [
+         -2.378126,
+         51.389231
+        ],
+        [
+         -2.371607,
+         51.3884
+        ],
+        [
+         -2.369772,
+         51.388418
+        ],
+        [
+         -2.367235,
+         51.388048
+        ],
+        [
+         -2.36512,
+         51.388087
+        ],
+        [
+         -2.361819,
+         51.387344
+        ],
+        [
+         -2.360561,
+         51.387637
+        ],
+        [
+         -2.357958,
+         51.389866
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.349394,
+         51.392938
+        ]
+       ],
+       "type": "LineString"
+      },
+      "legs": [
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 316.5,
+        "duration": 254,
+        "distance": 1066.8
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 631.4,
+        "duration": 411.3,
+        "distance": 1889.1
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1055.9,
+        "duration": 593.7,
+        "distance": 2860.3
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 789.8,
+        "duration": 455.9,
+        "distance": 2466.2
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 881.6,
+        "duration": 659.7,
+        "distance": 3498.4
+       }
+      ],
+      "weight_name": "routability",
+      "weight": 3675.2000000000003,
+      "duration": 2374.6000000000004,
+      "distance": 11780.8
+     }
+    ]
+   }
+  },
+  "api.mapbox.com/optimized-trips/v1/mapbox/driving/-2.3492725,51.3928108;-2.3944286,51.382651;-2.3713526,51.377295;-2.3597522,51.3875728;-2.3888658,51.3941247?destination=last&geometries=geojson&overview=simplified&roundtrip=false&source=first": {
+   "status": 200,
+   "body": {
+    "code": "Ok",
+    "waypoints": [
+     {
+      "distance": 16.450920487331693,
+      "name": "Kensington Place",
+      "location": [
+       -2.349394,
+       51.392938
+      ],
+      "waypoint_index": 0,
+      "trips_index": 0
+     },
+     {
+      "distance": 10.380633021448984,
+      "name": "Avondale Road",
+      "location": [
+       -2.39428,
+       51.382654
+      ],
+      "waypoint_index": 3,
+      "trips_index": 0
+     },
+     {
+      "distance": 14.523960184136124,
+      "name": "Lower Oldfield Park",
+      "location": [
+       -2.371321,
+       51.377166
+      ],
+      "waypoint_index": 2,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.864319502445586,
+      "name": "The Paragon",
+      "location": [
+       -2.359994,
+       51.387567
+      ],
+      "waypoint_index": 1,
+      "trips_index": 0
+     },
+     {
+      "distance": 12.719168055873869,
+      "name": "Manor Road",
+      "location": [
+       -2.388705,
+       51.394179
+      ],
+      "waypoint_index": 4,
+      "trips_index": 0
+     }
+    ],
+    "trips": [
+     {
+      "geometry": {
+       "coordinates": [
+        [
+         -2.349394,
+         51.392938
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.358223,
+         51.389745
+        ],
+        [
+         -2.359679,
+         51.388583
+        ],
+        [
+         -2.359994,
+         51.387567
+        ],
+        [
+         -2.360059,
+         51.38639
+        ],
+        [
+         -2.360766,
+         51.385206
+        ],
+        [
+         -2.363488,
+         51.384587
+        ],
+        [
+         -2.363003,
+         51.383162
+        ],
+        [
+         -2.364793,
+         51.382782
+        ],
+        [
+         -2.366267,
+         51.381021
+        ],
+        [
+         -2.367374,
+         51.381234
+        ],
+        [
+         -2.370709,
+         51.379998
+        ],
+        [
+         -2.370679,
+         51.379676
+        ],
+        [
+         -2.368444,
+         51.378909
+        ],
+        [
+         -2.368793,
+         51.377897
+        ],
+        [
+         -2.369534,
+         51.377366
+        ],
+        [
+         -2.371321,
+         51.377166
+        ],
+        [
+         -2.372283,
+         51.377092
+        ],
+        [
+         -2.373019,
+         51.377587
+        ],
+        [
+         -2.376472,
+         51.378343
+        ],
+        [
+         -2.376527,
+         51.378983
+        ],
+        [
+         -2.375896,
+         51.379368
+        ],
+        [
+         -2.374463,
+         51.381126
+        ],
+        [
+         -2.381244,
+         51.382137
+        ],
+        [
+         -2.381057,
+         51.383699
+        ],
+        [
+         -2.381745,
+         51.38459
+        ],
+        [
+         -2.383876,
+         51.384187
+        ],
+        [
+         -2.384502,
+         51.383353
+        ],
+        [
+         -2.385021,
+         51.383164
+        ],
+        [
+         -2.388552,
+         51.382813
+        ],
+        [
+         -2.391763,
+         51.382843
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.39432,
+         51.383455
+        ],
+        [
+         -2.39428,
+         51.382654
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.394457,
+         51.384355
+        ],
+        [
+         -2.388665,
+         51.384339
+        ],
+        [
+         -2.389414,
+         51.387893
+        ],
+        [
+         -2.388447,
+         51.393001
+        ],
+        [
+         -2.389909,
+         51.39502
+        ],
+        [
+         -2.391619,
+         51.3962
+        ],
+        [
+         -2.391047,
+         51.396182
+        ],
+        [
+         -2.38979,
+         51.395598
+        ],
+        [
+         -2.388705,
+         51.394179
+        ]
+       ],
+       "type": "LineString"
+      },
+      "legs": [
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 316.5,
+        "duration": 254,
+        "distance": 1066.8
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 631.4,
+        "duration": 411.3,
+        "distance": 1889.1
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1055.9,
+        "duration": 593.7,
+        "distance": 2860.3
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 789.8,
+        "duration": 455.9,
+        "distance": 2466.2
+       }
+      ],
+      "weight_name": "routability",
+      "weight": 2793.6000000000004,
+      "duration": 1714.9,
+      "distance": 8282.4
+     }
+    ]
+   }
+  },
+  "api.mapbox.com/optimized-trips/v1/mapbox/driving/-2.35712,51.3777;-2.3713526,51.377295;-2.3944286,51.382651;-2.3492725,51.3928108;-2.3597522,51.3875728?destination=last&geometries=geojson&overview=simplified&roundtrip=false&source=first": {
+   "status": 200,
+   "body": {
+    "code": "Ok",
+    "waypoints": [
+     {
+      "distance": 24.397705288579196,
+      "name": "Dorchester Street",
+      "location": [
+       -2.357158,
+       51.377918
+      ],
+      "waypoint_index": 0,
+      "trips_index": 0
+     },
+     {
+      "distance": 14.523960184136124,
+      "name": "Lower Oldfield Park",
+      "location": [
+       -2.371321,
+       51.377166
+      ],
+      "waypoint_index": 1,
+      "trips_index": 0
+     },
+     {
+      "distance": 10.380633021448984,
+      "name": "Avondale Road",
+      "location": [
+       -2.39428,
+       51.382654
+      ],
+      "waypoint_index": 2,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.450920487331693,
+      "name": "Kensington Place",
+      "location": [
+       -2.349394,
+       51.392938
+      ],
+      "waypoint_index": 3,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.864319502445586,
+      "name": "The Paragon",
+      "location": [
+       -2.359994,
+       51.387567
+      ],
+      "waypoint_index": 4,
+      "trips_index": 0
+     }
+    ],
+    "trips": [
+     {
+      "geometry": {
+       "coordinates": [
+        [
+         -2.357158,
+         51.377918
+        ],
+        [
+         -2.359641,
+         51.378023
+        ],
+        [
+         -2.360327,
+         51.377815
+        ],
+        [
+         -2.360462,
+         51.377412
+        ],
+        [
+         -2.359591,
+         51.377139
+        ],
+        [
+         -2.359877,
+         51.376997
+        ],
+        [
+         -2.361365,
+         51.377164
+        ],
+        [
+         -2.361645,
+         51.377536
+        ],
+        [
+         -2.364749,
+         51.378321
+        ],
+        [
+         -2.368444,
+         51.378909
+        ],
+        [
+         -2.368793,
+         51.377897
+        ],
+        [
+         -2.369534,
+         51.377366
+        ],
+        [
+         -2.371321,
+         51.377166
+        ],
+        [
+         -2.372283,
+         51.377092
+        ],
+        [
+         -2.373019,
+         51.377587
+        ],
+        [
+         -2.376472,
+         51.378343
+        ],
+        [
+         -2.376527,
+         51.378983
+        ],
+        [
+         -2.375896,
+         51.379368
+        ],
+        [
+         -2.374463,
+         51.381126
+        ],
+        [
+         -2.381244,
+         51.382137
+        ],
+        [
+         -2.381057,
+         51.383699
+        ],
+        [
+         -2.381745,
+         51.38459
+        ],
+        [
+         -2.383876,
+         51.384187
+        ],
+        [
+         -2.384502,
+         51.383353
+        ],
+        [
+         -2.385021,
+         51.383164
+        ],
+        [
+         -2.388552,
+         51.382813
+        ],
+        [
+         -2.391763,
+         51.382843
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.39432,
+         51.383455
+        ],
+        [
+         -2.39428,
+         51.382654
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.394457,
+         51.384355
+        ],
+        [
+         -2.390682,
+         51.384258
+        ],
+        [
+         -2.386771,
+         51.384522
+        ],
+        [
+         -2.384013,
+         51.384175
+        ],
+        [
+         -2.379815,
+         51.385383
+        ],
+        [
+         -2.37843,
+         51.385561
+        ],
+        [
+         -2.375502,
+         51.385195
+        ],
+        [
+         -2.372931,
+         51.384318
+        ],
+        [
+         -2.367051,
+         51.383219
+        ],
+        [
+         -2.363189,
+         51.383825
+        ],
+        [
+         -2.363468,
+         51.384609
+        ],
+        [
+         -2.360766,
+         51.385206
+        ],
+        [
+         -2.360012,
+         51.386545
+        ],
+        [
+         -2.359978,
+         51.388153
+        ],
+        [
+         -2.358423,
+         51.389636
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.349394,
+         51.392938
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.358223,
+         51.389745
+        ],
+        [
+         -2.359679,
+         51.388583
+        ],
+        [
+         -2.359994,
+         51.387567
+        ]
+       ],
+       "type": "LineString"
+      },
+      "legs": [
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 309.8,
+        "duration": 244.2,
+        "distance": 1356
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1055.9,
+        "duration": 593.7,
+        "distance": 2860.3
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1250.9,
+        "duration": 837.7,
+        "distance": 4219
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 316.5,
+        "duration": 254,
+        "distance": 1066.8
+       }
+      ],
+      "weight_name": "routability",
+      "weight": 2933.1000000000004,
+      "duration": 1929.6000000000001,
+      "distance": 9502.099999999999
+     }
+    ]
+   }
+  },
+  "api.mapbox.com/optimized-trips/v1/mapbox/driving/-2.35712,51.3777;-2.3597522,51.3875728;-2.3713526,51.377295;-2.3944286,51.382651;-2.3492725,51.3928108?destination=last&geometries=geojson&overview=simplified&roundtrip=false&source=first": {
+   "status": 200,
+   "body": {
+    "code": "Ok",
+    "waypoints": [
+     {
+      "distance": 24.397705288579196,
+      "name": "Dorchester Street",
+      "location": [
+       -2.357158,
+       51.377918
+      ],
+      "waypoint_index": 0,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.864319502445586,
+      "name": "The Paragon",
+      "location": [
+       -2.359994,
+       51.387567
+      ],
+      "waypoint_index": 3,
+      "trips_index": 0
+     },
+     {
+      "distance": 14.523960184136124,
+      "name": "Lower Oldfield Park",
+      "location": [
+       -2.371321,
+       51.377166
+      ],
+      "waypoint_index": 1,
+      "trips_index": 0
+     },
+     {
+      "distance": 10.380633021448984,
+      "name": "Avondale Road",
+      "location": [
+       -2.39428,
+       51.382654
+      ],
+      "waypoint_index": 2,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.450920487331693,
+      "name": "Kensington Place",
+      "location": [
+       -2.349394,
+       51.392938
+      ],
+      "waypoint_index": 4,
+      "trips_index": 0
+     }
+    ],
+    "trips": [
+     {
+      "geometry": {
+       "coordinates": [
+        [
+         -2.357158,
+         51.377918
+        ],
+        [
+         -2.359641,
+         51.378023
+        ],
+        [
+         -2.360327,
+         51.377815
+        ],
+        [
+         -2.360462,
+         51.377412
+        ],
+        [
+         -2.359591,
+         51.377139
+        ],
+        [
+         -2.359877,
+         51.376997
+        ],
+        [
+         -2.361365,
+         51.377164
+        ],
+        [
+         -2.361645,
+         51.377536
+        ],
+        [
+         -2.364749,
+         51.378321
+        ],
+        [
+         -2.368444,
+         51.378909
+        ],
+        [
+         -2.368793,
+         51.377897
+        ],
+        [
+         -2.369534,
+         51.377366
+        ],
+        [
+         -2.371321,
+         51.377166
+        ],
+        [
+         -2.372283,
+         51.377092
+        ],
+        [
+         -2.373019,
+         51.377587
+        ],
+        [
+         -2.376472,
+         51.378343
+        ],
+        [
+         -2.376527,
+         51.378983
+        ],
+        [
+         -2.375896,
+         51.379368
+        ],
+        [
+         -2.374463,
+         51.381126
+        ],
+        [
+         -2.381244,
+         51.382137
+        ],
+        [
+         -2.381057,
+         51.383699
+        ],
+        [
+         -2.381745,
+         51.38459
+        ],
+        [
+         -2.383876,
+         51.384187
+        ],
+        [
+         -2.384502,
+         51.383353
+        ],
+        [
+         -2.385021,
+         51.383164
+        ],
+        [
+         -2.388552,
+         51.382813
+        ],
+        [
+         -2.391763,
+         51.382843
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.39432,
+         51.383455
+        ],
+        [
+         -2.39428,
+         51.382654
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.394457,
+         51.384355
+        ],
+        [
+         -2.390682,
+         51.384258
+        ],
+        [
+         -2.386771,
+         51.384522
+        ],
+        [
+         -2.384013,
+         51.384175
+        ],
+        [
+         -2.379815,
+         51.385383
+        ],
+        [
+         -2.37843,
+         51.385561
+        ],
+        [
+         -2.375502,
+         51.385195
+        ],
+        [
+         -2.372931,
+         51.384318
+        ],
+        [
+         -2.367051,
+         51.383219
+        ],
+        [
+         -2.363189,
+         51.383825
+        ],
+        [
+         -2.363468,
+         51.384609
+        ],
+        [
+         -2.360766,
+         51.385206
+        ],
+        [
+         -2.360059,
+         51.38639
+        ],
+        [
+         -2.359994,
+         51.387567
+        ],
+        [
+         -2.359679,
+         51.388583
+        ],
+        [
+         -2.358223,
+         51.389745
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.349394,
+         51.392938
+        ]
+       ],
+       "type": "LineString"
+      },
+      "legs": [
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 309.8,
+        "duration": 244.2,
+        "distance": 1356
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1055.9,
+        "duration": 593.7,
+        "distance": 2860.3
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 905.3,
+        "duration": 587.2,
+        "distance": 3151.7
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 345.6,
+        "duration": 250.5,
+        "distance": 1067.2
+       }
+      ],
+      "weight_name": "routability",
+      "weight": 2616.6,
+      "duration": 1675.6000000000001,
+      "distance": 8435.2
+     }
+    ]
+   }
+  },
+  "api.mapbox.com/optimized-trips/v1/mapbox/driving/-2.35712,51.3777;-2.3597522,51.3875728;-2.3713526,51.377295;-2.3492725,51.3928108;-2.3944286,51.382651?destination=last&geometries=geojson&overview=simplified&roundtrip=false&source=first": {
+   "status": 200,
+   "body": {
+    "code": "Ok",
+    "waypoints": [
+     {
+      "distance": 24.397705288579196,
+      "name": "Dorchester Street",
+      "location": [
+       -2.357158,
+       51.377918
+      ],
+      "waypoint_index": 0,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.864319502445586,
+      "name": "The Paragon",
+      "location": [
+       -2.359994,
+       51.387567
+      ],
+      "waypoint_index": 2,
+      "trips_index": 0
+     },
+     {
+      "distance": 14.523960184136124,
+      "name": "Lower Oldfield Park",
+      "location": [
+       -2.371321,
+       51.377166
+      ],
+      "waypoint_index": 3,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.450920487331693,
+      "name": "Kensington Place",
+      "location": [
+       -2.349394,
+       51.392938
+      ],
+      "waypoint_index": 1,
+      "trips_index": 0
+     },
+     {
+      "distance": 10.380633021448984,
+      "name": "Avondale Road",
+      "location": [
+       -2.39428,
+       51.382654
+      ],
+      "waypoint_index": 4,
+      "trips_index": 0
+     }
+    ],
+    "trips": [
+     {
+      "geometry": {
+       "coordinates": [
+        [
+         -2.357158,
+         51.377918
+        ],
+        [
+         -2.359641,
+         51.378023
+        ],
+        [
+         -2.360397,
+         51.377772
+        ],
+        [
+         -2.360497,
+         51.377474
+        ],
+        [
+         -2.359365,
+         51.377035
+        ],
+        [
+         -2.356945,
+         51.376765
+        ],
+        [
+         -2.353936,
+         51.376986
+        ],
+        [
+         -2.352079,
+         51.377527
+        ],
+        [
+         -2.351078,
+         51.378711
+        ],
+        [
+         -2.35149,
+         51.385184
+        ],
+        [
+         -2.35178,
+         51.385582
+        ],
+        [
+         -2.351542,
+         51.386633
+        ],
+        [
+         -2.354219,
+         51.387919
+        ],
+        [
+         -2.356778,
+         51.390125
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.349394,
+         51.392938
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.358223,
+         51.389745
+        ],
+        [
+         -2.359679,
+         51.388583
+        ],
+        [
+         -2.359994,
+         51.387567
+        ],
+        [
+         -2.360059,
+         51.38639
+        ],
+        [
+         -2.360766,
+         51.385206
+        ],
+        [
+         -2.363488,
+         51.384587
+        ],
+        [
+         -2.363003,
+         51.383162
+        ],
+        [
+         -2.364793,
+         51.382782
+        ],
+        [
+         -2.366267,
+         51.381021
+        ],
+        [
+         -2.367374,
+         51.381234
+        ],
+        [
+         -2.370709,
+         51.379998
+        ],
+        [
+         -2.370679,
+         51.379676
+        ],
+        [
+         -2.368444,
+         51.378909
+        ],
+        [
+         -2.368793,
+         51.377897
+        ],
+        [
+         -2.369534,
+         51.377366
+        ],
+        [
+         -2.371321,
+         51.377166
+        ],
+        [
+         -2.372283,
+         51.377092
+        ],
+        [
+         -2.373019,
+         51.377587
+        ],
+        [
+         -2.376472,
+         51.378343
+        ],
+        [
+         -2.376527,
+         51.378983
+        ],
+        [
+         -2.375896,
+         51.379368
+        ],
+        [
+         -2.374463,
+         51.381126
+        ],
+        [
+         -2.381244,
+         51.382137
+        ],
+        [
+         -2.381057,
+         51.383699
+        ],
+        [
+         -2.381745,
+         51.38459
+        ],
+        [
+         -2.383876,
+         51.384187
+        ],
+        [
+         -2.384502,
+         51.383353
+        ],
+        [
+         -2.385021,
+         51.383164
+        ],
+        [
+         -2.388552,
+         51.382813
+        ],
+        [
+         -2.391763,
+         51.382843
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.39432,
+         51.383455
+        ],
+        [
+         -2.39428,
+         51.382654
+        ]
+       ],
+       "type": "LineString"
+      },
+      "legs": [
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 834.1,
+        "duration": 648,
+        "distance": 3164.6
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 316.5,
+        "duration": 254,
+        "distance": 1066.8
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 631.4,
+        "duration": 411.3,
+        "distance": 1889.1
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1055.9,
+        "duration": 593.7,
+        "distance": 2860.3
+       }
+      ],
+      "weight_name": "routability",
+      "weight": 2837.9,
+      "duration": 1907,
+      "distance": 8980.8
+     }
+    ]
+   }
+  },
+  "api.mapbox.com/optimized-trips/v1/mapbox/driving/-2.35712,51.3777;-2.3597522,51.3875728;-2.3944286,51.382651;-2.3492725,51.3928108;-2.3713526,51.377295?destination=last&geometries=geojson&overview=simplified&roundtrip=false&source=first": {
+   "status": 200,
+   "body": {
+    "code": "Ok",
+    "waypoints": [
+     {
+      "distance": 24.397705288579196,
+      "name": "Dorchester Street",
+      "location": [
+       -2.357158,
+       51.377918
+      ],
+      "waypoint_index": 0,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.864319502445586,
+      "name": "The Paragon",
+      "location": [
+       -2.359994,
+       51.387567
+      ],
+      "waypoint_index": 2,
+      "trips_index": 0
+     },
+     {
+      "distance": 10.380633021448984,
+      "name": "Avondale Road",
+      "location": [
+       -2.39428,
+       51.382654
+      ],
+      "waypoint_index": 3,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.450920487331693,
+      "name": "Kensington Place",
+      "location": [
+       -2.349394,
+       51.392938
+      ],
+      "waypoint_index": 1,
+      "trips_index": 0
+     },
+     {
+      "distance": 14.523960184136124,
+      "name": "Lower Oldfield Park",
+      "location": [
+       -2.371321,
+       51.377166
+      ],
+      "waypoint_index": 4,
+      "trips_index": 0
+     }
+    ],
+    "trips": [
+     {
+      "geometry": {
+       "coordinates": [
+        [
+         -2.357158,
+         51.377918
+        ],
+        [
+         -2.359641,
+         51.378023
+        ],
+        [
+         -2.360397,
+         51.377772
+        ],
+        [
+         -2.360497,
+         51.377474
+        ],
+        [
+         -2.359365,
+         51.377035
+        ],
+        [
+         -2.356945,
+         51.376765
+        ],
+        [
+         -2.353936,
+         51.376986
+        ],
+        [
+         -2.352079,
+         51.377527
+        ],
+        [
+         -2.351078,
+         51.378711
+        ],
+        [
+         -2.35149,
+         51.385184
+        ],
+        [
+         -2.35178,
+         51.385582
+        ],
+        [
+         -2.351542,
+         51.386633
+        ],
+        [
+         -2.354219,
+         51.387919
+        ],
+        [
+         -2.356778,
+         51.390125
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.349394,
+         51.392938
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.358223,
+         51.389745
+        ],
+        [
+         -2.359679,
+         51.388583
+        ],
+        [
+         -2.359994,
+         51.387567
+        ],
+        [
+         -2.360059,
+         51.38639
+        ],
+        [
+         -2.360766,
+         51.385206
+        ],
+        [
+         -2.363468,
+         51.384609
+        ],
+        [
+         -2.36298,
+         51.383214
+        ],
+        [
+         -2.363754,
+         51.383028
+        ],
+        [
+         -2.364346,
+         51.383628
+        ],
+        [
+         -2.367145,
+         51.383201
+        ],
+        [
+         -2.372931,
+         51.384318
+        ],
+        [
+         -2.375502,
+         51.385195
+        ],
+        [
+         -2.37843,
+         51.385561
+        ],
+        [
+         -2.379815,
+         51.385383
+        ],
+        [
+         -2.383876,
+         51.384187
+        ],
+        [
+         -2.384635,
+         51.383282
+        ],
+        [
+         -2.386483,
+         51.382983
+        ],
+        [
+         -2.391763,
+         51.382843
+        ],
+        [
+         -2.394668,
+         51.382419
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395256,
+         51.383443
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.39432,
+         51.383455
+        ],
+        [
+         -2.39428,
+         51.382654
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.394457,
+         51.384355
+        ],
+        [
+         -2.390682,
+         51.384258
+        ],
+        [
+         -2.386771,
+         51.384522
+        ],
+        [
+         -2.384013,
+         51.384175
+        ],
+        [
+         -2.38162,
+         51.38476
+        ],
+        [
+         -2.381057,
+         51.383699
+        ],
+        [
+         -2.38122,
+         51.382375
+        ],
+        [
+         -2.380855,
+         51.382089
+        ],
+        [
+         -2.374055,
+         51.381113
+        ],
+        [
+         -2.376527,
+         51.378983
+        ],
+        [
+         -2.376472,
+         51.378343
+        ],
+        [
+         -2.373019,
+         51.377587
+        ],
+        [
+         -2.372283,
+         51.377092
+        ],
+        [
+         -2.371321,
+         51.377166
+        ]
+       ],
+       "type": "LineString"
+      },
+      "legs": [
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 834.1,
+        "duration": 648,
+        "distance": 3164.6
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 316.5,
+        "duration": 254,
+        "distance": 1066.8
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1226.6,
+        "duration": 721.4,
+        "distance": 3387.6
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 858.1,
+        "duration": 532.2,
+        "distance": 2809.5
+       }
+      ],
+      "weight_name": "routability",
+      "weight": 3235.2999999999997,
+      "duration": 2155.6000000000004,
+      "distance": 10428.5
+     }
+    ]
+   }
+  },
+  "api.mapbox.com/optimized-trips/v1/mapbox/driving/-2.3713526,51.377295;-2.3888658,51.3941247;-2.3597522,51.3875728;-2.3944286,51.382651;-2.3492725,51.3928108?geometries=geojson&overview=simplified&roundtrip=true": {
+   "status": 200,
+   "body": {
+    "code": "Ok",
+    "waypoints": [
+     {
+      "distance": 14.523960184136124,
+      "name": "Lower Oldfield Park",
+      "location": [
+       -2.371321,
+       51.377166
+      ],
+      "waypoint_index": 0,
+      "trips_index": 0
+     },
+     {
+      "distance": 12.719168055873869,
+      "name": "Manor Road",
+      "location": [
+       -2.388705,
+       51.394179
+      ],
+      "waypoint_index": 2,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.864319502445586,
+      "name": "The Paragon",
+      "location": [
+       -2.359994,
+       51.387567
+      ],
+      "waypoint_index": 4,
+      "trips_index": 0
+     },
+     {
+      "distance": 10.380633021448984,
+      "name": "Avondale Road",
+      "location": [
+       -2.39428,
+       51.382654
+      ],
+      "waypoint_index": 1,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.450920487331693,
+      "name": "Kensington Place",
+      "location": [
+       -2.349394,
+       51.392938
+      ],
+      "waypoint_index": 3,
+      "trips_index": 0
+     }
+    ],
+    "trips": [
+     {
+      "geometry": {
+       "coordinates": [
+        [
+         -2.371321,
+         51.377166
+        ],
+        [
+         -2.372283,
+         51.377092
+        ],
+        [
+         -2.373019,
+         51.377587
+        ],
+        [
+         -2.376472,
+         51.378343
+        ],
+        [
+         -2.376527,
+         51.378983
+        ],
+        [
+         -2.375896,
+         51.379368
+        ],
+        [
+         -2.374463,
+         51.381126
+        ],
+        [
+         -2.381244,
+         51.382137
+        ],
+        [
+         -2.381057,
+         51.383699
+        ],
+        [
+         -2.381745,
+         51.38459
+        ],
+        [
+         -2.383876,
+         51.384187
+        ],
+        [
+         -2.384502,
+         51.383353
+        ],
+        [
+         -2.385021,
+         51.383164
+        ],
+        [
+         -2.388552,
+         51.382813
+        ],
+        [
+         -2.391763,
+         51.382843
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.39432,
+         51.383455
+        ],
+        [
+         -2.39428,
+         51.382654
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.394457,
+         51.384355
+        ],
+        [
+         -2.388665,
+         51.384339
+        ],
+        [
+         -2.389414,
+         51.387893
+        ],
+        [
+         -2.388447,
+         51.393001
+        ],
+        [
+         -2.389909,
+         51.39502
+        ],
+        [
+         -2.391619,
+         51.3962
+        ],
+        [
+         -2.391047,
+         51.396182
+        ],
+        [
+         -2.38979,
+         51.395598
+        ],
+        [
+         -2.388705,
+         51.394179
+        ],
+        [
+         -2.389302,
+         51.394869
+        ],
+        [
+         -2.389441,
+         51.394394
+        ],
+        [
+         -2.388447,
+         51.393001
+        ],
+        [
+         -2.38519,
+         51.391163
+        ],
+        [
+         -2.378126,
+         51.389231
+        ],
+        [
+         -2.371607,
+         51.3884
+        ],
+        [
+         -2.369772,
+         51.388418
+        ],
+        [
+         -2.367235,
+         51.388048
+        ],
+        [
+         -2.36512,
+         51.388087
+        ],
+        [
+         -2.361819,
+         51.387344
+        ],
+        [
+         -2.360561,
+         51.387637
+        ],
+        [
+         -2.357958,
+         51.389866
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.349394,
+         51.392938
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.358223,
+         51.389745
+        ],
+        [
+         -2.359679,
+         51.388583
+        ],
+        [
+         -2.359994,
+         51.387567
+        ],
+        [
+         -2.360059,
+         51.38639
+        ],
+        [
+         -2.360766,
+         51.385206
+        ],
+        [
+         -2.363488,
+         51.384587
+        ],
+        [
+         -2.363003,
+         51.383162
+        ],
+        [
+         -2.364793,
+         51.382782
+        ],
+        [
+         -2.366267,
+         51.381021
+        ],
+        [
+         -2.367374,
+         51.381234
+        ],
+        [
+         -2.370709,
+         51.379998
+        ],
+        [
+         -2.370679,
+         51.379676
+        ],
+        [
+         -2.368444,
+         51.378909
+        ],
+        [
+         -2.368793,
+         51.377897
+        ],
+        [
+         -2.369534,
+         51.377366
+        ],
+        [
+         -2.371321,
+         51.377166
+        ]
+       ],
+       "type": "LineString"
+      },
+      "legs": [
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1055.9,
+        "duration": 593.7,
+        "distance": 2860.3
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 789.8,
+        "duration": 455.9,
+        "distance": 2466.2
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 881.6,
+        "duration": 659.7,
+        "distance": 3498.4
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 316.5,
+        "duration": 254,
+        "distance": 1066.8
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 631.4,
+        "duration": 411.3,
+        "distance": 1889.1
+       }
+      ],
+      "weight_name": "routability",
+      "weight": 3675.2000000000003,
+      "duration": 2374.6,
+      "distance": 11780.8
+     }
+    ]
+   }
+  },
+  "api.mapbox.com/optimized-trips/v1/mapbox/driving/-2.3492725,51.3928108;-2.3713526,51.377295;-2.3597522,51.3875728;-2.3944286,51.382651;-2.3888658,51.3941247?destination=last&geometries=geojson&overview=simplified&roundtrip=false&source=first": {
+   "status": 200,
+   "body": {
+    "code": "Ok",
+    "waypoints": [
+     {
+      "distance": 16.450920487331693,
+      "name": "Kensington Place",
+      "location": [
+       -2.349394,
+       51.392938
+      ],
+      "waypoint_index": 0,
+      "trips_index": 0
+     },
+     {
+      "distance": 14.523960184136124,
+      "name": "Lower Oldfield Park",
+      "location": [
+       -2.371321,
+       51.377166
+      ],
+      "waypoint_index": 2,
+      "trips_index": 0
+     },
+     {
+      "distance": 16.864319502445586,
+      "name": "The Paragon",
+      "location": [
+       -2.359994,
+       51.387567
+      ],
+      "waypoint_index": 1,
+      "trips_index": 0
+     },
+     {
+      "distance": 10.380633021448984,
+      "name": "Avondale Road",
+      "location": [
+       -2.39428,
+       51.382654
+      ],
+      "waypoint_index": 3,
+      "trips_index": 0
+     },
+     {
+      "distance": 12.719168055873869,
+      "name": "Manor Road",
+      "location": [
+       -2.388705,
+       51.394179
+      ],
+      "waypoint_index": 4,
+      "trips_index": 0
+     }
+    ],
+    "trips": [
+     {
+      "geometry": {
+       "coordinates": [
+        [
+         -2.349394,
+         51.392938
+        ],
+        [
+         -2.349104,
+         51.393183
+        ],
+        [
+         -2.358223,
+         51.389745
+        ],
+        [
+         -2.359679,
+         51.388583
+        ],
+        [
+         -2.359994,
+         51.387567
+        ],
+        [
+         -2.360059,
+         51.38639
+        ],
+        [
+         -2.360766,
+         51.385206
+        ],
+        [
+         -2.363488,
+         51.384587
+        ],
+        [
+         -2.363003,
+         51.383162
+        ],
+        [
+         -2.364793,
+         51.382782
+        ],
+        [
+         -2.366267,
+         51.381021
+        ],
+        [
+         -2.367374,
+         51.381234
+        ],
+        [
+         -2.370709,
+         51.379998
+        ],
+        [
+         -2.370679,
+         51.379676
+        ],
+        [
+         -2.368444,
+         51.378909
+        ],
+        [
+         -2.368793,
+         51.377897
+        ],
+        [
+         -2.369534,
+         51.377366
+        ],
+        [
+         -2.371321,
+         51.377166
+        ],
+        [
+         -2.372283,
+         51.377092
+        ],
+        [
+         -2.373019,
+         51.377587
+        ],
+        [
+         -2.376472,
+         51.378343
+        ],
+        [
+         -2.376527,
+         51.378983
+        ],
+        [
+         -2.375896,
+         51.379368
+        ],
+        [
+         -2.374463,
+         51.381126
+        ],
+        [
+         -2.381244,
+         51.382137
+        ],
+        [
+         -2.381057,
+         51.383699
+        ],
+        [
+         -2.381745,
+         51.38459
+        ],
+        [
+         -2.383876,
+         51.384187
+        ],
+        [
+         -2.384502,
+         51.383353
+        ],
+        [
+         -2.385021,
+         51.383164
+        ],
+        [
+         -2.388552,
+         51.382813
+        ],
+        [
+         -2.391763,
+         51.382843
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.39432,
+         51.383455
+        ],
+        [
+         -2.39428,
+         51.382654
+        ],
+        [
+         -2.394269,
+         51.382424
+        ],
+        [
+         -2.395223,
+         51.382484
+        ],
+        [
+         -2.395244,
+         51.383492
+        ],
+        [
+         -2.394706,
+         51.383771
+        ],
+        [
+         -2.394457,
+         51.384355
+        ],
+        [
+         -2.388665,
+         51.384339
+        ],
+        [
+         -2.389414,
+         51.387893
+        ],
+        [
+         -2.388447,
+         51.393001
+        ],
+        [
+         -2.389909,
+         51.39502
+        ],
+        [
+         -2.391619,
+         51.3962
+        ],
+        [
+         -2.391047,
+         51.396182
+        ],
+        [
+         -2.38979,
+         51.395598
+        ],
+        [
+         -2.388705,
+         51.394179
+        ]
+       ],
+       "type": "LineString"
+      },
+      "legs": [
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 316.5,
+        "duration": 254,
+        "distance": 1066.8
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 631.4,
+        "duration": 411.3,
+        "distance": 1889.1
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 1055.9,
+        "duration": 593.7,
+        "distance": 2860.3
+       },
+       {
+        "steps": [],
+        "summary": "",
+        "weight": 789.8,
+        "duration": 455.9,
+        "distance": 2466.2
+       }
+      ],
+      "weight_name": "routability",
+      "weight": 2793.6000000000004,
+      "duration": 1714.9,
+      "distance": 8282.4
+     }
+    ]
+   }
+  }
+ }
+}

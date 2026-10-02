@@ -75,6 +75,15 @@ export type SoldArgs = {
 
 type JsonObject = Record<string, unknown>;
 
+/** One home's published position; coordinates are null when the listing has none. */
+export type HomeLocation = {
+  listing_id: string;
+  address: string | null;
+  postcode: string | null;
+  url: string | null;
+  coordinates: { latitude: number; longitude: number } | null;
+};
+
 const MIN_SECTOR_SALES = 10;
 /** Listing descriptions read at once for a wish search; home.co.uk answers each in about 0.2 s. */
 const WISH_READS_AT_ONCE = 5;
@@ -265,6 +274,7 @@ export class HomeClient {
   private readonly cachedAreas: TtlCache<JsonObject>;
   private readonly listingRoutes: TtlCache<EnrichmentRoute>;
   private readonly listingTexts: TtlCache<string | null>;
+  private readonly listingLocations: TtlCache<HomeLocation>;
 
   constructor(private readonly options: HomeClientOptions) {
     this.homeBaseUrl = (options.homeBaseUrl ?? DEFAULT_HOME_URL).replace(/\/+$/, "");
@@ -278,6 +288,7 @@ export class HomeClient {
     this.cachedAreas = new TtlCache(options.cachedAreas ?? 2_000, ttl, clock);
     this.listingRoutes = new TtlCache(4 * (options.cachedHomes ?? 2_000), ttl, clock);
     this.listingTexts = new TtlCache(2_000, LISTING_TEXT_TTL_MS, clock);
+    this.listingLocations = new TtlCache(2_000, LISTING_TEXT_TTL_MS, clock);
   }
 
   /** Hit and miss counts for health. A home hit is one Homedata core lookup not spent. */
@@ -496,6 +507,31 @@ export class HomeClient {
 
   async compare(listingIds: string[]): Promise<JsonObject> {
     return { homes: await Promise.all(listingIds.map((id) => this.home(id))) };
+  }
+
+  /**
+   * Where one home is, from its property-details page only: no search, no
+   * Homedata. Kept for an hour like listing text, so a commute check followed by
+   * a viewing plan reads each home once.
+   */
+  async locate(listingId: string): Promise<HomeLocation> {
+    if (!UUID.test(listingId)) throw new HomeError(`${listingId} is not a listing UUID returned by search_homes`);
+    const known = this.listingLocations.peek(listingId);
+    if (known) return { ...known };
+    const detail = object(await this.homeGet(`/api/property-details/${listingId}`));
+    if (!Object.keys(detail).length) throw new HomeError(`Home ${listingId} was not found`);
+    const lat = Number(detail["latitude"]); const lng = Number(detail["longitude"]);
+    const located = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
+    const location: HomeLocation = {
+      listing_id: listingId,
+      address: [text(detail["building_name"]), [text(detail["building_number"]), text(detail["street_name"])].filter(Boolean).join(" "), text(detail["locality"]), text(detail["town_name"])]
+        .filter(Boolean).join(", ") || null,
+      postcode: text(detail["postcode"]),
+      url: absoluteHomeUrl(`/property/${listingId}`),
+      coordinates: located ? { latitude: lat, longitude: lng } : null,
+    };
+    this.listingLocations.set(listingId, location);
+    return { ...location };
   }
 
   async area(postcode: string): Promise<JsonObject> {
