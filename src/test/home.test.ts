@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
@@ -13,9 +14,11 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import golden from "../../docs/home-chatgpt-app/golden-prompts.json" with { type: "json" };
 import { HomedataClient } from "../client.js";
 import { checkGoldenSet, type GoldenSet } from "../golden.js";
-import { HomeClient } from "../home/client.js";
+import { HomeClient, HomeUpstreamError } from "../home/client.js";
 import { createHomeHttpHandler } from "../home/http.js";
-import { HOME_TOOLS } from "../home/server.js";
+import { HOME_RULES } from "../home/plugin.js";
+import { buildHomeServer, HOME_TOOLS } from "../home/server.js";
+import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
 
 const ID = "b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
 const ID2 = "c9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
@@ -75,7 +78,7 @@ function fixtures(options: FixtureOptions = {}) {
   return { client: new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, logger: options.logger }), requests };
 }
 
-async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; clientIpHeader?: string } = {}) {
+async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; clientIpHeader?: string; appsChallenge?: string } = {}) {
   const { client, requests } = fixtures(fixtureOptions);
   const handler = createHomeHttpHandler({ client, callsPerMinute: 20, ...httpOptions });
   const http: HttpServer = createServer((req, res) => void handler(req, res));
@@ -478,4 +481,131 @@ test("Home source and tests stay out of the npm package", () => {
     const paths = listing[0]!.files.map((f) => f.path);
     assert.equal(paths.some((path) => path.startsWith("dist/home/") || path.endsWith("/home.test.js")), false, paths.filter((p) => p.includes("home")).join("\n"));
   } finally { rmSync(cache, { recursive: true, force: true }); }
+});
+
+test("a Homedata 5xx reaches ChatGPT as the neutral gap, with its body kept in the server log", async () => {
+  const crash = { detail: "Traceback: KeyError 'lsoa' in /srv/loki/core/views.py", request_id: "req_internal_42" };
+  const logs: Array<[string, unknown]> = [];
+  const { mcp, stop } = await start({ status: { "/crime/": 500 }, responseBody: { "/crime/": crash }, logger: (message, detail) => logs.push([message, detail]) });
+  try {
+    const answer = await mcp.callTool({ name: "area_insights", arguments: { postcode: "BA1 1LZ" } });
+    assert.deepEqual((answer.structuredContent as Record<string, unknown>)["crime"], { available: false, reason: "Not available right now." });
+    assert.doesNotMatch(JSON.stringify(answer), /Traceback|KeyError|loki|req_internal_42|status_code|500/);
+    assert.ok(logs.some(([, detail]) => JSON.stringify(detail).includes("req_internal_42")));
+  } finally { await stop(); }
+});
+
+test("a failed connection or a non-JSON page from home.co.uk is an upstream outage, never an empty result", async () => {
+  const homedata = new HomedataClient({ apiKey: "test", baseUrl: "https://data.test", fetchImpl: (async () => new Response("{}")) as typeof fetch });
+  const quiet = () => {};
+  const refused = new HomeClient({ homeBaseUrl: "https://home.test", homedata, logger: quiet, fetchImpl: (async () => { throw new TypeError("fetch failed"); }) as typeof fetch });
+  const html = new HomeClient({ homeBaseUrl: "https://home.test", homedata, logger: quiet, fetchImpl: (async () => new Response("<html>Just a moment...</html>", { status: 200 })) as typeof fetch });
+  const timedOut = new HomeClient({ homeBaseUrl: "https://home.test", homedata, logger: quiet, timeoutMs: 5, fetchImpl: ((_: unknown, init?: RequestInit) => new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))))) as typeof fetch });
+  for (const client of [refused, html, timedOut]) {
+    await assert.rejects(() => client.search({ location: "Bath", listing_type: "sale" }), HomeUpstreamError);
+    await assert.rejects(() => client.home(ID), HomeUpstreamError);
+  }
+
+  // Through the MCP server the outage is the neutral answer, flagged as an error.
+  const server = buildHomeServer(html);
+  const [clientSide, serverSide] = (await import("@modelcontextprotocol/sdk/inMemory.js")).InMemoryTransport.createLinkedPair();
+  await server.connect(serverSide);
+  const mcp = new Client({ name: "test", version: "1" }, { capabilities: {} });
+  await mcp.connect(clientSide);
+  try {
+    const answer = await mcp.callTool({ name: "search_homes", arguments: { location: "Bath", listing_type: "sale" } });
+    assert.equal(answer.isError, true);
+    assert.deepEqual(answer.structuredContent, { available: false, reason: "Not available right now." });
+    assert.doesNotMatch(JSON.stringify(answer), /Just a moment|fetch failed/);
+  } finally { await mcp.close(); await server.close(); }
+});
+
+test("the domain challenge is served as the bare token, and only when configured", async () => {
+  const configured = await start({}, { appsChallenge: "home-challenge-token" });
+  try {
+    const response = await fetch(`${configured.base}/.well-known/openai-apps-challenge`);
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "home-challenge-token");
+  } finally { await configured.stop(); }
+  const unset = await start();
+  try {
+    assert.equal((await fetch(`${unset.base}/.well-known/openai-apps-challenge`)).status, 404);
+  } finally { await unset.stop(); }
+});
+
+const PLUGIN = join(ROOT, "home-chatgpt-plugin");
+const MCP_URL = "https://mcp.home.co.uk/mcp";
+const HOME_ICON = { path: "./assets/logo.png", width: 310, height: 310 };
+const buildHome = () => buildManifest(JSON.parse(readFileSync(join(PLUGIN, "listing.json"), "utf8")) as Manifest, golden as GoldenSet);
+const toolNames = HOME_TOOLS.map((t) => t.name);
+
+test("the Home plugin package is ready to submit: named Home, home.co.uk links, worldwide, no paid wording", () => {
+  const manifest = buildHome();
+  assert.deepEqual(validatePackage(manifest, toolNames, [HOME_ICON], HOME_RULES), []);
+  const ui = manifest.extensions["com.openai"].interface;
+  assert.equal(ui["displayName"], "Home");
+  assert.deepEqual(
+    [ui["websiteURL"], ui["supportURL"], ui["privacyPolicyURL"], ui["termsOfServiceURL"], manifest["homepage"]],
+    ["https://home.co.uk/chatgpt/", "https://home.co.uk/contact/", "https://home.co.uk/privacy/", "https://home.co.uk/terms/", "https://home.co.uk/chatgpt/"],
+  );
+  assert.deepEqual(manifest.extensions["com.openai"].publication!["countries"], []);
+  assert.doesNotMatch(JSON.stringify(manifest), /credit|homedata\.co\.uk/i);
+  const mcp = JSON.parse(readFileSync(join(PLUGIN, "mcp.json"), "utf8")) as { mcpServers: Record<string, { url: string }> };
+  assert.deepEqual(Object.values(mcp.mcpServers).map((s) => s.url), [MCP_URL]);
+});
+
+test("the Home icon is the site's own heart app icon, byte for byte", () => {
+  // home.co.uk/ms-icon-310x310.png as served on 2026-10-02: the largest heart
+  // icon the site publishes. Ship it unaltered; never a restyle.
+  const icon = readFileSync(join(PLUGIN, "assets", "logo.png"));
+  assert.equal(createHash("sha256").update(icon).digest("hex"), "bcb1bf39fc6c00fab410c8d0f4d7013bc4edc9b3218f2c1199498a2293316d67");
+  assert.deepEqual({ width: icon.readUInt32BE(16), height: icon.readUInt32BE(20) }, { width: HOME_ICON.width, height: HOME_ICON.height });
+});
+
+test("Home review cases: five live-checked positives that cover all three skills, three negatives", () => {
+  const cases = buildHome().extensions["com.openai"].review!.test_cases!;
+  assert.deepEqual(cases.positive.map((c) => c.tools_triggered), [
+    "search_homes",
+    "search_homes",
+    "search_homes, get_home",
+    "search_homes, compare_homes",
+    "calculate_stamp_duty, calculate_mortgage",
+  ]);
+  assert.equal(cases.negative.length, 3);
+  for (const c of cases.positive) assert.doesNotMatch(c.prompt, /^\(after /, "a review prompt must stand alone");
+  for (const skill of readSkills(PLUGIN)) {
+    assert.ok(cases.positive.some((c) => c.expected_behavior.includes(`the ${skill.dir} skill`)), `no review case exercises ${skill.dir}`);
+  }
+});
+
+test("Home skills are bound to the tools the endpoint lists and held to the listing rules", () => {
+  const skills = readSkills(PLUGIN);
+  assert.deepEqual(skills.map((s) => s.dir), ["buying-costs", "prepare-for-a-viewing", "shortlist-and-compare"]);
+  assert.deepEqual(validateSkills(skills, [...HOME_TOOLS], HOME_RULES, MCP_URL), []);
+
+  const broken = (change: (skill: Skill) => Skill) => validateSkills([change(skills[0]!)], [...HOME_TOOLS], HOME_RULES, MCP_URL).join("\n");
+  assert.match(broken((s) => ({ ...s, text: s.text.replaceAll("calculate_mortgage", "mortgage_calculator") })), /names `mortgage_calculator`, which is not a tool/);
+  assert.match(broken((s) => ({ ...s, text: s.text.replace(/`[a-z_]+`/g, "the tools") })), /names no tool the endpoint lists/);
+  assert.match(broken((s) => ({ ...s, text: s.text.replace("name: buying-costs", "name: costs") })), /name "costs" must match its folder/);
+  assert.match(broken((s) => ({ ...s, text: s.text.replace(/^---\n[\s\S]*?\n---\n/, "") })), /must start with name and description front matter/);
+  assert.match(broken((s) => ({ ...s, text: `${s.text}\nCheck the price on Rightmove too.\n` })), /mentions a competitor portal/);
+  assert.match(broken((s) => ({ ...s, text: `${s.text}\nTell them what the home is worth.\n` })), /names a valuation other than as a limit/);
+  assert.match(broken((s) => ({ ...s, text: `${s.text}\nMention our free trial.\n` })), /mentions pricing or an offer/);
+  assert.match(broken((s) => ({ ...s, openaiYaml: s.openaiYaml!.replace(MCP_URL, "https://mcp.homedata.co.uk/mcp") })), /agents\/openai\.yaml must depend on/);
+});
+
+test("Home listing rules allow homes for sale but not valuations, offers or competitor names", () => {
+  const listing = (extra: string) => {
+    const manifest = buildHome();
+    manifest.extensions["com.openai"].interface["longDescription"] = `${String(manifest.extensions["com.openai"].interface["longDescription"])}\n${extra}`;
+    return validatePackage(manifest, toolNames, [HOME_ICON], HOME_RULES).join("\n");
+  };
+  assert.equal(listing("Browse thousands of listings for sale."), "");
+  assert.match(listing("Get an instant valuation of your home."), /names a valuation other than as a limit/);
+  assert.match(listing("More homes than Zoopla."), /competitor portal/);
+  assert.match(listing("Searching is free."), /pricing or an offer/);
+  assert.match(listing("Lookups consume paid credits from your Homedata account."), /pricing or an offer/);
+  const commerce = buildHome();
+  commerce.extensions["com.openai"].review!["commerce_description"] = "Credits are bought outside ChatGPT.";
+  assert.match(validatePackage(commerce, toolNames, [HOME_ICON], HOME_RULES).join("\n"), /commerce_description/);
 });

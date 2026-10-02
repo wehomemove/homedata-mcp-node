@@ -81,6 +81,14 @@ unmatched listings receive explicitly labelled postcode-area facts. Published
 coordinates recover a missing postcode; only listings with none of those
 identifiers remain unavailable.
 
+The Home app has its own ChatGPT plugin package beside Homedata's
+(`node scripts/package-chatgpt-plugin.mjs home`): the Home listing, the site's
+heart icon, worldwide availability, five positive and three negative review
+cases from the Home golden set, and three skills (prepare for a viewing,
+shortlist and compare, buying costs) checked against the tools the endpoint
+lists. The Home endpoint serves the portal's domain challenge
+(`OPENAI_APPS_CHALLENGE`).
+
 The property tiers (`property_discovery`, `property_address`, `property_base`,
 `property_core`, `property_complete`, `property_custom`), property attributes,
 `property_lr_titles`, `address_postcode`, `risks`, `deprivation`, price trends,

@@ -1,51 +1,71 @@
 {
-  "about": "Golden prompts for the separate home.co.uk Home ChatGPT app. Run these after changing tool names, descriptions, schemas or instructions. Review cases are five positive and three negative examples.",
-  "version": "2026-10-02-sellers-renters",
+  "about": "Golden prompts for the separate home.co.uk Home ChatGPT app. Run these after changing tool names, descriptions, schemas, instructions or skills. The review packet (review: true) is five positive and three negative cases, each run live against https://mcp.home.co.uk/mcp before its outcome was written; the positive outcomes name figures and filters a reviewer can check.",
+  "version": "2026-10-02-review-packet",
   "cases": [
     {
       "id": "search-family-home", "kind": "indirect", "review": true,
       "prompt": "Find me three-bedroom houses for sale in Bath up to £500,000, newest first.",
-      "expect": { "calls": [{ "tool": "search_homes", "args": { "location": "Bath", "listing_type": "sale", "min_beds": 3, "max_price": 500000, "sort": "newest" } }], "outcome": "Shows matching Home listings with asking prices, photos, dates, status and links." }
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "sale", "min_beds": 3, "max_price": 500000, "sort": "newest"}}], "outcome": "Calls search_homes once with Bath, sale, at least three bedrooms, at most £500,000 and newest first, then shows matching homes with asking price, bedrooms, photo, date added, status and a home.co.uk link. Every home shown has three or more bedrooms and an asking price of £500,000 or less."}
+    },
+    {
+      "id": "new-build-search", "kind": "indirect", "review": true,
+      "prompt": "Show me new-build homes for sale in Bristol, cheapest first.",
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bristol", "listing_type": "sale", "new_build": true, "sort": "price_asc"}}], "outcome": "Calls search_homes once with Bristol, sale, new-build only and lowest price first, then lists the new-build homes in rising price order with a home.co.uk link for each."}
+    },
+    {
+      "id": "prepare-viewing", "kind": "indirect", "review": true,
+      "prompt": "I'm viewing the newest three-bedroom house for sale in Bath under £500,000 this weekend. What should I check and ask the agent?",
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "sale", "min_beds": 3, "max_price": 500000, "sort": "newest"}}, {"tool": "get_home", "args": {}}], "allowed": [{"tool": "area_insights", "args": {}}], "outcome": "Uses the prepare-for-a-viewing skill: opens the newest result with get_home, then gives a checklist drawn from that home's tenure, age band, time on market and any reduction, reports the Homedata checks that came back and says plainly which were unavailable, ends with five questions for the agent and the listing link, and gives no estimate of what the home is worth."}
+    },
+    {
+      "id": "compare-rentals", "kind": "indirect", "review": true,
+      "prompt": "Find two-bedroom homes to rent in Bath and compare the three newest side by side.",
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "rent", "min_beds": 2, "max_beds": 2, "sort": "newest"}}, {"tool": "compare_homes", "args": {}}], "outcome": "Uses the shortlist-and-compare skill: passes the first three listing IDs from the search to compare_homes, then sets the three homes side by side by rent, property type, photos and the facts in each description, marking any fact a home does not publish as not available."}
+    },
+    {
+      "id": "buying-costs", "kind": "indirect", "review": true,
+      "prompt": "I'm a first-time buyer. What would a £450,000 home cost me up front and each month with a £45,000 deposit at 4.5% over 25 years?",
+      "expect": {"calls": [{"tool": "calculate_stamp_duty", "args": {"price": 450000, "buyer_type": "first_time"}}, {"tool": "calculate_mortgage", "args": {"price": 450000, "deposit": 45000, "rate": 4.5, "term": 25}}], "outcome": "Uses the buying-costs skill: stamp duty of £7,500 with first-time buyer relief, a £405,000 loan, about £2,251 a month and about £270,336 total interest, each labelled as an estimate to confirm with a broker or conveyancer, with no lender or product named."}
     },
     {
       "id": "search-recently-reduced", "kind": "indirect", "review": false,
       "prompt": "Show me homes for sale in Bristol reduced in the last 14 days.",
-      "expect": { "calls": [{ "tool": "search_homes", "args": { "location": "Bristol", "listing_type": "sale", "reduced_within_days": 14 } }], "outcome": "Returns only homes with a recorded reduction in that period and notes if not every source result was checked." }
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bristol", "listing_type": "sale", "reduced_within_days": 14}}], "outcome": "Returns only homes with a recorded reduction in that period and notes if not every source result was checked."}
     },
     {
       "id": "search-long-listed", "kind": "indirect", "review": false,
       "prompt": "Find flats to buy in Leeds that have been on the market at least 90 days.",
-      "expect": { "calls": [{ "tool": "search_homes", "args": { "location": "Leeds", "listing_type": "sale", "property_type": "flat", "on_market_at_least_days": 90 } }], "outcome": "Returns long-listed flats across the checked pages with any coverage limit stated." }
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Leeds", "listing_type": "sale", "property_type": "flat", "on_market_at_least_days": 90}}], "outcome": "Returns long-listed flats across the checked pages with any coverage limit stated."}
     },
     {
       "id": "search-new-rentals", "kind": "indirect", "review": false,
       "prompt": "What rentals were newly listed in Manchester in the last 3 days?",
-      "expect": { "calls": [{ "tool": "search_homes", "args": { "location": "Manchester", "listing_type": "rent", "new_within_days": 3 } }], "outcome": "Returns rentals whose recorded added date is within the requested period." }
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Manchester", "listing_type": "rent", "new_within_days": 3}}], "outcome": "Returns rentals whose recorded added date is within the requested period."}
     },
     {
-      "id": "open-result", "kind": "followup", "review": true,
+      "id": "open-result", "kind": "followup", "review": false,
       "prompt": "(after search-family-home) Tell me everything about the first one, including EPC, flood risk and broadband.",
-      "expect": { "calls": [{ "tool": "get_home", "args": {} }], "outcome": "Reuses the first listing ID and returns its full listing plus available Homedata enrichment." }
+      "expect": {"calls": [{"tool": "get_home", "args": {}}], "outcome": "Reuses the first listing ID and returns its full listing plus available Homedata enrichment."}
     },
     {
-      "id": "compare-shortlist", "kind": "indirect", "review": true,
+      "id": "compare-shortlist", "kind": "indirect", "review": false,
       "prompt": "Compare these three Home listings side by side: 11111111-1111-4111-8111-111111111111, 22222222-2222-4222-8222-222222222222 and 33333333-3333-4333-8333-333333333333.",
-      "expect": { "calls": [{ "tool": "compare_homes", "args": {} }], "outcome": "Compares the listing details and enrichment without inventing missing values." }
+      "expect": {"calls": [{"tool": "compare_homes", "args": {}}], "outcome": "Compares the listing details and enrichment without inventing missing values."}
     },
     {
-      "id": "area-check", "kind": "indirect", "review": true,
+      "id": "area-check", "kind": "indirect", "review": false,
       "prompt": "What is the area around BA1 1LZ like for schools, broadband and recorded crime?",
-      "expect": { "calls": [{ "tool": "area_insights", "args": { "postcode": "BA1 1LZ" } }], "outcome": "Summarises the evidence and does not declare the area safe or unsafe." }
+      "expect": {"calls": [{"tool": "area_insights", "args": {"postcode": "BA1 1LZ"}}], "outcome": "Summarises the evidence and does not declare the area safe or unsafe."}
     },
     {
-      "id": "mortgage-scenario", "kind": "direct", "review": true,
+      "id": "mortgage-scenario", "kind": "direct", "review": false,
       "prompt": "Estimate repayments on a £400,000 home with a £60,000 deposit, 4.5% interest and a 30-year term.",
-      "expect": { "calls": [{ "tool": "calculate_mortgage", "args": { "price": 400000, "deposit": 60000, "rate": 4.5, "term": 30 } }], "outcome": "Returns an estimate and does not present it as a mortgage offer." }
+      "expect": {"calls": [{"tool": "calculate_mortgage", "args": {"price": 400000, "deposit": 60000, "rate": 4.5, "term": 30}}], "outcome": "Returns an estimate and does not present it as a mortgage offer."}
     },
     {
       "id": "stamp-duty", "kind": "direct", "review": false,
       "prompt": "Estimate stamp duty on a £450,000 first home.",
-      "expect": { "calls": [{ "tool": "calculate_stamp_duty", "args": { "price": 450000, "buyer_type": "first_time" } }], "outcome": "Returns an SDLT estimate and labels it as an estimate rather than tax advice." }
+      "expect": {"calls": [{"tool": "calculate_stamp_duty", "args": {"price": 450000, "buyer_type": "first_time"}}], "outcome": "Returns an SDLT estimate and labels it as an estimate rather than tax advice."}
     },
     {
       "id": "sold-prices-seller", "kind": "indirect", "review": false,
@@ -87,13 +107,13 @@
     {
       "id": "negative-mortgage-approval", "kind": "negative", "review": true,
       "prompt": "Approve me for the biggest mortgage I can get.",
-      "expect": { "calls": [], "outcome": "Explains that it cannot assess eligibility or approve lending." },
+      "expect": {"calls": [], "outcome": "Explains that it cannot assess eligibility or approve lending."},
       "why": "A repayment calculator is not a lending or eligibility service."
     },
     {
       "id": "negative-home-value", "kind": "negative", "review": true,
       "prompt": "What will my house be worth in five years?",
-      "expect": { "calls": [], "outcome": "Does not invent a future valuation." },
+      "expect": {"calls": [], "outcome": "Does not invent a future valuation."},
       "why": "The tools search advertised homes and report evidence; they do not forecast a specific home's value."
     }
   ]

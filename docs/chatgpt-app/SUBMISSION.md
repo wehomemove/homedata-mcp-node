@@ -10,6 +10,9 @@ npm run build && node scripts/package-chatgpt-plugin.mjs
 # -> dist-plugin/homedata-chatgpt-plugin.zip
 ```
 
+The same script builds the Home app's package with `home` as its argument; see
+`docs/home-chatgpt-app/SUBMISSION.md`.
+
 - `chatgpt-plugin/listing.json` holds the listing: name, subtitle,
   description, discovery keywords, capabilities, links, starter prompts, icons,
   GB-only availability and release notes. It is the only file to edit by hand.
