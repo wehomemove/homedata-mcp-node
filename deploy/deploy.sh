@@ -7,16 +7,25 @@
 # switches `current` atomically, restarts the supervised service and checks
 # /healthz. If the new release does not answer healthy it switches back to
 # the previous one and exits non-zero. Keeps the last three releases.
-# Runbook: docs/chatgpt-app/DEPLOY.md
+#
+# The defaults release the Homedata endpoint. The same script releases the
+# Home endpoint with its own program, folder and health check:
+#
+#   DEPLOY_PROGRAM=... DEPLOY_ROOT=... DEPLOY_HEALTH=... deploy.sh origin/main
+#
+# Runbooks: docs/chatgpt-app/DEPLOY.md (Homedata),
+# docs/home-chatgpt-app/RUNNING.md (Home values).
 set -euo pipefail
 
 REF=${1:?usage: deploy.sh <git ref>}
-# Overridable only so the script itself can be exercised away from the box.
+# Which endpoint: supervisor program, release folder and health check URL.
+PROGRAM=${DEPLOY_PROGRAM:-homedata-mcp}
 ROOT=${DEPLOY_ROOT:-/home/forge/mcp.homedata.co.uk}
-REPO=${DEPLOY_REPO:-https://github.com/wehomemove/homedata-mcp-node.git}
-PROGRAM=homedata-mcp
 HEALTH=${DEPLOY_HEALTH:-http://127.0.0.1:8191/healthz}
+# Overridable only so the script itself can be exercised away from the box.
+REPO=${DEPLOY_REPO:-https://github.com/wehomemove/homedata-mcp-node.git}
 SUPERVISORCTL=${DEPLOY_SUPERVISORCTL:-sudo -n /usr/bin/supervisorctl}
+echo "deploy: $PROGRAM from $ROOT, health $HEALTH" >&2
 
 cd "$ROOT"
 [ -d repo ] || git clone --quiet "$REPO" repo
