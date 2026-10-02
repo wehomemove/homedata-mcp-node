@@ -261,6 +261,9 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
 
   function harness(systemDark = false, openai: Record<string, unknown> | undefined = undefined, script = widgetScript) {
     const listeners = new Map<string, Array<(event: any) => void>>();
+    const timers = new Map<number, () => void>();
+    let nextTimer = 0;
+    let contentHeight = 480;
     const classes = new Set<string>();
     const styles: string[] = [];
     let mapRemoved = false;
@@ -268,7 +271,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     const mapElement = { clientWidth: 600, dataset: {} as Record<string, string>, classList: { toggle: (name: string, on: boolean) => on ? mapClasses.add(name) : mapClasses.delete(name) }, querySelectorAll: () => [], querySelector: () => null, remove: () => { mapRemoved = true; } };
     const controls = new Map<string, { dataset: Record<string, string>; onclick?: (event: any) => void }>();
     const root = {
-      innerHTML: "", querySelector: () => null,
+      innerHTML: '<div class="empty">Finding beautiful homes…</div>', scrollHeight: 480, querySelector: () => null,
       querySelectorAll(selector: string) {
         if (selector === "[data-map]" || selector === "[data-map]:not([data-drawn])" && !mapElement.dataset.drawn) return [mapElement];
         const attribute = ({ "[data-shortlist]": "data-shortlist", "[data-all]": "data-all", "[data-compare]": "data-compare", "[data-plan]": "data-plan" } as Record<string, string>)[selector];
@@ -280,7 +283,8 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
       },
     };
     const classList = { toggle: (name: string, on: boolean) => on ? classes.add(name) : classes.delete(name) };
-    const parent = { postMessage: () => undefined };
+    const messages: any[] = [];
+    const parent = { postMessage: (message: any) => messages.push(message) };
     const window = {
       parent, openai, mapboxgl: undefined as unknown,
       addEventListener: (type: string, listener: (event: any) => void) => listeners.set(type, [...(listeners.get(type) ?? []), listener]),
@@ -293,7 +297,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     }; pins.push(pin); return pin; };
     const mapboxListeners = new Map<string, () => void>();
     const mapboxScript = { addEventListener: (type: string, listener: () => void) => mapboxListeners.set(type, listener) };
-    const document = { getElementById: (id: string) => id === "root" ? root : id === "home-mapbox" ? mapboxScript : null, documentElement: { classList }, createElement: button };
+    const document = { getElementById: (id: string) => id === "root" ? root : id === "home-mapbox" ? mapboxScript : null, documentElement: { classList, scrollHeight: 900 }, body: { getBoundingClientRect: () => ({ height: contentHeight }) }, createElement: button };
     const pins: Array<{ className: string; innerHTML: string }> = [];
     const layers: Array<{ id: string; type: string; paint: Record<string, unknown> }> = [];
     const mapEvents = new Map<string, () => void>();
@@ -312,7 +316,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     class Bounds { extend() { return this; } }
     const mapboxgl = { Map: FakeMap, Marker, LngLatBounds: Bounds, NavigationControl: class {}, accessToken: "" };
     window.mapboxgl = mapboxgl;
-    new Function("window", "document", "matchMedia", "mapboxgl", script)(window, document, () => ({ matches: systemDark }), mapboxgl);
+    new Function("window", "document", "matchMedia", "mapboxgl", "setTimeout", "clearTimeout", script)(window, document, () => ({ matches: systemDark }), mapboxgl, (fn: () => void) => { const timer = ++nextTimer; timers.set(timer, fn); return timer; }, (timer: number) => timers.delete(timer));
     const dispatch = (type: string, event: any) => (listeners.get(type) ?? []).forEach((listener) => listener(event));
     const render = () => dispatch("message", { source: parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [{ price: 325000, coordinates: { latitude: 51.38, longitude: -2.36 } }] } } } });
     const click = (selector: string) => {
@@ -320,8 +324,49 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
       assert.ok(control?.onclick, `${selector} is clickable`);
       control.onclick({ stopPropagation() {} });
     };
-    return { pins, layers, mapEvents, mapClasses, classes, styles, parent, dispatch, render, root, window, mapboxgl, mapboxListeners, mapRemoved: () => mapRemoved, click };
+    return { pins, layers, mapEvents, mapClasses, classes, styles, messages, parent, dispatch, render, root, window, mapboxgl, mapboxListeners, mapRemoved: () => mapRemoved, setContentHeight: (height: number) => { contentHeight = height; }, runTimers: () => { for (const fn of [...timers.values()]) fn(); timers.clear(); }, click };
   }
+
+  const home = { id: "strict-home", price: 410000 };
+  const toolInput = harness();
+  toolInput.dispatch("message", { source: toolInput.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { title: "From input", homes: [home] } } } });
+  assert.match(toolInput.root.innerHTML, /From input/);
+
+  const structuredResult = harness();
+  structuredResult.dispatch("message", { source: structuredResult.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "detail", home } } } });
+  assert.match(structuredResult.root.innerHTML, /£410,000/);
+
+  const plainResult = harness();
+  plainResult.dispatch("message", { source: plainResult.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { content: [{ type: "text", text: JSON.stringify({ view: "listings", title: "From plain result", homes: [home] }) }] } } });
+  assert.match(plainResult.root.innerHTML, /From plain result/);
+  const directResult = harness();
+  directResult.dispatch("message", { source: directResult.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { view: "listings", title: "From direct result", homes: [home] } } });
+  assert.match(directResult.root.innerHTML, /From direct result/);
+
+  const originalToolOutput = { view: "listings", title: "Initial global", homes: [home] };
+  const initialGlobal = harness(false, { toolOutput: originalToolOutput });
+  assert.match(initialGlobal.root.innerHTML, /Initial global/);
+  initialGlobal.root.innerHTML = "User's interactive view";
+  initialGlobal.dispatch("openai:set_globals", { detail: { globals: { theme: "dark", toolOutput: structuredClone(originalToolOutput) } } });
+  assert.equal(initialGlobal.root.innerHTML, "User's interactive view");
+  const laterGlobal = harness();
+  laterGlobal.dispatch("openai:set_globals", { detail: { globals: { toolOutput: { view: "detail", home } } } });
+  assert.match(laterGlobal.root.innerHTML, /£410,000/);
+
+  const sizing = harness();
+  sizing.dispatch("load", {});
+  sizing.dispatch("resize", {});
+  assert.deepEqual(sizing.messages.filter((message) => message.method === "ui/notifications/size-changed"), [
+    { jsonrpc: "2.0", method: "ui/notifications/size-changed", params: { height: 480 } },
+    { jsonrpc: "2.0", method: "ui/notifications/size-changed", params: { height: 480 } },
+  ]);
+  sizing.setContentHeight(300);
+  sizing.dispatch("message", { source: sizing.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { view: "listings", homes: [home] } } });
+  assert.deepEqual(sizing.messages.at(-1), { jsonrpc: "2.0", method: "ui/notifications/size-changed", params: { height: 300 } });
+  const timedOut = harness();
+  assert.match(timedOut.root.innerHTML, /Finding beautiful homes/);
+  timedOut.runTimers();
+  assert.equal(timedOut.root.innerHTML, '<div class="empty">Home could not be opened.</div>');
 
   const chatgpt = harness(false, { theme: "dark" });
   assert.ok(chatgpt.classes.has("dark"));
@@ -512,11 +557,11 @@ test("render tools reuse supplied homes without another search and keep text fal
   } finally { await stop(); }
 });
 
-test("Home publishes a v11 MCP Apps resource without a map surface when the browser token is absent", async () => {
+test("Home publishes a v12 MCP Apps resource without a map surface when the browser token is absent", async () => {
   const { mcp, stop } = await start();
   try {
     const resources = await mcp.listResources();
-    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v11.html"]);
+    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v12.html"]);
     const resource = await mcp.readResource({ uri: resources.resources[0]!.uri });
     const content = resource.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
     assert.equal(content.mimeType, "text/html;profile=mcp-app");
