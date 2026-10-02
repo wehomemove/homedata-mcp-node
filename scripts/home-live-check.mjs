@@ -47,6 +47,9 @@ if (token) {
     ['commute_filter 15 min walk from Bath Spa station', async () => routes.commute(client, { place: 'Bath Spa station', place_kind: 'station', minutes: 15, mode: 'walk', listing_ids: await bathHomes(8) }),
       (r) => metres(r.place.coordinates, BATH_SPA) < 300 && r.homes_inside.length + r.homes_outside.length + (r.homes_not_checked ?? []).length === 8 &&
         r.homes_inside.length > 0 && r.homes_inside.every((h) => metres(h.coordinates, BATH_SPA) < 1700) && r.reachable_area.geometry.type.endsWith('Polygon')],
+    // Search Box lists Bath Theatre School and Bath Guitar School beside it: the named school must win, never just a Bath one.
+    ['commute_filter resolves King Edward\'s School, Bath, not another Bath school', () => routes.commute(client, { place: "King Edward's School, Bath", place_kind: 'school', minutes: 10, mode: 'drive' }),
+      (r) => r.place.name === "King Edward's School" && /BA2 6HX/.test(r.place.address)],
     ['plan_viewings four Bath homes from BA1 1SU', async () => { const ids = await bathHomes(4); return { ids, r: await routes.viewings(client, { listing_ids: ids, start: 'BA1 1SU' }) }; },
       ({ ids, r }) => r.stops.length === 4 && new Set(r.stops.map((s) => s.listing_id)).size === 4 && r.stops.every((s) => ids.includes(s.listing_id)) &&
         r.total_driving_minutes > 0 && r.total_driving_minutes < 90 && Math.abs(r.stops.at(-1).driving_minutes_so_far - r.total_driving_minutes) <= 1 && r.route.type === 'LineString'],

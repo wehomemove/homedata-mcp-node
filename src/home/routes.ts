@@ -28,17 +28,59 @@ const CATEGORIES: Partial<Record<PlaceKind, string>> = {
 };
 /** Words that name a kind of place, not which one; they cannot make a match on their own. */
 const GENERIC_WORDS = new Set(["the", "a", "an", "of", "and", "near", "in", "at", "on", "uk", "station", "railway", "rail", "train", "tube", "school", "primary", "secondary", "academy", "office", "offices", "hq", "head", "building"]);
+/**
+ * Kind words that must still be true of the answer, in its name, street or
+ * Mapbox category: Bath Spa station is "Bath Spa" in the transport category,
+ * and Bath Road in Bridgwater is no answer to "Station Road, Bath".
+ */
+const KIND_FAMILIES: Array<[PlaceKind, RegExp, RegExp]> = [
+  ["station", /^(?:station|railway|rail|train|tube)$/, /station|railway|rail/],
+  ["school", /^(?:school|primary|secondary|academy)$/, /school|education|academy/],
+];
 const words = (value: string) => value.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/['’]/g, "").split(/[^a-z0-9]+/).filter((word) => word.length > 1);
+
+/** "Edward's" and "Edwards", "Hospital" and "Hospitals" are one word here. */
+const stems = (value: string) => new Set(words(value).map((word) => word.length > 3 ? word.replace(/s$/, "") : word));
 
 /**
  * Search Box always answers with something: "zzqxv nowhere" comes back as a
- * council office in Norwich. A candidate counts only when it shares a word that
- * says which place, not just what kind of place, with the query.
+ * council office in Norwich, and "King Edward's School, Bath" sits among Bath
+ * Theatre School and Bath Guitar School. So every word of the query that says
+ * which place (kind words such as "school" never count) must be in the
+ * candidate's name or its surroundings (street, town, postcode), and one of
+ * them must be in the name alone. A town only qualifies the search: "Bath"
+ * cannot make Bath Theatre School into King Edward's, and "Malmesbury" cannot
+ * make any office there into Dyson's. A candidate whose whole name is query
+ * words, such as the town of Bath itself, also counts.
  */
-export function namesPlace(query: string, candidate: string): boolean {
-  const found = new Set(words(candidate));
-  return words(query).some((word) => !GENERIC_WORDS.has(word) && found.has(word));
+export function namesPlace(query: string, candidate: { name: string; where: string; categories?: string[] }, kind?: PlaceKind): boolean {
+  const name = stems(candidate.name); const where = stems(candidate.where);
+  const categories = (candidate.categories ?? []).join(" ");
+  for (const word of stems(query)) {
+    const family = KIND_FAMILIES.find(([, words]) => words.test(word));
+    if (!family || name.has(word) || where.has(word)) continue;
+    // Only a search for that kind may lean on the category: a bus stop called
+    // Bath Road is filed as a transport station, but "Station Road" is a road.
+    if (family[0] !== kind || !family[2].test(categories)) return false;
+  }
+  const asked = [...stems(query)].filter((word) => !GENERIC_WORDS.has(word));
+  if (!asked.length || !asked.every((word) => name.has(word) || where.has(word))) return false;
+  return asked.some((word) => name.has(word) && !where.has(word)) || extraWords(query, candidate.name) === 0;
 }
+
+/** Words in a candidate's name that the query did not ask for: "Bounce Luggage Storage - Bath Spa Station" has three for "Bath Spa station". */
+export function extraWords(query: string, name: string): number {
+  const asked = stems(query);
+  return [...stems(name)].filter((word) => !GENERIC_WORDS.has(word) && !asked.has(word)).length;
+}
+
+/** The candidate's surroundings, which qualify a query but never name the place. */
+function surroundings(properties: JsonObject): string {
+  const context = object(properties["context"]);
+  return [properties["address"], properties["place_formatted"], ...Object.values(context).map((part) => object(part)["name"])]
+    .filter((value): value is string => typeof value === "string").join(" ");
+}
+
 const MAX_COMMUTE_HOMES = 20;
 const LOCATE_AT_ONCE = 5;
 
@@ -298,38 +340,46 @@ export class MapboxRoutes {
       const lat = near.reduce((sum, p) => sum + p.latitude, 0) / near.length;
       base["proximity"] = `${round(lng)},${round(lat)}`;
     }
+    // "Paddington station" with no kind is still a station: without the category,
+    // the open search near Bath answers Paddington Play Station in Tidworth. Only
+    // a kind word that ends a part of the query counts: "Station Road, Bath" is a road.
+    const ends = query.split(",").map((part) => words(part).at(-1));
+    const inferred = kind ?? (ends.some((word) => word === "station") ? "station" : ends.some((word) => word === "school") ? "school" : undefined);
     const attempts: Array<Record<string, string>> = [];
     if (postcode?.full) attempts.push({ ...base, q: postcode.full, types: "postcode" });
     else {
-      const category = kind ? CATEGORIES[kind] : undefined;
+      const category = inferred ? CATEGORIES[inferred] : undefined;
       if (category) {
         attempts.push({ ...base, q: query, types: "poi", poi_category: category });
         // The category index names a station "Bath Spa", not "Bath Spa station".
-        const bare = query.replace(kind === "station" ? /\b(?:railway|rail|train|tube|underground)?\s*station\b/gi : /\bschool\b/gi, " ").replace(/\s+/g, " ").trim();
+        const bare = query.replace(inferred === "station" ? /\s*\b(?:(?:railway|rail|train|tube|underground)\s+)?station\s*(?=,|$)/gi : /\s*\bschool\s*(?=,|$)/gi, "").replace(/\s+/g, " ").trim();
         if (bare && bare.toLowerCase() !== query.toLowerCase()) attempts.push({ ...base, q: bare, types: "poi", poi_category: category });
       }
       attempts.push({ ...base, q: query });
     }
     for (const attempt of attempts) {
       const features = object(await this.mapbox("/search/searchbox/v1/forward", attempt))["features"];
-      for (const feature of (Array.isArray(features) ? features : []).map(object)) {
+      const candidates = (Array.isArray(features) ? features : []).map(object).flatMap((feature) => {
         const point = object(feature["geometry"])["coordinates"];
-        if (!Array.isArray(point) || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) continue;
+        if (!Array.isArray(point) || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) return [];
         const properties = object(feature["properties"]);
-        const label = [properties["name"], properties["full_address"], properties["place_formatted"]].filter((v) => typeof v === "string").join(" ");
+        const name = String(properties["name"] ?? "");
         // An unknown postcode comes back as a different one ("BA1 9ZZ" as "GU2 9ZZ").
         const matches = attempt["types"] === "postcode"
-          ? String(properties["name"] ?? "").replace(/\s+/g, "").toUpperCase() === postcode!.full!.replace(/\s+/g, "")
-          : namesPlace(query, label);
-        if (!matches) continue;
-        return {
-          query,
-          name: text(properties["name"]) ?? query,
-          address: text(properties["full_address"]) ?? text(properties["place_formatted"]),
-          type: text(properties["feature_type"]),
-          coordinates: { latitude: round(Number(point[1])), longitude: round(Number(point[0])) },
-        };
-      }
+          ? name.replace(/\s+/g, "").toUpperCase() === postcode!.full!.replace(/\s+/g, "")
+          : namesPlace(query, { name, where: surroundings(properties), categories: Array.isArray(properties["poi_category_ids"]) ? properties["poi_category_ids"].map(String) : [] }, inferred);
+        return matches ? [{ properties, point: point as Position, extra: attempt["types"] === "postcode" ? 0 : extraWords(query, name) }] : [];
+      });
+      // The closest name wins, then Mapbox's own order: Bath Spa station over the luggage shop beside it.
+      const best = candidates.reduce<typeof candidates[number] | undefined>((a, b) => !a || b.extra < a.extra ? b : a, undefined);
+      if (!best) continue;
+      return {
+        query,
+        name: text(best.properties["name"]) ?? query,
+        address: text(best.properties["full_address"]) ?? text(best.properties["place_formatted"]),
+        type: text(best.properties["feature_type"]),
+        coordinates: { latitude: round(Number(best.point[1])), longitude: round(Number(best.point[0])) },
+      };
     }
     if (postcode?.full) throw new HomeError(`Mapbox does not know the postcode ${postcode.full}; check it, or give an address or place instead`);
     throw new HomeError(`Mapbox found no place in the UK matching "${query}"; add the town, or give an address or full postcode`);

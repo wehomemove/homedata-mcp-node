@@ -21,7 +21,7 @@ import { accountFromEnv, createHomeHttpHandler, mapboxTokenFromEnv } from "../ho
 import { HOME_RULES } from "../home/plugin.js";
 import { MAPBOX_GL_ASSET_PREFIX } from "../home/mapbox-assets.js";
 import { buildHomeServer, HOME_ROUTE_TOOLS, HOME_TOOLS } from "../home/server.js";
-import { insideArea, MapboxRoutes, metresToEdge, namesPlace } from "../home/routes.js";
+import { extraWords, insideArea, MapboxRoutes, metresToEdge, namesPlace } from "../home/routes.js";
 import { BATH_HOMES, BATH_ROUTE_SCENARIOS, routeFixtureKey } from "./home-routes-fixture.js";
 import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
 import { matchWishes, WISHES, type Wish } from "../home/wishes.js";
@@ -1842,9 +1842,58 @@ test("a place answer counts only when it names the place asked for, and a postco
     assert.match(answer.body["detail"], /Mapbox does not know the postcode BA1 9ZZ/);
     assert.equal(app.mapbox("/optimized-trips/").length, 0);
   } finally { await app.stop(); }
-  assert.equal(namesPlace("Dyson, Malmesbury", "Dyson Office Tetbury Hill, Malmesbury"), true);
-  assert.equal(namesPlace("King Edward's School, Bath", "King Edward’s School North Rd, Bath"), true);
-  assert.equal(namesPlace("Bath Spa station", "Green Park Station Bristol"), false, "a shared kind word is not a match");
+  assert.equal(namesPlace("Dyson, Malmesbury", { name: "Dyson Office", where: "Tetbury Hill Malmesbury, SN16 0RP" }), true);
+  assert.equal(namesPlace("King Edward's School, Bath", { name: "King Edward’s School", where: "North Rd Bath, BA2 6HX" }), true);
+  assert.equal(namesPlace("Bath Spa station", { name: "Green Park Station", where: "Bristol" }), false, "a shared kind word is not a match");
+});
+
+test("a place in the right town and category but with another name is never taken for the one asked", async () => {
+  const at = (name: string, place: string, categories: string[], lng: number, street?: string) => ({
+    type: "Feature", geometry: { type: "Point", coordinates: [lng, 51.38] },
+    properties: { name, feature_type: "poi", place_formatted: `${place}, United Kingdom`, full_address: `${street ?? ""} ${place}`.trim(), poi_category_ids: categories,
+      context: { place: { name: place }, country: { name: "United Kingdom" }, ...(street ? { street: { name: street } } : {}) } },
+  });
+  const answers = (features: unknown[]) => ({ status: 200, body: { type: "FeatureCollection", features } });
+  const theatre = at("Bath Theatre School", "Bath", ["education", "school"], -2.351);
+  const guitar = at("Bath Guitar School", "Bath", ["education", "school"], -2.352);
+  const kingEdwards = at("King Edward's School", "Bath", ["education", "school"], -2.34238, "North Rd");
+  // Only the place chosen matters here, so any recorded outline will do.
+  const outline = Object.entries(ROUTE_FIXTURE.responses).find(([key]) => key.includes("/isochrone/"))![1];
+  const app = await routeApp([
+    [(u) => u.pathname.includes("/isochrone/"), outline],
+    // Same category and town listed first, the school asked for third.
+    [(u) => u.searchParams.get("q") === "King Edward's School, Bath", answers([theatre, guitar, kingEdwards])],
+    [(u) => u.searchParams.get("q") === "Prior Park School, Bath", answers([theatre, guitar])],
+    [(u) => u.searchParams.get("q") === "Prior Park, Bath", answers([theatre])],
+    [(u) => u.searchParams.get("q") === "Dyson, Malmesbury", answers([at("Malmesbury Abbey Office", "Malmesbury", ["office"], -2.098), at("Dyson Office", "Malmesbury", ["office"], -2.10565, "Tetbury Hill")])],
+    // Search Box's own order on 2026-10-02: the luggage shop beside Bath Spa station before the station.
+    [(u) => u.searchParams.get("q") === "Bath Spa station" && u.searchParams.get("limit") === "5", answers([at("Bounce Luggage Storage - Bath Spa Station", "Bath", ["services"], -2.35724, "Manvers St"), at("Bath Spa", "Bath", ["public_transportation_station"], -2.35698)])],
+    // Bus stops named after a road carry the transport-station category.
+    [(u) => u.searchParams.get("q") === "Station Road, Bath", answers([at("Bath Road", "Bridgwater", ["public_transportation_station"], -3.0), at("Station Road", "Bath", [], -2.388, "Station Road")])],
+  ]);
+  try {
+    const school = await app.call("commute_filter", { place: "King Edward's School, Bath", place_kind: "school", minutes: 10, mode: "drive" });
+    assert.equal(school.body["place"].name, "King Edward's School");
+    assert.equal(school.body["place"].coordinates.longitude, -2.34238);
+    const unknown = await app.call("commute_filter", { place: "Prior Park School, Bath", place_kind: "school", minutes: 10, mode: "drive" });
+    assert.match(unknown.body["detail"], /no place in the UK matching "Prior Park School, Bath"/, "two Bath schools are not Prior Park");
+    const office = await app.call("commute_filter", { place: "Dyson, Malmesbury", place_kind: "office", minutes: 30, mode: "drive" });
+    assert.equal(office.body["place"].name, "Dyson Office");
+    const station = await app.call("commute_filter", { place: "Bath Spa station", minutes: 15, mode: "walk" });
+    assert.equal(station.body["place"].name, "Bath Spa", "the closest name wins over Mapbox's first answer");
+    const road = await app.call("commute_filter", { place: "Station Road, Bath", minutes: 15, mode: "walk" });
+    assert.equal(road.body["place"].name, "Station Road");
+    assert.equal(app.mapbox("/search/").filter((r) => r.url.searchParams.get("q") === "Station Road, Bath").every((r) => !r.url.searchParams.has("poi_category")), true, "a road named Station is not searched as a station");
+  } finally { await app.stop(); }
+  // Town words qualify; they never name the place.
+  assert.equal(namesPlace("King Edward's School, Bath", { name: "Bath Theatre School", where: "Alexandra Park Bath, BA2 4LL" }), false);
+  assert.equal(namesPlace("Bath", { name: "Bath", where: "Bath and North East Somerset England" }), true);
+  assert.equal(namesPlace("26 The Paragon, Bath", { name: "26 The Paragon", where: "26 The Paragon The Paragon Bath BA1 5LY Walcot" }), true);
+  assert.equal(namesPlace("26 The Paragon, Bath", { name: "26 The Paragon", where: "26 The Paragon The Paragon Bristol BS8 4LA Hotwells" }), false, "the same address in another town");
+  assert.equal(namesPlace("Bath Spa station", { name: "Bath Spa", where: "Bath BA1 1SU", categories: ["public_transportation_station"] }, "station"), true);
+  assert.equal(namesPlace("Station Road, Bath", { name: "Bath Road", where: "Bridgwater TA6 4PP", categories: ["public_transportation_station"] }), false, "a category backs a kind word only in a search for that kind");
+  assert.equal(namesPlace("Bath Spa station", { name: "Thermae Bath Spa", where: "Bath BA1 1SJ", categories: ["spa"] }), false, "a station must be a station");
+  assert.equal(extraWords("Bath Spa station", "Bounce Luggage Storage - Bath Spa Station"), 3);
 });
 
 test("plan_viewings gives the same quickest order whatever order the homes are listed in", async () => {
