@@ -19,6 +19,7 @@ import { createHomeHttpHandler } from "../home/http.js";
 import { HOME_RULES } from "../home/plugin.js";
 import { buildHomeServer, HOME_TOOLS } from "../home/server.js";
 import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
+import { HOME_WIDGET_HTML, homeMapLayout, homeMapProject, homePinLabel } from "../home/widget.js";
 
 const ID = "b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
 const ID2 = "c9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
@@ -39,7 +40,7 @@ function fixtures(options: FixtureOptions = {}) {
   const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
     const url = new URL(String(input)); requests.push(url);
     let body: unknown = {};
-    if (url.pathname.startsWith("/api/for-sale/")) body = { displayLocation: "Bath", total: 2, pagination: { current_page: 1, last_page: 1 }, properties: [ID, ID2].map((listing_id) => ({ listing_id, latest_price: 325000, bedrooms: 3, agent_name: "Search Agent", added_date: "2026-10-01", reduced_date: "2026-09-20", first_offer_date: "2026-10-02", days_listed: 12, card_html: "MUST NOT LEAK", images: [{ cdn_url: "https://cdn.home.co.uk/full.jpg", thumbnail_cdn_url: "https://cdn.home.co.uk/one.jpg", is_primary: true }] })) };
+    if (url.pathname.startsWith("/api/for-sale/")) body = { displayLocation: "Bath", total: 2, pagination: { current_page: 1, last_page: 1 }, properties: [ID, ID2].map((listing_id, index) => ({ listing_id, latest_price: 325000, bedrooms: 3, postcode: "BA1 1LZ", is_new: true, latitude: 51.38 + index / 100, longitude: -2.36, agent_name: "Search Agent", added_date: "2026-10-01", reduced_date: "2026-09-20", first_offer_date: "2026-10-02", days_listed: 12, card_html: "MUST NOT LEAK", images: [{ cdn_url: "https://cdn.home.co.uk/full.jpg", thumbnail_cdn_url: "https://cdn.home.co.uk/one.jpg", is_primary: true }] })) };
     else if (url.pathname.startsWith("/api/property-details/")) body = { id: url.pathname.split("/").pop(), latest_price: 325000, building_number: "12", street_name: "Heritage Close", town_name: "Bath", postcode: "BA2 8TJ", description: "Full description", images: ["/api/image/one"], agent_name: "Example Agent", ...options.detail };
     else if (url.pathname === "/api/reverse-geocode") body = options.reverseGeocode ?? { success: true, place_name: "Heritage Close, Bath, BA2 8TJ, United Kingdom", context: [{ id: "postcode.123", text: "BA2 8TJ" }] };
     else if (url.pathname === "/address/find/") body = options.address ?? { results: [{ uprn: "100012345678", postcode: "BA2 8TJ", building_number: "12", full_address: "12 Heritage Close, Bath, BA2 8TJ" }] };
@@ -89,7 +90,7 @@ async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPe
   return { base, mcp, requests, stop: async () => { await mcp.close(); http.closeAllConnections(); await new Promise((resolve) => http.close(resolve)); } };
 }
 
-test("Home lists only its nine no-auth read-only tools and its golden set holds", async () => {
+test("Home lists its no-auth read-only data and render tools and its golden set holds", async () => {
   const { mcp, stop } = await start();
   try {
     const tools = (await mcp.listTools()).tools;
@@ -98,6 +99,11 @@ test("Home lists only its nine no-auth read-only tools and its golden set holds"
       assert.deepEqual(tool.annotations, { readOnlyHint: true, destructiveHint: false, openWorldHint: true });
       assert.deepEqual((tool as unknown as Record<string, unknown>)["securitySchemes"], undefined); // SDK strips extension fields.
       assert.doesNotMatch(JSON.stringify(tool), /Rightmove|Zoopla|OnTheMarket/i);
+    }
+    const renderNames = new Set(["render_home_listings", "render_home_detail"]);
+    for (const tool of tools) {
+      const uri = (tool._meta?.["ui"] as { resourceUri?: string } | undefined)?.resourceUri;
+      assert.equal(Boolean(uri), renderNames.has(tool.name), `${tool.name} UI resource linkage`);
     }
     assert.deepEqual(checkGoldenSet(golden as GoldenSet, tools), []);
   } finally { await stop(); }
@@ -110,6 +116,9 @@ test("search translates filters and strips the multi-megabyte response to card f
     const body = answer.structuredContent as { homes: Array<Record<string, unknown>> };
     assert.equal(body.homes.length, 2);
     assert.equal(body.homes[0]?.["under_offer_date"], "2026-10-02");
+    assert.deepEqual(body.homes[0]?.["coordinates"], { latitude: 51.38, longitude: -2.36 });
+    assert.equal("area" in body.homes[0]!, false);
+    assert.equal(body.homes[0]?.["new_listing"], true);
     assert.equal("card_html" in body.homes[0]!, false);
     const url = requests[0]!;
     assert.equal(url.pathname, "/api/for-sale/Bath/");
@@ -119,6 +128,35 @@ test("search translates filters and strips the multi-megabyte response to card f
     assert.equal(url.searchParams.get("sort"), "date_desc");
     assert.equal(url.searchParams.get("per_page"), "20");
   } finally { await stop(); }
+});
+
+test("map pins use the same measured pixel coordinate system as map tiles", () => {
+  const points = [
+    { latitude: 51.381, longitude: -2.361 },
+    { latitude: 51.395, longitude: -2.325 },
+  ];
+  for (const [width, height] of [[540, 360], [320, 250], [900, 640]]) {
+    const layout = homeMapLayout(points, width!, height!);
+    points.forEach((point, index) => {
+      const projected = homeMapProject(point.latitude, point.longitude, layout.zoom);
+      assert.equal(layout.pins[index]!.x, projected.x - layout.left);
+      assert.equal(layout.pins[index]!.y, projected.y - layout.top);
+      assert.ok(layout.pins[index]!.x >= 0 && layout.pins[index]!.x <= width!);
+      assert.ok(layout.pins[index]!.y >= 0 && layout.pins[index]!.y <= height!);
+    });
+  }
+});
+
+test("rental map pins show exact prices rather than rounded thousands", () => {
+  assert.equal(homePinLabel(1500, "pcm"), "£1,500");
+  assert.equal(homePinLabel(450, "pw"), "£450");
+  assert.equal(homePinLabel(325000, null), "£325k");
+});
+
+test("the generated dependency-free widget script is valid JavaScript", () => {
+  const script = HOME_WIDGET_HTML.match(/<script>([\s\S]*)<\/script>/)?.[1];
+  assert.ok(script);
+  assert.doesNotThrow(() => new Function(script));
 });
 
 test("render tools reuse supplied homes without another search and keep text fallbacks", async () => {
@@ -144,7 +182,7 @@ test("Home publishes one MCP Apps resource with a narrow image and tile CSP", as
   const { mcp, stop } = await start();
   try {
     const resources = await mcp.listResources();
-    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v1.html"]);
+    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v2.html"]);
     const resource = await mcp.readResource({ uri: resources.resources[0]!.uri });
     const content = resource.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
     assert.equal(content.mimeType, "text/html;profile=mcp-app");

@@ -1,4 +1,49 @@
-export const HOME_WIDGET_URI = "ui://home/listings-and-detail-v1.html";
+export const HOME_WIDGET_URI = "ui://home/listings-and-detail-v2.html";
+
+export type HomeMapPoint = { latitude: number; longitude: number };
+
+export function homeMapProject(latitude: number, longitude: number, zoom: number): { x: number; y: number } {
+  const size = Math.pow(2, zoom) * 256;
+  const sin = Math.sin(latitude * Math.PI / 180);
+  return {
+    x: (longitude + 180) / 360 * size,
+    y: (.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * size,
+  };
+}
+
+/** Fit points to the measured map viewport and return pixel positions for both tiles and pins. */
+export function homeMapLayout(points: HomeMapPoint[], width: number, height: number): {
+  zoom: number; left: number; top: number; pins: Array<{ x: number; y: number }>;
+} {
+  const safeWidth = Math.max(1, width);
+  const safeHeight = Math.max(1, height);
+  let zoom = 15;
+  let projected: Array<{ x: number; y: number }> = [];
+  for (; zoom > 4; zoom--) {
+    projected = points.map((point) => homeMapProject(point.latitude, point.longitude, zoom));
+    const xs = projected.map((point) => point.x);
+    const ys = projected.map((point) => point.y);
+    if (Math.max(...xs) - Math.min(...xs) <= Math.max(1, safeWidth - 72) &&
+        Math.max(...ys) - Math.min(...ys) <= Math.max(1, safeHeight - 72)) break;
+  }
+  projected = points.map((point) => homeMapProject(point.latitude, point.longitude, zoom));
+  const xs = projected.map((point) => point.x);
+  const ys = projected.map((point) => point.y);
+  const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const left = centerX - safeWidth / 2;
+  const top = centerY - safeHeight / 2;
+  return { zoom, left, top, pins: projected.map((point) => ({ x: point.x - left, y: point.y - top })) };
+}
+
+export function homePinLabel(price: unknown, rentalFrequency?: unknown, locale = "en-GB"): string | null {
+  const amount = Number(price);
+  if (!Number.isFinite(amount)) return null;
+  if (rentalFrequency || amount < 10_000) {
+    return new Intl.NumberFormat(locale, { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(amount);
+  }
+  return `£${Math.round(amount / 1000)}k`;
+}
 
 /**
  * A dependency-free MCP Apps component. Keeping the bundle inline means its
@@ -12,26 +57,32 @@ export const HOME_WIDGET_HTML = String.raw`<!doctype html>
 @media(prefers-color-scheme:dark){:root{--ink:#edf4ee;--muted:#aebbb1;--paper:#172019;--soft:#222d25;--line:#354239;--brand:#78d59b;--accent:#243d2c}.map-note{background:#172019e8;color:#edf4ee}}
 </style></head><body><main id="root" class="shell"><div class="empty">Loading homes…</div></main>
 <script>
+${homeMapProject.toString()}
+${homeMapLayout.toString()}
+${homePinLabel.toString()}
 (function(){
-  var root=document.getElementById('root'), latest=null, selected=0;
+  var root=document.getElementById('root'), latest=null, selected=0, mapObserver=null;
   function obj(v){return v&&typeof v==='object'&&!Array.isArray(v)?v:{}}
   function arr(v){return Array.isArray(v)?v:[]}
   function str(v){return typeof v==='string'?v:''}
   function safeUrl(v,kind){try{var u=new URL(str(v));if(u.protocol!=='https:')return '';var h=u.hostname.toLowerCase();if(kind==='image'&&(h==='home.co.uk'||h.endsWith('.home.co.uk')))return u.href;if(kind==='link'&&(h==='home.co.uk'||h.endsWith('.home.co.uk')))return u.href}catch(e){}return ''}
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function money(v,freq){var n=Number(v);if(!Number.isFinite(n))return 'Price on application';var out=new Intl.NumberFormat(document.documentElement.lang||'en-GB',{style:'currency',currency:'GBP',maximumFractionDigits:0}).format(n);return out+(freq?' '+esc(freq):'')}
-  function n(v){var x=Number(v);return Number.isFinite(x)?x:null}
+  function n(v){if(v==null||v==='')return null;var x=Number(v);return Number.isFinite(x)?x:null}
   function coords(h){var c=obj(h.coordinates);return {lat:n(c.latitude!=null?c.latitude:h.latitude),lon:n(c.longitude!=null?c.longitude:h.longitude)}}
   function badges(h){var b=[];if(h.new_listing)b.push('<span class="badge">New</span>');if(h.new_build)b.push('<span class="badge">New build</span>');if(h.reduced_date)b.push('<span class="badge">Reduced</span>');if(h.under_offer_date||/under offer|sold stc/i.test(str(h.status)))b.push('<span class="badge offer">Under offer</span>');return b.join('')}
   function photo(url,alt,cls){var u=safeUrl(url,'image');return u?'<img class="'+(cls||'photo')+'" src="'+esc(u)+'" alt="'+esc(alt)+'" loading="lazy">':'<div class="photo photo-placeholder">No photo</div>'}
-  function card(h,i){var url=safeUrl(h.url,'link'), facts=[];if(n(h.bedrooms)!=null)facts.push(esc(h.bedrooms)+' bed');if(h.property_type)facts.push(esc(str(h.property_type).replace(/_/g,' ')));if(h.area)facts.push(esc(h.area));return '<article class="card" tabindex="0" data-index="'+i+'" aria-current="'+(i===selected)+'">'+photo(h.image,str(h.address)||'Home')+'<div class="card-body"><div class="badges">'+badges(h)+'</div><div class="price">'+money(h.price,h.rental_frequency)+'</div><div class="address">'+esc(h.address||h.postcode||'Home')+'</div><div class="facts">'+facts.join(' · ')+'</div>'+(h.agent?'<div class="secondary">Listed by '+esc(h.agent)+'</div>':'')+(url?'<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">View on home.co.uk</a>':'')+'</div></article>'}
-  function project(lat,lon,z){var s=Math.pow(2,z)*256;var x=(lon+180)/360*s;var sin=Math.sin(lat*Math.PI/180);var y=(.5-Math.log((1+sin)/(1-sin))/(4*Math.PI))*s;return {x:x,y:y,s:s}}
-  function drawMap(homes){var points=homes.map(function(h,i){var c=coords(h);return {lat:c.lat,lon:c.lon,i:i,h:h}}).filter(function(p){return p.lat!=null&&p.lon!=null&&Math.abs(p.lat)<=85&&Math.abs(p.lon)<=180});if(!points.length)return '<div class="map"><div class="empty">Map positions are not available for these homes.</div></div>';var lat=points.reduce(function(a,p){return a+p.lat},0)/points.length,lon=points.reduce(function(a,p){return a+p.lon},0)/points.length,w=540,h=360,z=15,projected;for(;z>4;z--){projected=points.map(function(p){return project(p.lat,p.lon,z)});var xs=projected.map(function(p){return p.x}),ys=projected.map(function(p){return p.y});if(Math.max.apply(null,xs)-Math.min.apply(null,xs)<=w*.76&&Math.max.apply(null,ys)-Math.min.apply(null,ys)<=h*.68)break}var c=project(lat,lon,z),left=c.x-w/2,top=c.y-h/2,tiles='';for(var tx=Math.floor(left/256);tx<=Math.floor((left+w)/256);tx++)for(var ty=Math.floor(top/256);ty<=Math.floor((top+h)/256);ty++){var max=Math.pow(2,z),wx=((tx%max)+max)%max;if(ty>=0&&ty<max)tiles+='<img class="tile" alt="" src="https://tile.openstreetmap.org/'+z+'/'+wx+'/'+ty+'.png" style="left:'+(tx*256-left)+'px;top:'+(ty*256-top)+'px">'}var pins=points.map(function(p){var q=project(p.lat,p.lon,z),label=n(p.h.price)!=null?'£'+Math.round(Number(p.h.price)/1000)+'k':String(p.i+1);return '<button class="pin '+(p.i===selected?'active':'')+'" data-index="'+p.i+'" style="left:'+((q.x-left)/w*100)+'%;top:'+((q.y-top)/h*100)+'%" aria-label="Select '+esc(p.h.address||'home')+'">'+esc(label)+'</button>'}).join('');return '<div class="map" aria-label="Map of homes">'+tiles+pins+'<div class="map-note">© OpenStreetMap contributors</div></div>'}
+  function card(h,i){var url=safeUrl(h.url,'link'), facts=[];if(n(h.bedrooms)!=null)facts.push(esc(h.bedrooms)+' bed');if(h.property_type)facts.push(esc(str(h.property_type).replace(/_/g,' ')));if(h.area||h.postcode)facts.push(esc(h.area||h.postcode));return '<article class="card" tabindex="0" data-index="'+i+'" aria-current="'+(i===selected)+'">'+photo(h.image,str(h.address)||'Home')+'<div class="card-body"><div class="badges">'+badges(h)+'</div><div class="price">'+money(h.price,h.rental_frequency)+'</div><div class="address">'+esc(h.address||h.postcode||'Home')+'</div><div class="facts">'+facts.join(' · ')+'</div>'+(h.agent?'<div class="secondary">Listed by '+esc(h.agent)+'</div>':'')+(url?'<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">View on home.co.uk</a>':'')+'</div></article>'}
+  function mapPoints(homes){return homes.map(function(h,i){var c=coords(h);return {latitude:c.lat,longitude:c.lon,index:i,home:h}}).filter(function(p){return p.latitude!=null&&p.longitude!=null&&Math.abs(p.latitude)<=85&&Math.abs(p.longitude)<=180})}
+  function drawMap(homes){return mapPoints(homes).length?'<div class="map" data-home-map aria-label="Map of homes"></div>':'<div class="map"><div class="empty">Map positions are not available for these homes.</div></div>'}
+  function pinLabel(home,index){return homePinLabel(home.price,home.rental_frequency,document.documentElement.lang||'en-GB')||String(index+1)}
+  function layoutMap(map,homes){var points=mapPoints(homes),width=map.clientWidth,height=map.clientHeight;if(!points.length||!width||!height)return;var layout=homeMapLayout(points,width,height),z=layout.zoom,tiles='';for(var tx=Math.floor(layout.left/256);tx<=Math.floor((layout.left+width)/256);tx++)for(var ty=Math.floor(layout.top/256);ty<=Math.floor((layout.top+height)/256);ty++){var max=Math.pow(2,z),wx=((tx%max)+max)%max;if(ty>=0&&ty<max)tiles+='<img class="tile" alt="" src="https://tile.openstreetmap.org/'+z+'/'+wx+'/'+ty+'.png" style="left:'+(tx*256-layout.left)+'px;top:'+(ty*256-layout.top)+'px">'}var pins=points.map(function(p,i){var q=layout.pins[i];return '<button class="pin '+(p.index===selected?'active':'')+'" data-index="'+p.index+'" style="left:'+q.x+'px;top:'+q.y+'px" aria-label="Select '+esc(p.home.address||'home')+'">'+esc(pinLabel(p.home,p.index))+'</button>'}).join('');map.innerHTML=tiles+pins+'<div class="map-note">© OpenStreetMap contributors</div>';bindInteractions(map)}
   function listings(data){var homes=arr(data.homes).map(obj).slice(0,20);if(!homes.length)return '<div class="empty">No homes to show.</div>';return '<header class="heading"><h1>'+esc(data.title||'Homes')+'</h1><span class="count">'+homes.length+' result'+(homes.length===1?'':'s')+'</span></header><section class="results"><div class="cards">'+homes.map(card).join('')+'</div>'+drawMap(homes)+'</section>'}
   function fact(label,value){return value==null||value===''?'':'<div class="fact"><b>'+esc(value)+'</b><span>'+esc(label)+'</span></div>'}
   function detail(data){var h=obj(data.home),photos=arr(h.photos).map(function(x){return safeUrl(x,'image')}).filter(Boolean).slice(0,5),hero=photos.length?photos.map(function(p,i){return '<img src="'+esc(p)+'" alt="'+esc((h.address||'Home')+' photo '+(i+1))+'">'}).join(''):'<div class="hero-empty">No photos available</div>',url=safeUrl(h.url,'link');return '<article class="detail"><div class="hero">'+hero+'</div><div class="detail-body"><div class="badges">'+badges(h)+'</div><div class="detail-title"><h1>'+esc(h.address||h.postcode||'Home')+'</h1><div class="detail-price">'+money(h.price,h.rental_frequency)+'</div></div><div class="keyfacts">'+fact('Bedrooms',h.bedrooms)+fact('Bathrooms',h.bathrooms)+fact('Property type',str(h.property_type).replace(/_/g,' '))+fact('Floor area',n(h.floor_area_sqm)!=null?h.floor_area_sqm+' m²':null)+fact('Tenure',h.tenure)+fact('Reception rooms',h.reception_rooms)+fact('EPC',obj(obj(h.enrichment).property).epc&&obj(obj(obj(h.enrichment).property).epc).rating)+fact('Council tax',obj(obj(h.enrichment).property).council_tax&&obj(obj(obj(h.enrichment).property).council_tax).band)+'</div>'+(h.description?'<p class="description">'+esc(h.description)+'</p>':'')+(url?'<a class="detail-link" href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">View listing on home.co.uk</a>':'')+'</div></article>'}
-  function render(data){latest=obj(data);root.innerHTML=latest.view==='detail'?detail(latest):listings(latest);root.querySelectorAll('[data-index]').forEach(function(el){el.addEventListener('click',function(){selected=Number(el.getAttribute('data-index'))||0;render(latest);var cardEl=root.querySelector('.card[data-index="'+selected+'"]');if(el.classList.contains('pin')&&cardEl)cardEl.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'})})})}
-  window.addEventListener('message',function(event){if(event.source!==window.parent)return;var m=event.data;if(!m||m.jsonrpc!=='2.0')return;if(m.method==='ui/notifications/tool-result')render(obj(m.params).structuredContent);if(m.method==='ui/notifications/tool-input'&&!latest)render(obj(m.params).arguments||m.params)},{passive:true});
+  function bindInteractions(scope){scope.querySelectorAll('[data-index]:not([data-bound])').forEach(function(el){el.setAttribute('data-bound','true');el.addEventListener('click',function(){selected=Number(el.getAttribute('data-index'))||0;render(latest);var cardEl=root.querySelector('.card[data-index="'+selected+'"]');if(el.classList.contains('pin')&&cardEl)cardEl.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'})})})}
+  function render(data){latest=obj(data);if(mapObserver){mapObserver.disconnect();mapObserver=null}root.innerHTML=latest.view==='detail'?detail(latest):listings(latest);bindInteractions(root);var map=root.querySelector('[data-home-map]'),homes=arr(latest.homes).map(obj).slice(0,20);if(map){layoutMap(map,homes);if(typeof ResizeObserver!=='undefined'){mapObserver=new ResizeObserver(function(){layoutMap(map,homes)});mapObserver.observe(map)}else window.addEventListener('resize',function(){layoutMap(map,homes)},{once:true})}}
+  window.addEventListener('message',function(event){if(event.source!==window.parent)return;var m=event.data;if(!m||m.jsonrpc!=='2.0')return;if(m.method==='ui/notifications/tool-result')render(obj(m.params).structuredContent);if(m.method==='ui/notifications/tool-input'&&!latest){var input=obj(m.params).arguments||m.params;if(obj(input).home)render({view:'detail',home:obj(input).home})}},{passive:true});
   if(window.openai&&window.openai.toolOutput)render(window.openai.toolOutput);
   var initId='home-ui-init';
   function initialized(event){if(event.source!==window.parent||!event.data||event.data.id!==initId)return;window.removeEventListener('message',initialized);window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized'},'*')}

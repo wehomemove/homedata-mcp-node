@@ -99,7 +99,6 @@ export function trimCard(value: unknown): JsonObject {
     rental_frequency: p["rental_frequency"] ?? null,
     address: p["display_address"] ?? p["address"] ?? null,
     postcode: p["postcode"] ?? null,
-    area: p["postcode"] ?? null,
     bedrooms: p["bedrooms"] ?? null,
     bathrooms: p["bathrooms"] ?? null,
     property_type: p["listing_property_type"] ?? p["property_type"] ?? null,
