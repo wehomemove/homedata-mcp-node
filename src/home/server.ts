@@ -11,6 +11,7 @@ import { VERSION } from "../index.js";
 import { ACCOUNT_TOOLS, isAccountTool, type AccountTools } from "./account.js";
 import { HomeClient, HomeError, HomeUpstreamError, type SearchArgs, type SoldArgs } from "./client.js";
 import { HOME_WIDGET_HTML, HOME_WIDGET_URI } from "./widget.js";
+import { mapboxAssetTags } from "./mapbox-assets.js";
 
 type Schema = Record<string, unknown>;
 type Tool = { name: string; title: string; description: string; inputSchema: Schema; outputSchema?: Schema; _meta?: Record<string, unknown> };
@@ -177,7 +178,7 @@ function positive(args: Record<string, unknown>, name: string, allowZero = false
   return value;
 }
 
-export function buildHomeServer(client: HomeClient, account?: HomeAccount, options: { mapboxToken?: string } = {}): Server {
+export function buildHomeServer(client: HomeClient, account?: HomeAccount, options: { mapboxToken?: string; assetOrigin?: string } = {}): Server {
   const server = new Server({ name: "home", version: VERSION }, { capabilities: { tools: {}, resources: {} }, instructions: account ? `${HOME_INSTRUCTIONS} ${HOME_ACCOUNT_INSTRUCTIONS}` : HOME_INSTRUCTIONS });
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
     resources: [{ uri: HOME_WIDGET_URI, name: "Home listings and detail", description: "Responsive listing carousel, map and home gallery.", mimeType: "text/html;profile=mcp-app" }],
@@ -185,15 +186,16 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     if (request.params.uri !== HOME_WIDGET_URI) throw new Error("Unknown Home UI resource");
     const mapboxDomains = options.mapboxToken ? ["https://api.mapbox.com", "https://events.mapbox.com"] : [];
+    const assetDomains = options.mapboxToken && options.assetOrigin ? [options.assetOrigin] : [];
     const csp = {
       connectDomains: mapboxDomains,
-      resourceDomains: ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", ...mapboxDomains],
+      resourceDomains: ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", ...assetDomains, ...mapboxDomains],
     };
     return { contents: [{
       uri: HOME_WIDGET_URI,
       mimeType: "text/html;profile=mcp-app",
       text: HOME_WIDGET_HTML
-        .replace("__HOME_MAPBOX_ASSETS__", options.mapboxToken ? '<link href="https://api.mapbox.com/mapbox-gl-js/v3.15.0/mapbox-gl.css" rel="stylesheet" integrity="sha384-ybStW03vjH/S7ZApCJT0nH1D7iITNZEYRxjmkJWtpkDDUhwI+hXoHm7JcDvL6spf" crossorigin="anonymous"><script id="home-mapbox" src="https://api.mapbox.com/mapbox-gl-js/v3.15.0/mapbox-gl.js" integrity="sha384-bdNholknIOkWEb1azEKvnPJRgM0yXw3+r2L2Hjhl0twDnzUC7WxuBpKfJdp7Fzpg" crossorigin="anonymous"></script>' : "")
+        .replace("__HOME_MAPBOX_ASSETS__", options.mapboxToken && options.assetOrigin ? mapboxAssetTags(options.assetOrigin) : "")
         .replace("__HOME_MAPBOX_TOKEN__", JSON.stringify(options.mapboxToken ?? "")),
       _meta: {
         ui: { prefersBorder: false, domain: "https://mcp.home.co.uk", csp },
