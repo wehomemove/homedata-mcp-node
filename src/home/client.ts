@@ -5,7 +5,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
 
 export class HomeError extends Error {}
-export class HomeUpstreamError extends Error {}
+export class HomeUpstreamError extends Error {
+  constructor(message: string, readonly status?: number, readonly notJson = false) { super(message); }
+}
 
 const UNAVAILABLE = Object.freeze({ available: false, reason: "Not available right now." });
 
@@ -34,7 +36,24 @@ export type SearchArgs = {
   new_within_days?: number;
 };
 
+export type SoldArgs = {
+  postcode: string;
+  months?: 6 | 12 | 24;
+  property_type?: "detached" | "semi_detached" | "terraced" | "flat";
+  min_price?: number;
+  max_price?: number;
+  sort?: "newest" | "oldest" | "price_asc" | "price_desc";
+  page?: number;
+};
+
 type JsonObject = Record<string, unknown>;
+
+const MIN_SECTOR_SALES = 10;
+const AGENT_PAGE_SIZE = 120;
+const AGENT_MAX_PAGES = 40;
+const PROPERTY_TYPES = ["detached", "semi_detached", "terraced", "flat"];
+const SORTS = ["newest", "oldest", "price_asc", "price_desc"];
+const sortParam = (sort: string) => sort === "newest" ? "date_desc" : sort === "oldest" ? "date_asc" : sort;
 
 function object(value: unknown): JsonObject {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : {};
@@ -47,6 +66,19 @@ function text(value: unknown): string | null {
 function coordinate(value: unknown): string | null {
   const numeric = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(numeric) ? String(numeric) : null;
+}
+
+/** A full postcode ("BA1 1LZ") or a postcode district ("BA1"), normalised; null when it is neither. */
+export function parsePostcode(value: unknown): { outcode: string; full: string | null } | null {
+  const compact = (text(value) ?? "").toUpperCase().replace(/\s+/g, "");
+  if (/^[A-Z]{1,2}\d[A-Z\d]?$/.test(compact)) return { outcode: compact, full: null };
+  const full = compact.length > 3 ? `${compact.slice(0, -3)} ${compact.slice(-3)}` : compact;
+  return POSTCODE.test(full) ? { outcode: full.split(" ")[0]!, full } : null;
+}
+
+/** home.co.uk location slugs are lower case with hyphens: "Milton Keynes" -> "milton-keynes". */
+function slug(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 function absoluteHomeUrl(value: unknown): string | null {
@@ -109,8 +141,8 @@ export class HomeClient {
     if ((args.page ?? 1) > 100) throw new HomeError("page must be no more than 100");
     if (args.min_price !== undefined && args.max_price !== undefined && args.min_price > args.max_price) throw new HomeError("min_price cannot exceed max_price");
     if (args.min_beds !== undefined && args.max_beds !== undefined && args.min_beds > args.max_beds) throw new HomeError("min_beds cannot exceed max_beds");
-    if (args.property_type && !["detached", "semi_detached", "terraced", "flat"].includes(args.property_type)) throw new HomeError("property_type is not supported");
-    if (args.sort && !["newest", "oldest", "price_asc", "price_desc"].includes(args.sort)) throw new HomeError("sort is not supported");
+    if (args.property_type && !PROPERTY_TYPES.includes(args.property_type)) throw new HomeError("property_type is not supported");
+    if (args.sort && !SORTS.includes(args.sort)) throw new HomeError("sort is not supported");
     const route = args.listing_type === "rent" ? "to-rent" : "for-sale";
     const location = encodeURIComponent(args.location.trim());
     const query: Record<string, string> = { page: String(args.page ?? 1), per_page: "20" };
@@ -267,6 +299,173 @@ export class HomeClient {
     return { postcode: normalised, ...Object.fromEntries(settled) };
   }
 
+  /**
+   * Recorded sale prices near a postcode, from home.co.uk's sold-properties JSON.
+   * A full postcode searches its sector (BA1 1), widening to the district (BA1)
+   * when the sector has no boundary or too few sales to be useful. Never a valuation.
+   */
+  async soldPrices(args: SoldArgs): Promise<JsonObject> {
+    const postcode = parsePostcode(args.postcode);
+    if (!postcode) throw new HomeError("postcode must be a UK postcode or postcode district, such as BA1 1LZ or BA1");
+    const months = args.months ?? 12;
+    if (![6, 12, 24].includes(months)) throw new HomeError("months must be 6, 12 or 24");
+    for (const name of ["min_price", "max_price", "page"] as const) {
+      const value = args[name];
+      if (value !== undefined && (!Number.isInteger(value) || value < (name === "page" ? 1 : 0))) throw new HomeError(`${name} must be a non-negative whole number${name === "page" ? " starting at 1" : ""}`);
+    }
+    if ((args.page ?? 1) > 100) throw new HomeError("page must be no more than 100");
+    if (args.min_price !== undefined && args.max_price !== undefined && args.min_price > args.max_price) throw new HomeError("min_price cannot exceed max_price");
+    if (args.property_type && !PROPERTY_TYPES.includes(args.property_type)) throw new HomeError("property_type is not supported");
+    if (args.sort && !SORTS.includes(args.sort)) throw new HomeError("sort is not supported");
+    const query: Record<string, string> = { daterange: `${months}months`, sort: sortParam(args.sort ?? "newest"), page: String(args.page ?? 1) };
+    if (args.min_price !== undefined) query["minprice"] = String(args.min_price);
+    if (args.max_price !== undefined) query["maxprice"] = String(args.max_price);
+    if (args.property_type) query[args.property_type === "semi_detached" ? "semi" : args.property_type] = "1";
+    const areas = postcode.full
+      ? [{ slug: `${postcode.outcode}-${postcode.full.split(" ")[1]![0]}`.toLowerCase(), scope: "postcode sector", name: postcode.full.slice(0, -2) },
+        { slug: postcode.outcode.toLowerCase(), scope: "postcode district", name: postcode.outcode }]
+      : [{ slug: postcode.outcode.toLowerCase(), scope: "postcode district", name: postcode.outcode }];
+    for (const [index, area] of areas.entries()) {
+      const raw = object(await this.homeGet(`/sold-properties/${area.slug}/`, query));
+      // An unknown slug redirects to the national page, which also answers JSON:
+      // the latest sales anywhere in the country. Never present those as local.
+      if (raw["isNationalSearch"] !== false || !object(raw["filters"])["gid"]) continue;
+      // A city-centre sector can hold one or two sales a year; widen to the district
+      // rather than answer from a handful.
+      if (index < areas.length - 1 && Number(raw["total"] ?? 0) < MIN_SECTOR_SALES) continue;
+      const pagination = object(raw["pagination"]);
+      const target = postcode.full?.replace(/\s+/g, "");
+      return {
+        area: area.name,
+        area_type: area.scope,
+        postcode: postcode.full ?? postcode.outcode,
+        period: `sales recorded in the last ${months} months`,
+        total: raw["total"] ?? pagination["total"] ?? null,
+        page: pagination["current_page"] ?? args.page ?? 1,
+        last_page: pagination["last_page"] ?? null,
+        sales: (Array.isArray(raw["properties"]) ? raw["properties"] : []).map((value) => {
+          const sale = object(value);
+          return {
+            address: sale["display_address"] ?? sale["full_address"] ?? null,
+            postcode: sale["postcode"] ?? null,
+            price: sale["price"] ?? null,
+            sold_date: sale["sold_date"] ?? null,
+            property_type: sale["property_type"] ?? null,
+            bedrooms: sale["bedrooms"] ?? null,
+            ...(target ? { same_postcode: String(sale["postcode"] ?? "").replace(/\s+/g, "").toUpperCase() === target } : {}),
+          };
+        }),
+        source: "Recorded sale prices (HM Land Registry price paid data) as published on home.co.uk",
+        not_a_valuation: "These are past sale prices of other homes. They are not a valuation of any home.",
+        page_url: absoluteHomeUrl(`/sold-properties/${area.slug}/`),
+      };
+    }
+    throw new HomeError(`home.co.uk has no sold-price area for ${postcode.full ?? postcode.outcode}`);
+  }
+
+  /**
+   * Agents ranked by how many homes they list in an area right now. home.co.uk's own
+   * directory order puts partner agents first; this tool ranks by listings only.
+   */
+  async agents(location: string, agentType: "sales" | "lettings", limit = 10): Promise<JsonObject> {
+    if (!text(location)) throw new HomeError("location is required");
+    if (!["sales", "lettings"].includes(agentType)) throw new HomeError("agent_type must be sales or lettings");
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) throw new HomeError("limit must be a whole number from 1 to 20");
+    const postcode = parsePostcode(location);
+    const area = postcode?.full ? slug(postcode.full) : postcode ? postcode.outcode.toLowerCase() : slug(location);
+    if (!area) throw new HomeError("location must be a UK town, city or postcode");
+    const path = `/api/agents/search/${encodeURIComponent(area)}/${agentType}`;
+    let raw: JsonObject;
+    try {
+      raw = object(await this.homeGet(path, { per_page: String(AGENT_PAGE_SIZE) }));
+    } catch (error) {
+      // An unknown location redirects through the HTML directory and ends in a 4xx.
+      if (error instanceof HomeUpstreamError && error.status !== undefined && error.status < 500) raw = {};
+      else throw error;
+    }
+    // "property" mode counts each agent's listings inside the searched boundary.
+    // Any other mode counts an agent's whole stock, which cannot rank an area.
+    if (raw["searchMode"] !== "property") throw new HomeError(`home.co.uk could not match ${location.trim()} to an area; try a town or postcode`);
+    const ranked = (await this.everyAreaAgent(path, raw))
+      .map((agent) => ({ agent, count: Number(agent["boundary_listing_count"] ?? agent["property_count"] ?? 0) }))
+      .filter(({ count }) => Number.isFinite(count) && count > 0)
+      .sort((a, b) => b.count - a.count || String(a.agent["agent_name"] ?? "").localeCompare(String(b.agent["agent_name"] ?? "")));
+    const listed = agentType === "sales" ? "homes_for_sale_here" : "homes_to_let_here";
+    return {
+      area: raw["boundaryName"] ?? raw["displayLocation"] ?? location.trim(),
+      agent_type: agentType,
+      ranked_by: `Homes each agent is currently ${agentType === "sales" ? "selling" : "letting"} in this area on home.co.uk`,
+      agents_with_listings: ranked.length,
+      agents: ranked.slice(0, limit).map(({ agent, count }, index) => ({
+        rank: index + 1,
+        name: agent["agent_name"] ?? agent["name"] ?? null,
+        branch: agent["branch_name"] ?? agent["branch_location"] ?? null,
+        [listed]: count,
+        office: agent["address_lines"] ?? null,
+        office_postcode: agent["postcode"] ?? null,
+        website: text(agent["website_url"]),
+        profile_url: agent["id"] !== undefined ? absoluteHomeUrl(`/agents/${String(agent["id"])}/${slug(String(agent["agent_name"] ?? "agent")) || "agent"}`) : null,
+      })),
+      page_url: absoluteHomeUrl(`/agents/search/${area}/${agentType}/`),
+    };
+  }
+
+  /**
+   * Every agent in the searched area, not just the first page: the directory is
+   * paginated in partner-first order, so the busiest agent can sit on any page
+   * (London sales: 1,845 agents, the top one on page 2). `allPins` carries every
+   * agent with its in-area count in one answer; card details come from the pages.
+   * If the pins are missing or short of the total, every page is read instead.
+   */
+  private async everyAreaAgent(path: string, first: JsonObject): Promise<JsonObject[]> {
+    const cards = (raw: JsonObject) => (Array.isArray(raw["agents"]) ? raw["agents"] : []).map(object);
+    const total = Number(first["total"] ?? object(first["pagination"])["total"] ?? 0);
+    const pins = (Array.isArray(first["allPins"]) ? first["allPins"] : []).map(object);
+    let agents = cards(first);
+    if (pins.length && pins.length >= total) {
+      const details = new Map(agents.map((agent) => [String(agent["id"]), agent]));
+      return pins.map((pin) => ({ ...pin, ...details.get(String(pin["id"])) }));
+    }
+    const lastPage = Number(object(first["pagination"])["last_page"] ?? 1);
+    if (!Number.isInteger(lastPage) || lastPage > AGENT_MAX_PAGES) {
+      this.logger(`Home agent search has too many pages to rank: GET ${path}`, { lastPage, total });
+      throw new HomeUpstreamError("Not available right now.");
+    }
+    for (let page = 2; page <= lastPage; page += 4) {
+      const batch = Array.from({ length: Math.min(4, lastPage - page + 1) }, (_, i) => page + i);
+      const answers = await Promise.all(batch.map((n) => this.homeGet(path, { per_page: String(AGENT_PAGE_SIZE), page: String(n) })));
+      agents = agents.concat(...answers.map((answer) => cards(object(answer))));
+    }
+    return agents;
+  }
+
+  /** Typical asking rents for a postcode district or town, from home.co.uk's rental price pages. */
+  async rents(location: string): Promise<JsonObject> {
+    if (!text(location)) throw new HomeError("location is required");
+    const postcode = parsePostcode(location);
+    const path = postcode
+      ? `/rental-prices/postcode/${postcode.outcode.toLowerCase()}/current`
+      : `/rental-prices/location/${encodeURIComponent(slug(location))}/current`;
+    if (!postcode && !slug(location)) throw new HomeError("location must be a UK town, city or postcode");
+    let raw: JsonObject;
+    try {
+      raw = object(await this.homeGet(path));
+    } catch (error) {
+      // An unknown district is a 404; an unknown town redirects to the HTML index page.
+      if (error instanceof HomeUpstreamError && (error.status === 404 || (error.notJson && !postcode))) raw = {};
+      else throw error;
+    }
+    if (!("summary" in raw) || !Object.keys(object(raw["location"])).length) {
+      if (postcode) throw new HomeUpstreamError(`home.co.uk did not return rental price data for ${postcode.outcode}`);
+      throw new HomeError(`home.co.uk has no rental price data for ${location.trim()}; try a postcode district such as BA1`);
+    }
+    return {
+      ...raw,
+      ...(postcode?.full ? { postcode: postcode.full, note: `Figures cover the whole ${postcode.outcode} postcode district.` } : {}),
+      not_achieved_rents: "These are asking rents of homes currently advertised, not agreed rents.",
+    };
+  }
+
   async calculator(kind: "stamp_duty" | "mortgage", query: Record<string, string>): Promise<unknown> {
     return this.data(`/calculators/${kind === "stamp_duty" ? "stamp-duty" : "mortgage"}/`, query);
   }
@@ -372,11 +571,11 @@ export class HomeClient {
       try { value = raw === "" ? null : JSON.parse(raw); }
       catch {
         this.logger(`Home upstream request returned invalid JSON: GET ${url.pathname}`, { statusCode: response.status, body: raw });
-        throw new HomeUpstreamError("Not available right now.");
+        throw new HomeUpstreamError("Not available right now.", response.status, true);
       }
       if (!response.ok) {
         this.logger(`Home upstream request failed: GET ${url.pathname}`, { statusCode: response.status, body: value });
-        throw new HomeUpstreamError("Not available right now.");
+        throw new HomeUpstreamError("Not available right now.", response.status);
       }
       return value;
     } catch (error) {

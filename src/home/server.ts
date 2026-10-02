@@ -2,7 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 import { VERSION } from "../index.js";
-import { HomeClient, HomeError, HomeUpstreamError, type SearchArgs } from "./client.js";
+import { HomeClient, HomeError, HomeUpstreamError, type SearchArgs, type SoldArgs } from "./client.js";
 
 type Schema = Record<string, unknown>;
 type Tool = { name: string; title: string; description: string; inputSchema: Schema };
@@ -13,10 +13,11 @@ const number = (description: string, minimum = 0): Schema => ({ type: "number", 
 const string = (description: string, values?: string[]): Schema => ({ type: "string", description, ...(values ? { enum: values } : {}) });
 
 export const HOME_INSTRUCTIONS = [
-  "Home searches homes for sale and to rent across the United Kingdom using home.co.uk.",
+  "Home helps people buying, renting, selling or letting homes across the United Kingdom using home.co.uk.",
   "Start with search_homes. Keep the listing IDs it returns: get_home gives every photo, the full description, agent and Homedata checks; compare_homes gives the same depth side by side.",
   "Use area_insights for schools, broadband, recorded crime, deprivation and local price growth. Use the two calculators only when the user supplies their assumptions.",
   "Property enrichment is labelled with scope home. When no UPRN can be found, enrichment labelled with scope area contains postcode-level facts only: never present those as facts about the home.",
+  "For sellers and landlords: sold_prices shows what nearby homes actually sold for and when, find_agents ranks local agents by the homes they are selling or letting in the area, and typical_rents gives current asking rents. Sold prices are evidence about other homes, never a valuation of the user's home.",
   "Never invent availability, safety, mortgage eligibility or future prices. Dates and status are snapshots and should be described as such.",
 ].join(" ");
 
@@ -52,6 +53,32 @@ export const HOME_TOOLS: readonly Tool[] = [
     name: "area_insights", title: "Area insights",
     description: "Bring together nearby schools, broadband coverage, recorded crime, deprivation and local house-price growth for one UK postcode. Use this when someone asks what an area is like or wants to compare locations. Report evidence rather than declaring an area safe or unsafe.",
     inputSchema: obj({ postcode: string("A full UK postcode.") }, ["postcode"]),
+  },
+  {
+    name: "sold_prices", title: "Recent sold prices nearby",
+    description: "List what homes near a UK postcode actually sold for, with sale dates, property type and bedrooms, from recorded sale prices on home.co.uk. A full postcode covers its postcode sector; a district such as BA1 covers the district. Use this when someone selling, buying or remortgaging asks what nearby or similar homes sold for. Present the results as past sales of other homes, never as a valuation or estimate of the user's home.",
+    inputSchema: obj({
+      postcode: string("A full UK postcode (for the street or address in question) or a postcode district such as BA1."),
+      months: { type: "integer", enum: [6, 12, 24], description: "How far back to look, in months. Defaults to 12." },
+      property_type: string("Optional property type.", ["detached", "semi_detached", "terraced", "flat"]),
+      min_price: number("Minimum sale price in pounds."), max_price: number("Maximum sale price in pounds."),
+      sort: string("Result order. Defaults to newest.", ["newest", "oldest", "price_asc", "price_desc"]),
+      page: { type: "integer", minimum: 1, maximum: 100, description: "Results page of 20 sales, starting at 1." },
+    }, ["postcode"]),
+  },
+  {
+    name: "find_agents", title: "Find local agents",
+    description: "Rank the estate agents or letting agents in a UK town or postcode area by how many homes each is currently selling or letting there on home.co.uk, with office and profile links. Use this when someone selling or letting a home asks which agents are active locally. Report the listing counts as evidence of local activity, not as a recommendation or a measure of quality.",
+    inputSchema: obj({
+      location: string("Town, city or UK postcode."),
+      agent_type: string("sales for agents selling homes, lettings for agents letting homes.", ["sales", "lettings"]),
+      limit: { type: "integer", minimum: 1, maximum: 20, description: "How many agents to return. Defaults to 10." },
+    }, ["location", "agent_type"]),
+  },
+  {
+    name: "typical_rents", title: "Typical rents",
+    description: "Get typical asking rents per calendar month for a UK postcode district or town from home.co.uk's rental price data: median and average rent, the usual range, and rents by bedrooms and property type. Use this when someone renting or letting asks what rent to expect or charge in an area. Describe the figures as asking rents of homes currently advertised, not agreed rents.",
+    inputSchema: obj({ location: string("A UK postcode, postcode district such as BA1, or town.") }, ["location"]),
   },
   {
     name: "calculate_stamp_duty", title: "Calculate stamp duty",
@@ -104,6 +131,13 @@ export function buildHomeServer(client: HomeClient): Server {
           return result(await client.compare(args["listing_ids"] as string[]));
         }
         case "area_insights": return result(await client.area(String(args["postcode"] ?? "")));
+        case "sold_prices": return result(await client.soldPrices(args as SoldArgs));
+        case "find_agents": {
+          const limit = args["limit"] === undefined ? 10 : args["limit"];
+          if (typeof limit !== "number") throw new HomeError("limit must be a whole number from 1 to 20");
+          return result(await client.agents(String(args["location"] ?? ""), String(args["agent_type"] ?? "") as "sales" | "lettings", limit));
+        }
+        case "typical_rents": return result(await client.rents(String(args["location"] ?? "")));
         case "calculate_stamp_duty": {
           const buyer = String(args["buyer_type"] ?? "");
           if (!["standard", "first_time", "additional"].includes(buyer)) throw new HomeError("buyer_type must be standard, first_time or additional");

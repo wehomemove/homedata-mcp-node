@@ -24,4 +24,14 @@ The endpoint answers MCP at `HOME_MCP_PATH` and health checks at `/healthz`. It 
 node scripts/home-golden-check.mjs https://mcp.home.co.uk/mcp
 ```
 
+To check the seller and renter tools against live home.co.uk data (no key needed), run `node scripts/home-live-check.mjs` after `npm run build`.
+
+## Sellers and renters
+
+These three tools read home.co.uk's JSON only. They do not use the Homedata key or the enrichment limit.
+
+- `sold_prices` reads `/sold-properties/{slug}/` with `Accept: application/json`. A full postcode searches its sector (`ba1-1`). If the sector has fewer than ten sales, the tool widens to the district (`ba1`). An unknown slug redirects to the national page, and that page also answers JSON with the latest sales anywhere in the country. The tool rejects any answer with `isNationalSearch` set or no boundary id, so national sales are never reported as local.
+- `find_agents` reads `/api/agents/search/{location}/{sales|lettings}?per_page=120` and ranks by each agent's in-area listing count. The directory is paginated in partner-first order: Founder and Homemover agents come first, and featured agents with no stock in the area are merged in. So the busiest agent can sit on any page; in London sales (1,845 agents) the top agent is on page 2. The tool ranks from `allPins`, which lists every agent in the area with its count in the first answer, and joins card details from the page. If `allPins` is missing or shorter than `total`, it reads every page (up to 40) before ranking. It drops agents with no listings in the area. Answers not in `property` search mode count each agent's whole stock, so the tool refuses them.
+- `typical_rents` reads `/rental-prices/{postcode|location}/{code}/current` with `Accept: application/json`. That JSON edition was added in wehomemove/atlas#2540. Until that change is deployed the page is HTML, and the tool reports the data as unavailable.
+
 Search reads home.co.uk's public JSON. Search responses deliberately omit HTML cards, boundaries, map pins and all other page payload. One-home and comparison responses first use `uprn` from property details when Home publishes it, then try an exact address match. Today Home does not yet populate that field, so exact matches receive `scope: "home"`; listings that cannot be matched receive `scope: "area"` with explicitly labelled postcode facts. When details omit a postcode, published coordinates are reverse-geocoded first. Only a listing with no usable UPRN, postcode or coordinates is reported as unavailable.
