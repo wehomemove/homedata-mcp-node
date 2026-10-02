@@ -641,7 +641,7 @@ test("the Home icon is the site's own heart app icon, byte for byte", () => {
 test("Home review cases: five live-checked positives that cover all three skills, three negatives", () => {
   const cases = buildHome().extensions["com.openai"].review!.test_cases!;
   assert.deepEqual(cases.positive.map((c) => c.tools_triggered), [
-    "search_homes",
+    "search_homes, render_home_listings",
     "search_homes",
     "search_homes, get_home",
     "search_homes, compare_homes",
