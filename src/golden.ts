@@ -37,7 +37,7 @@ export interface GoldenSet {
 
 export interface ListedTool {
   name: string;
-  inputSchema: { properties?: Record<string, { enum?: unknown[] }> };
+  inputSchema: { properties?: Record<string, { enum?: unknown[]; items?: { enum?: unknown[] } }> };
 }
 
 const KINDS: CaseKind[] = ["direct", "indirect", "followup", "negative", "boundary"];
@@ -82,6 +82,9 @@ export function checkGoldenSet(set: GoldenSet, tools: ListedTool[]): string[] {
         const schema = properties[arg];
         if (!schema) problems.push(`${at}: ${call.tool} has no argument ${arg}`);
         else if (schema.enum && !schema.enum.includes(value)) problems.push(`${at}: ${call.tool}.${arg}=${String(value)} is not allowed`);
+        else if (schema.items?.enum && Array.isArray(value)) {
+          for (const item of value) if (!schema.items.enum.includes(item)) problems.push(`${at}: ${call.tool}.${arg} item ${String(item)} is not allowed`);
+        }
       }
     }
   }

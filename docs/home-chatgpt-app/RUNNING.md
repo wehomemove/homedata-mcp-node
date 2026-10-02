@@ -61,7 +61,13 @@ node scripts/home-review-live.mjs https://mcp.home.co.uk/mcp
 
 The second runs the review packet's positive cases live and prints what came back. It uses four enrichment units in one minute, the default cap, so wait a minute before running it twice.
 
-To check the seller and renter tools against live home.co.uk data (no key needed), run `node scripts/home-live-check.mjs` after `npm run build`.
+To check the wish searches and the seller and renter tools against live home.co.uk data (no key needed), run `node scripts/home-live-check.mjs` after `npm run build`. Each wish check reads every matched listing again on its own and fails if any quoted evidence is not in that listing's description.
+
+## Searching by wishes
+
+`search_homes` takes an optional `wishes` list: `garden`, `off_road_parking`, `quiet_street`, `period_features`, `open_plan`, `home_office`, `no_chain`. The search card carries only the first 150 characters of a description, so a wish search reads each home's full description from `/api/property-details/{id}` (five at a time, about 1.5 s for a page of 20). These reads go to home.co.uk, not Homedata, and use the trusted listing lane like `get_home`. Without `HOME_MCP_LISTING_VIEW_SECRET`, each read counts against atlas's daily per-address listing limit. Descriptions are kept in memory for an hour, so refining the wishes on the same page reads nothing again. A failed read is not kept.
+
+The patterns in `src/home/wishes.ts` are deliberately narrow. A wish matches only when the listing states it. A negated mention ("no garden"), a possibility ("could be used as a home office", "potential for off-road parking"), a place name ("Sydney Gardens") and a nearby feature ("the surrounding grounds are Grade II listed") do not count. Each match carries its sentence, cut to about 120 characters, as an exact substring of the listing. A wish that is not matched is reported under `wishes_not_stated`: the listing does not mention it, which is not the same as the home lacking it. Homes are ranked by wishes stated on the page that was read. When more source pages exist, the answer gives `wishes_next_page`. If a listing cannot be read, it is checked against its card summary and marked `wishes_checked_in: "summary_only"`.
 
 ## Sellers and renters
 

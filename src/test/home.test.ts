@@ -22,6 +22,7 @@ import { HOME_RULES } from "../home/plugin.js";
 import { MAPBOX_GL_ASSET_PREFIX } from "../home/mapbox-assets.js";
 import { buildHomeServer, HOME_TOOLS } from "../home/server.js";
 import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
+import { matchWishes, WISHES, type Wish } from "../home/wishes.js";
 import { HOME_WIDGET_HTML, HOME_WIDGET_URI, homeMapLayout, homeMapProject, homePinCollisions, homePinLabel, humaniseDaysListed } from "../home/widget.js";
 
 const ID = "b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
@@ -445,6 +446,138 @@ test("search sends market signals as Atlas date filters in one request", async (
   const reduced = await client.search({ location: "Bath", listing_type: "sale", reduced_within_days: 14 });
   assert.deepEqual((reduced["homes"] as Array<Record<string, unknown>>).map((home) => home["id"]), [ID]);
   await assert.rejects(() => client.search({ location: "Bath", listing_type: "sale", new_within_days: 0 }), /starting at 1/);
+});
+
+// Phrases from live home.co.uk listings, 2 October 2026.
+test("a wish matches only when the listing states it, and its evidence is the listing's own phrase", () => {
+  const stated: Array<[Wish, string, string]> = [
+    ["garden", "At the rear there is a mature private garden with a private feel.", "At the rear there is a mature private garden with a private feel"],
+    ["garden", "Benefitting from on street permit parking, communal gardens and offered To The Market With No Onward Chain.", "Benefitting from on street permit parking, communal gardens and offered To The Market With No Onward Chain"],
+    ["off_road_parking", "The property also benefits from a Driveway providing off-road parking for up to three cars.", "The property also benefits from a Driveway providing off-road parking for up to three cars"],
+    ["off_road_parking", "AVAILABLE 23RD NOVEMBER | FULLY FURNISHED | SECURE ALLOCATED PARKING | BALCONY", "SECURE ALLOCATED PARKING"],
+    ["quiet_street", "Heritage Close is a quiet cul-de-sac within the village of Peasedown St John.", "Heritage Close is a quiet cul-de-sac within the village of Peasedown St John"],
+    ["quiet_street", "Quietly tucked away on a no through road, lies this three bedroom terraced home.", "Quietly tucked away on a no through road, lies this three bedroom terraced home"],
+    ["period_features", "Retaining charming period features such as picture rails, original doors, and Bakelite handles.", "Retaining charming period features such as picture rails, original doors, and Bakelite handles"],
+    ["period_features", "An immaculately-presented, terraced Victorian home occupying a popular position in Windmill Hill.", "An immaculately-presented, terraced Victorian home occupying a popular position in Windmill Hill"],
+    ["open_plan", "The heart of the home is the wonderful open-plan Kitchen/Dining/Living Room.", "The heart of the home is the wonderful open-plan Kitchen/Dining/Living Room"],
+    ["home_office", "The property boasts three generous bedrooms, a separate study and two reception rooms.", "The property boasts three generous bedrooms, a separate study and two reception rooms"],
+    ["no_chain", "This two-bed flat is chain free and ready for its next chapter.", "This two-bed flat is chain free and ready for its next chapter"],
+    ["no_chain", "Sold with vacant possession", "Sold with vacant possession"],
+  ];
+  for (const [wish, text, evidence] of stated) {
+    const found = matchWishes(text, [wish]);
+    assert.deepEqual(found, [{ wish, evidence }], text);
+    assert.ok(text.includes(found[0]!.evidence), "evidence is quoted, never rewritten");
+  }
+
+  // Each of these mentions the word without stating the feature for this home.
+  const notStated: Array<[Wish, string]> = [
+    ["garden", "There is no garden, but the park is opposite."],
+    ["garden", "A short walk to Sydney Gardens and the city centre."],
+    ["garden", "Close to the garden centre and local shops."],
+    ["garden", "Garden details: Terrace"],
+    ["garden", "A lovely ground floor garden flat."],
+    ["off_road_parking", "Immediately outside, offering potential for further off-road parking, subject to any necessary permissions."],
+    ["off_road_parking", "The former garage has been converted into a snug."],
+    ["off_road_parking", "Unrestricted on street parking."],
+    ["quiet_street", "Internal French doors lead into the sun room, currently enjoyed by the owner as a peaceful reading spot."],
+    ["quiet_street", "A handy storage cupboard keeps coats and shoes neatly tucked away."],
+    ["period_features", "Close to Royal Victoria Park, the surrounding grounds are Grade II listed."],
+    ["period_features", "A Victorian-style terrace built in 2019."],
+    ["home_office", "A third bedroom offers flexibility for guests or a home office."],
+    ["home_office", "This versatile space could be used as a home office, hobby room or occasional guest accommodation."],
+    ["open_plan", "The kitchen is not open plan."],
+    ["no_chain", "We can take your property in as part exchange, giving you a guaranteed buyer and a quicker, chain-free move."],
+    // Opposite claims: the chain phrases are negated before or after, never evidence.
+    ["no_chain", "This sale is not chain-free."],
+    ["no_chain", "Please note the property is not chain free as the vendors are buying."],
+    ["no_chain", "Vacant possession is not available."],
+    ["no_chain", "Vacant possession will not be given on completion."],
+    ["no_chain", "Sold without vacant possession, with the tenant in situ."],
+    ["off_road_parking", "Off-road parking is not available."],
+  ];
+  for (const [wish, text] of notStated) assert.deepEqual(matchWishes(text, [wish]), [], `${wish}: ${text}`);
+  // A denial of something else in the clause leaves the wish stated.
+  assert.equal(matchWishes("A rear garden which is not overlooked.", ["garden"])[0]?.evidence, "A rear garden which is not overlooked");
+  assert.equal(matchWishes("Offered with no onward chain, which is not often the case here.", ["no_chain"])[0]?.evidence, "Offered with no onward chain, which is not often the case here");
+  assert.equal(matchWishes("Vacant possession and chain free.", ["no_chain"])[0]?.evidence, "Vacant possession and chain free");
+  assert.deepEqual(matchWishes(null, [...WISHES]), []);
+});
+
+test("a long sentence is cut to a short phrase around the match, at word boundaries", () => {
+  const text = "Allen Residential are pleased to offer for sale with no onward chain this extended family home in a pleasant cul de sac requiring modernising offering fantastic potential, with views across the valley towards the hills beyond the village and the river.";
+  const [match] = matchWishes(text, ["quiet_street"]);
+  assert.ok(match && match.evidence.length <= 130 && match.evidence.includes("cul de sac"), match?.evidence);
+  const at = text.indexOf(match.evidence);
+  assert.ok(at > 0, "an exact part of the listing");
+  assert.match(text[at - 1]!, /\s/, "starts on a whole word");
+  assert.match(text[at + match.evidence.length] ?? " ", /[\s,.]/, "ends on a whole word");
+});
+
+test("search_homes with wishes reads each full listing, ranks the homes stating most wishes first and quotes them", async () => {
+  const { mcp, requests, stop } = await start({ responseBody: {
+    [`/api/property-details/${ID}`]: { description: "<p>Heritage Close is a quiet cul-de-sac within the village of Peasedown St John.</p><p>There is no garden.</p>" },
+    [`/api/property-details/${ID2}`]: { description: "<div>Externally there is a lawned garden to the front and driveway parking.</div><div>Set in a quiet cul-de-sac.</div>" },
+  } });
+  try {
+    const plain = await mcp.callTool({ name: "search_homes", arguments: { location: "Bath", listing_type: "sale" } });
+    assert.equal((plain.structuredContent as Record<string, unknown>)["wishes"], undefined);
+    assert.equal(requests.filter((url) => url.pathname.startsWith("/api/property-details/")).length, 0, "a plain search reads no listing");
+
+    const answer = await mcp.callTool({ name: "search_homes", arguments: { location: "Bath", listing_type: "sale", wishes: ["garden", "quiet_street", "garden"] } });
+    const body = answer.structuredContent as { wishes: string[]; homes_matching_every_wish: number; wishes_next_page?: number; homes: Array<{ id: string; wishes_matched: Array<{ wish: string; evidence: string }>; wishes_not_stated: string[]; wishes_checked_in: string }> };
+    assert.deepEqual(body.wishes, ["garden", "quiet_street"]);
+    assert.deepEqual(body.homes.map((home) => home.id), [ID2, ID], "the home stating both wishes comes first");
+    assert.deepEqual(body.homes[0]!.wishes_matched, [
+      { wish: "garden", evidence: "Externally there is a lawned garden to the front and driveway parking" },
+      { wish: "quiet_street", evidence: "Set in a quiet cul-de-sac" },
+    ]);
+    assert.deepEqual(body.homes[1]!.wishes_matched, [{ wish: "quiet_street", evidence: "Heritage Close is a quiet cul-de-sac within the village of Peasedown St John" }]);
+    assert.deepEqual(body.homes[1]!.wishes_not_stated, ["garden"], "\"no garden\" is never a garden");
+    assert.equal(body.homes[0]!.wishes_checked_in, "full_description");
+    assert.equal(body.homes_matching_every_wish, 1);
+    assert.equal(body.wishes_next_page, undefined, "a single source page has nothing more to check");
+    assert.doesNotMatch(JSON.stringify(body), /MUST NOT LEAK/);
+    assert.equal(requests.filter((url) => url.pathname.startsWith("/api/property-details/")).length, 2);
+
+    await mcp.callTool({ name: "search_homes", arguments: { location: "Bath", listing_type: "sale", wishes: ["no_chain"] } });
+    assert.equal(requests.filter((url) => url.pathname.startsWith("/api/property-details/")).length, 2, "listing text is kept, so a refined wish search reads nothing again");
+
+    const bad = await mcp.callTool({ name: "search_homes", arguments: { location: "Bath", listing_type: "sale", wishes: ["swimming_pool"] } });
+    assert.equal(bad.isError, true);
+    assert.match(JSON.stringify(bad.structuredContent), /wishes must list one or more of garden, off_road_parking/);
+  } finally { await stop(); }
+});
+
+test("a wish search checks the card summary when a listing cannot be read, says so, and offers the next page", async () => {
+  const summary = "THE PROPERTYAllen Residential are pleased to offer for sale with no onward chain this extended famil...";
+  const { client, requests } = fixtures({
+    status: { [`/api/property-details/${ID}`]: 500 },
+    responseBody: { "/api/for-sale/Bath/": { displayLocation: "Bath", total: 40, pagination: { current_page: 1, last_page: 2 }, properties: [{ listing_id: ID, description: summary }] } },
+    logger: () => {},
+  });
+  const body = await client.search({ location: "Bath", listing_type: "sale", wishes: ["no_chain"] });
+  const [home] = body["homes"] as Array<Record<string, unknown>>;
+  assert.equal(home!["wishes_checked_in"], "summary_only");
+  assert.deepEqual(home!["wishes_matched"], [{ wish: "no_chain", evidence: "THE PROPERTYAllen Residential are pleased to offer for sale with no onward chain this extended famil" }]);
+  assert.equal(body["wishes_next_page"], 2);
+  assert.match(String(body["wishes_note"]), /page 2 and the same arguments/);
+  // A failed read is not kept: the next search reads the listing again.
+  await client.search({ location: "Bath", listing_type: "sale", wishes: ["no_chain"] });
+  assert.equal(requests.filter((url) => url.pathname === `/api/property-details/${ID}`).length, 2);
+
+  for (const wishes of [[], "garden", ["pool"], 7]) {
+    await assert.rejects(() => client.search({ location: "Bath", listing_type: "sale", wishes: wishes as never }), /wishes must list one or more of/);
+  }
+});
+
+test("search_homes offers every wish as an enum the golden set is checked against", () => {
+  const search = HOME_TOOLS.find((tool) => tool.name === "search_homes")!;
+  const wishes = (search.inputSchema["properties"] as Record<string, { items: { enum: string[] } }>)["wishes"]!;
+  assert.deepEqual(wishes.items.enum, [...WISHES]);
+  const set = structuredClone(golden) as GoldenSet;
+  set.cases.find((c) => c.id === "wish-period-no-chain")!.expect.calls[0]!.args["wishes"] = ["period_features", "sea_view"];
+  assert.match(checkGoldenSet(set, HOME_TOOLS as never).join("\n"), /search_homes\.wishes item sea_view is not allowed/);
 });
 
 test("only property-detail requests carry the trusted listing header and cannot redirect", async () => {

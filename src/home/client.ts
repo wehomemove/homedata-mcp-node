@@ -1,5 +1,6 @@
 import { HomedataClient, type ApiResponse } from "../client.js";
 import { TtlCache } from "./cache.js";
+import { matchWishes, WISHES, type Wish } from "./wishes.js";
 
 const DEFAULT_HOME_URL = "https://home.co.uk";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -59,6 +60,7 @@ export type SearchArgs = {
   reduced_within_days?: number;
   on_market_at_least_days?: number;
   new_within_days?: number;
+  wishes?: Wish[];
 };
 
 export type SoldArgs = {
@@ -74,6 +76,9 @@ export type SoldArgs = {
 type JsonObject = Record<string, unknown>;
 
 const MIN_SECTOR_SALES = 10;
+/** Listing descriptions read at once for a wish search; home.co.uk answers each in about 0.2 s. */
+const WISH_READS_AT_ONCE = 5;
+const LISTING_TEXT_TTL_MS = 60 * 60 * 1000;
 const AGENT_PAGE_SIZE = 120;
 const AGENT_MAX_PAGES = 40;
 const PROPERTY_TYPES = ["detached", "semi_detached", "terraced", "flat"];
@@ -259,6 +264,7 @@ export class HomeClient {
   private readonly cachedHomes: TtlCache<unknown>;
   private readonly cachedAreas: TtlCache<JsonObject>;
   private readonly listingRoutes: TtlCache<EnrichmentRoute>;
+  private readonly listingTexts: TtlCache<string | null>;
 
   constructor(private readonly options: HomeClientOptions) {
     this.homeBaseUrl = (options.homeBaseUrl ?? DEFAULT_HOME_URL).replace(/\/+$/, "");
@@ -271,6 +277,7 @@ export class HomeClient {
     this.cachedHomes = new TtlCache(options.cachedHomes ?? 2_000, ttl, clock);
     this.cachedAreas = new TtlCache(options.cachedAreas ?? 2_000, ttl, clock);
     this.listingRoutes = new TtlCache(4 * (options.cachedHomes ?? 2_000), ttl, clock);
+    this.listingTexts = new TtlCache(2_000, LISTING_TEXT_TTL_MS, clock);
   }
 
   /** Hit and miss counts for health. A home hit is one Homedata core lookup not spent. */
@@ -303,6 +310,10 @@ export class HomeClient {
     if (args.min_beds !== undefined && args.max_beds !== undefined && args.min_beds > args.max_beds) throw new HomeError("min_beds cannot exceed max_beds");
     if (args.property_type && !PROPERTY_TYPES.includes(args.property_type)) throw new HomeError("property_type is not supported");
     if (args.sort && !SORTS.includes(args.sort)) throw new HomeError("sort is not supported");
+    const wishes = args.wishes === undefined ? null : Array.isArray(args.wishes) ? [...new Set(args.wishes)] : [];
+    if (wishes && (!wishes.length || !wishes.every((wish) => (WISHES as readonly unknown[]).includes(wish)))) {
+      throw new HomeError(`wishes must list one or more of ${WISHES.join(", ")}`);
+    }
     const route = args.listing_type === "rent" ? "to-rent" : "for-sale";
     const location = encodeURIComponent(args.location.trim());
     const query: Record<string, string> = { page: String(args.page ?? 1), per_page: "20" };
@@ -342,8 +353,66 @@ export class HomeClient {
           note: `Market-signal filters were verified on source page ${currentPage}. More source results remain; call search_homes again with page ${currentPage + 1} and the same filters to continue.`,
         } : {}),
       } : {}),
-      homes: properties.map(trimCard),
+      ...(wishes ? await this.rankByWishes(properties, wishes, { currentPage, lastPage, signalFilters }) : { homes: properties.map(trimCard) }),
     };
+  }
+
+  /**
+   * Order one page of homes by how many wishes each listing states in its own
+   * description, with the phrase that states it. The search card only carries
+   * the first 150 characters, so each listing's full description is read; a
+   * listing whose description cannot be read is checked against that summary
+   * and says so.
+   */
+  private async rankByWishes(properties: JsonObject[], wishes: Wish[], page: { currentPage: number; lastPage: number; signalFilters: boolean }): Promise<JsonObject> {
+    const texts: Array<{ text: string | null; checked: "full_description" | "summary_only" }> = new Array(properties.length);
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(WISH_READS_AT_ONCE, properties.length) }, async () => {
+      for (let i = next++; i < properties.length; i = next++) texts[i] = await this.listingText(properties[i]!);
+    }));
+    const homes = properties.map((property, index) => {
+      const { text: description, checked } = texts[index]!;
+      const matched = matchWishes(description, wishes);
+      return {
+        ...trimCard(property),
+        wishes_matched: matched,
+        wishes_not_stated: wishes.filter((wish) => !matched.some((match) => match.wish === wish)),
+        wishes_checked_in: checked,
+      };
+    });
+    // Stable: equal matches keep the source order (newest, cheapest, and so on).
+    homes.sort((a, b) => b.wishes_matched.length - a.wishes_matched.length);
+    const more = Number.isInteger(page.lastPage) ? page.currentPage < page.lastPage : properties.length > 0;
+    return {
+      wishes,
+      wishes_explained: "Homes are ordered by how many wishes their own listing states, each with the listing's phrase as evidence. A wish under wishes_not_stated is not mentioned in the listing: it is unknown, not absent. Never describe a home as having a wish it does not match.",
+      homes_matching_every_wish: homes.filter((home) => home.wishes_not_stated.length === 0).length,
+      ...(more && !page.signalFilters ? {
+        wishes_checked_on_page: page.currentPage,
+        wishes_next_page: page.currentPage + 1,
+        wishes_note: `Wishes were checked on source page ${page.currentPage} only. Call search_homes again with page ${page.currentPage + 1} and the same arguments to check more homes.`,
+      } : {}),
+      homes,
+    };
+  }
+
+  /** A listing's description as plain text, read from its detail page and kept for an hour. */
+  private async listingText(property: JsonObject): Promise<{ text: string | null; checked: "full_description" | "summary_only" }> {
+    const id = String(property["listing_id"] ?? property["id"] ?? "");
+    const summary = { text: cleanListingDescription(property["description"])?.replace(/\s*(?:\.\.\.|…)$/, "") ?? null, checked: "summary_only" as const };
+    if (!UUID.test(id)) return summary;
+    const known = this.listingTexts.peek(id);
+    if (known !== undefined) return { text: known, checked: "full_description" };
+    try {
+      const detail = object(await this.homeGet(`/api/property-details/${id}`));
+      if (!Object.keys(detail).length) return summary;
+      const text = cleanListingDescription(detail["description"]);
+      this.listingTexts.set(id, text);
+      return { text, checked: "full_description" };
+    } catch (error) {
+      if (error instanceof HomeUpstreamError) return summary;
+      throw error;
+    }
   }
 
   /**
