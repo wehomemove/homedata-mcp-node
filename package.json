@@ -12,6 +12,8 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "!dist/home",
+    "!dist/test/home.test.*",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
@@ -21,6 +23,7 @@
     "prepare": "npm run build",
     "pretest": "npm run build",
     "test": "node --test dist/test/*.test.js",
+    "home:http": "node dist/home/http.js",
     "vendor": "node scripts/vendor-manifest.mjs"
   },
   "keywords": [

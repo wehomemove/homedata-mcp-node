@@ -1,0 +1,54 @@
+{
+  "about": "Golden prompts for the separate home.co.uk Home ChatGPT app. Run these after changing tool names, descriptions, schemas or instructions. Review cases are five positive and three negative examples.",
+  "version": "2026-10-02",
+  "cases": [
+    {
+      "id": "search-family-home", "kind": "indirect", "review": true,
+      "prompt": "Find me three-bedroom houses for sale in Bath up to £500,000, newest first.",
+      "expect": { "calls": [{ "tool": "search_homes", "args": { "location": "Bath", "listing_type": "sale", "min_beds": 3, "max_price": 500000, "sort": "newest" } }], "outcome": "Shows matching Home listings with asking prices, photos, dates, status and links." }
+    },
+    {
+      "id": "open-result", "kind": "followup", "review": true,
+      "prompt": "(after search-family-home) Tell me everything about the first one, including EPC, flood risk and broadband.",
+      "expect": { "calls": [{ "tool": "get_home", "args": {} }], "outcome": "Reuses the first listing ID and returns its full listing plus available Homedata enrichment." }
+    },
+    {
+      "id": "compare-shortlist", "kind": "indirect", "review": true,
+      "prompt": "Compare these three Home listings side by side: 11111111-1111-4111-8111-111111111111, 22222222-2222-4222-8222-222222222222 and 33333333-3333-4333-8333-333333333333.",
+      "expect": { "calls": [{ "tool": "compare_homes", "args": {} }], "outcome": "Compares the listing details and enrichment without inventing missing values." }
+    },
+    {
+      "id": "area-check", "kind": "indirect", "review": true,
+      "prompt": "What is the area around BA1 1LZ like for schools, broadband and recorded crime?",
+      "expect": { "calls": [{ "tool": "area_insights", "args": { "postcode": "BA1 1LZ" } }], "outcome": "Summarises the evidence and does not declare the area safe or unsafe." }
+    },
+    {
+      "id": "mortgage-scenario", "kind": "direct", "review": true,
+      "prompt": "Estimate repayments on a £400,000 home with a £60,000 deposit, 4.5% interest and a 30-year term.",
+      "expect": { "calls": [{ "tool": "calculate_mortgage", "args": { "price": 400000, "deposit": 60000, "rate": 4.5, "term": 30 } }], "outcome": "Returns an estimate and does not present it as a mortgage offer." }
+    },
+    {
+      "id": "stamp-duty", "kind": "direct", "review": false,
+      "prompt": "Estimate stamp duty on a £450,000 first home.",
+      "expect": { "calls": [{ "tool": "calculate_stamp_duty", "args": { "price": 450000, "buyer_type": "first_time" } }], "outcome": "Returns an SDLT estimate and labels it as an estimate rather than tax advice." }
+    },
+    {
+      "id": "negative-sell-home", "kind": "negative", "review": true,
+      "prompt": "List my home for sale and contact agents for me.",
+      "expect": { "calls": [], "outcome": "Explains that the app is read-only." },
+      "why": "The Home app cannot create listings or contact anyone."
+    },
+    {
+      "id": "negative-mortgage-approval", "kind": "negative", "review": true,
+      "prompt": "Approve me for the biggest mortgage I can get.",
+      "expect": { "calls": [], "outcome": "Explains that it cannot assess eligibility or approve lending." },
+      "why": "A repayment calculator is not a lending or eligibility service."
+    },
+    {
+      "id": "negative-home-value", "kind": "negative", "review": true,
+      "prompt": "What will my house be worth in five years?",
+      "expect": { "calls": [], "outcome": "Does not invent a future valuation." },
+      "why": "The tools search advertised homes and report evidence; they do not forecast a specific home's value."
+    }
+  ]
+}
