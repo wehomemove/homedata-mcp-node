@@ -11,7 +11,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 
 import type { ToolCallEvent } from "../activity.js";
 import { HomedataClient } from "../client.js";
-import { checkAppsChallenge, checkCallsPerMinute, checkMcpPath, ConfigError, createHttpHandler, MinuteLimiter } from "../http.js";
+import { checkAppsChallenge, checkCallsPerMinute, checkMcpPath, ConfigError, createHttpHandler, MinuteLimiter, noStoreOnErrors } from "../http.js";
 import { descriptionFor, tools } from "../manifest.js";
 import { outOfScopeClaims } from "../plugin-package.js";
 import { CHATGPT_DESCRIPTIONS, CHATGPT_TOOLS, withoutPrice } from "../profile.js";
@@ -345,16 +345,64 @@ test("the domain-verification route serves exactly the portal's token, or 404 wh
   const set = await start({ appsChallenge: "oai-challenge_Token.123" });
   const response = await fetch(set.base + "/.well-known/openai-apps-challenge");
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
   assert.match(response.headers.get("content-type") ?? "", /^text\/plain/);
   assert.equal(await response.text(), "oai-challenge_Token.123");
   await set.stop();
 
   const unset = await start();
-  assert.equal((await fetch(unset.base + "/.well-known/openai-apps-challenge")).status, 404);
+  const missing = await fetch(unset.base + "/.well-known/openai-apps-challenge");
+  assert.equal(missing.status, 404);
+  // A cached 404 here hid a newly set token until the URL was purged by hand.
+  assert.equal(missing.headers.get("cache-control"), "no-store");
   await unset.stop();
 
   assert.equal(checkAppsChallenge(undefined), undefined);
   for (const bad of ["short", "has space here", "line\nbreak", "{\"token\":1}"]) {
     assert.throws(() => checkAppsChallenge(bad), ConfigError, bad);
+  }
+});
+
+test("every error answer from the Homedata endpoint is no-store, so Cloudflare never caches it", async () => {
+  const { base, stop } = await start({ callsPerMinute: 1 });
+  try {
+    const post = (path: string, body: string, headers: Record<string, string> = {}) =>
+      fetch(base + path, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", ...headers }, body });
+    const call = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "crime", arguments: { postcode: "SW1A 2AA" } } });
+    const answers: Array<[string, Response, number]> = [
+      ["unknown path", await fetch(base + "/nowhere"), 404],
+      ["discovery in server-key mode", await fetch(base + "/.well-known/oauth-protected-resource"), 404],
+      ["GET on MCP", await fetch(base + MCP_PATH), 405],
+      ["bad JSON", await post(MCP_PATH, "not json"), 400],
+      // Written by the SDK transport, not by our own sendJson.
+      ["no Accept", await post(MCP_PATH, call, { Accept: "text/plain" }), 406],
+    ];
+    await post(MCP_PATH, call);
+    answers.push(["over the cap", await post(MCP_PATH, call), 429]);
+    for (const [name, response, status] of answers) {
+      assert.equal(response.status, status, name);
+      assert.equal(response.headers.get("cache-control"), "no-store", name);
+    }
+  } finally {
+    await stop();
+  }
+});
+
+test("noStoreOnErrors covers implicit headers and overrides a cacheable error, and leaves successes alone", async () => {
+  const http: HttpServer = createServer((req, res) => {
+    noStoreOnErrors(res);
+    if (req.url === "/implicit") { res.statusCode = 500; return void res.end("x"); }
+    if (req.url === "/cacheable") return void res.writeHead(404, "Not Found", { "cache-control": "public, max-age=300" }).end();
+    res.writeHead(200, { "Cache-Control": "public, max-age=60" }).end();
+  });
+  await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${(http.address() as AddressInfo).port}`;
+  try {
+    assert.equal((await fetch(base + "/implicit")).headers.get("cache-control"), "no-store");
+    assert.equal((await fetch(base + "/cacheable")).headers.get("cache-control"), "no-store");
+    assert.equal((await fetch(base + "/ok")).headers.get("cache-control"), "public, max-age=60");
+  } finally {
+    http.closeAllConnections();
+    await new Promise((resolve) => http.close(resolve));
   }
 });
