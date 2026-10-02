@@ -202,29 +202,51 @@ test("search sends market signals as Atlas date filters in one request", async (
   const requests: URL[] = [];
   const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
     const url = new URL(String(input)); requests.push(url);
-    return new Response(JSON.stringify({ displayLocation: "Bath", total: 1, pagination: { current_page: 1, last_page: 1 }, properties: [{ listing_id: ID }] }), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ displayLocation: "Bath", total: 40, pagination: { current_page: 1, last_page: 2 }, properties: [
+      { listing_id: ID, reduced_date: "2026-09-18T10:00:00Z", added_date: "2026-07-04" },
+      { listing_id: ID2, reduced_date: "2026-09-17", added_date: "2026-09-30" },
+    ] }), { headers: { "Content-Type": "application/json" } });
   }) as typeof fetch;
   const homedata = new HomedataClient({ apiKey: "test", baseUrl: "https://data.test", fetchImpl });
   const client = new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, now: () => new Date("2026-10-02T00:00:00Z") });
   const body = await client.search({ location: "Bath", listing_type: "sale", reduced_within_days: 14, on_market_at_least_days: 90, new_within_days: 3 });
-  assert.equal((body["homes"] as unknown[]).length, 1);
+  // Atlas's listing route currently ignores these query parameters. The client
+  // must still reject every returned card that does not satisfy all three.
+  assert.deepEqual((body["homes"] as Array<Record<string, unknown>>).map((home) => home["id"]), []);
+  assert.equal(body["total"], null);
+  assert.equal(body["source_total"], 40);
+  assert.equal(body["matching_homes_returned"], 0);
+  assert.equal(body["pages_checked"], 1);
+  assert.equal(body["results_limited"], true);
+  assert.equal(body["next_page"], 2);
   assert.equal(requests.length, 1);
   assert.equal(requests[0]!.searchParams.get("reduced_since"), "2026-09-18");
   assert.equal(requests[0]!.searchParams.get("listed_before"), "2026-07-04");
   assert.equal(requests[0]!.searchParams.get("added_since"), "2026-09-29");
+  const reduced = await client.search({ location: "Bath", listing_type: "sale", reduced_within_days: 14 });
+  assert.deepEqual((reduced["homes"] as Array<Record<string, unknown>>).map((home) => home["id"]), [ID]);
   await assert.rejects(() => client.search({ location: "Bath", listing_type: "sale", new_within_days: 0 }), /starting at 1/);
 });
 
-test("home.co.uk requests carry the configured trusted listing header", async () => {
-  let received: Headers | undefined;
-  const fetchImpl = (async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-    received = new Headers(init?.headers);
-    return new Response(JSON.stringify({ total: 0, properties: [] }), { headers: { "Content-Type": "application/json" } });
+test("only property-detail requests carry the trusted listing header and cannot redirect", async () => {
+  const received: Array<{ url: URL; init?: RequestInit }> = [];
+  const fetchImpl = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const url = new URL(String(input)); received.push({ url, init });
+    const body = url.pathname.startsWith("/api/property-details/") ? { property_uprn: "1" }
+      : url.hostname === "data.test" ? { epc: { rating: "C" } }
+      : { total: 0, properties: [] };
+    return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } });
   }) as typeof fetch;
   const homedata = new HomedataClient({ apiKey: "test", baseUrl: "https://data.test", fetchImpl });
   const client = new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, listingViewSecret: "trusted-secret" });
   await client.search({ location: "Bath", listing_type: "sale" });
-  assert.equal(received?.get("X-Home-Listing-Secret"), "trusted-secret");
+  await client.home(ID);
+  const details = received.find((request) => request.url.pathname.startsWith("/api/property-details/"))!;
+  assert.equal(new Headers(details.init?.headers).get("X-Home-Listing-Secret"), "trusted-secret");
+  assert.equal(details.init?.redirect, "error");
+  for (const request of received.filter((item) => item !== details)) {
+    assert.equal(new Headers(request.init?.headers).has("X-Home-Listing-Secret"), false, request.url.toString());
+  }
 });
 
 test("get_home uses the property-details UPRN before address matching", async () => {
@@ -411,7 +433,9 @@ test("typical_rents reads the area's JSON API and treats its 404 as an unknown a
     assert.equal(requests[0]!.pathname, "/api/v1/rental-prices/BA1%201LZ");
     const town = await mcp.callTool({ name: "typical_rents", arguments: { location: "Milton Keynes" } });
     assert.equal(town.isError, true);
-    assert.equal(requests[1]!.pathname, "/api/v1/rental-prices/Milton%20Keynes");
+    assert.equal(requests[1]!.pathname, "/api/v1/rental-prices/milton-keynes");
+    await mcp.callTool({ name: "typical_rents", arguments: { location: "King's Lynn" } });
+    assert.equal(requests[2]!.pathname, "/api/v1/rental-prices/kings-lynn");
   } finally { await stop(); }
 });
 

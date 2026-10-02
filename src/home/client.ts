@@ -164,13 +164,31 @@ export class HomeClient {
     if (args.new_within_days !== undefined) query["added_since"] = this.daysAgo(args.new_within_days);
     const raw = object(await this.homeGet(`/api/${route}/${location}/`, query));
     const pagination = object(raw["pagination"]);
+    const sourceProperties = Array.isArray(raw["properties"]) ? raw["properties"].map(object) : [];
+    // Atlas currently accepts these parameters on this public route without applying
+    // them. Keep sending the new contract, but never trust an unfiltered response.
+    const signalFilters = args.reduced_within_days !== undefined || args.on_market_at_least_days !== undefined || args.new_within_days !== undefined;
+    const properties = signalFilters ? sourceProperties.filter((property) => this.matchesMarketSignals(property, query)) : sourceProperties;
+    const currentPage = Number(pagination["current_page"] ?? args.page ?? 1);
+    const lastPage = Number(pagination["last_page"]);
+    const hasMore = signalFilters && sourceProperties.length > 0 && (!Number.isInteger(lastPage) || currentPage < lastPage);
     return {
       location: raw["displayLocation"] ?? args.location,
       listing_type: args.listing_type,
-      total: raw["total"] ?? pagination["total"] ?? null,
+      total: signalFilters ? null : raw["total"] ?? pagination["total"] ?? null,
       page: pagination["current_page"] ?? args.page ?? 1,
       last_page: pagination["last_page"] ?? null,
-      homes: (Array.isArray(raw["properties"]) ? raw["properties"] : []).map(trimCard),
+      ...(signalFilters ? {
+        source_total: raw["total"] ?? pagination["total"] ?? null,
+        matching_homes_returned: properties.length,
+        pages_checked: 1,
+        results_limited: hasMore,
+        ...(hasMore ? {
+          next_page: currentPage + 1,
+          note: `Market-signal filters were verified on source page ${currentPage}. More source results remain; call search_homes again with page ${currentPage + 1} and the same filters to continue.`,
+        } : {}),
+      } : {}),
+      homes: properties.map(trimCard),
     };
   }
 
@@ -205,6 +223,17 @@ export class HomeClient {
     const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((item) => item.type === type)?.value);
     const date = new Date(Date.UTC(part("year"), part("month") - 1, part("day") - days));
     return date.toISOString().slice(0, 10);
+  }
+
+  private matchesMarketSignals(property: JsonObject, query: Record<string, string>): boolean {
+    const date = (value: unknown): string | null => {
+      const candidate = text(value)?.slice(0, 10) ?? null;
+      return candidate && /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : null;
+    };
+    if (query["reduced_since"] && (!date(property["reduced_date"]) || date(property["reduced_date"])! < query["reduced_since"]!)) return false;
+    if (query["added_since"] && (!date(property["added_date"]) || date(property["added_date"])! < query["added_since"]!)) return false;
+    if (query["listed_before"] && (!date(property["added_date"]) || date(property["added_date"])! > query["listed_before"]!)) return false;
+    return true;
   }
 
   async home(listingId: string): Promise<JsonObject> {
@@ -409,7 +438,8 @@ export class HomeClient {
     if (!postcode && !slug(location)) throw new HomeError("location must be a UK town, city or postcode");
     let raw: JsonObject;
     try {
-      raw = object(await this.homeGet(`/api/v1/rental-prices/${encodeURIComponent(location.trim())}`));
+      const area = postcode ? location.trim() : slug(location.replace(/['’]/g, ""));
+      raw = object(await this.homeGet(`/api/v1/rental-prices/${encodeURIComponent(area)}`));
     } catch (error) {
       if (error instanceof HomeUpstreamError && error.status === 404) raw = {};
       else throw error;
@@ -525,8 +555,9 @@ export class HomeClient {
     try {
       const headers: Record<string, string> = { Accept: "application/json", "User-Agent": "home-chatgpt-app/1.0" };
       const secret = this.options.listingViewSecret?.trim();
-      if (secret) headers["X-Home-Listing-Secret"] = secret;
-      const response = await this.fetchImpl(url, { headers, signal: controller.signal });
+      const trustedListingRequest = Boolean(secret) && url.pathname.startsWith("/api/property-details/");
+      if (trustedListingRequest) headers["X-Home-Listing-Secret"] = secret!;
+      const response = await this.fetchImpl(url, { headers, signal: controller.signal, ...(trustedListingRequest ? { redirect: "error" } : {}) });
       const raw = await response.text().catch(() => "");
       let value: unknown;
       try { value = raw === "" ? null : JSON.parse(raw); }
