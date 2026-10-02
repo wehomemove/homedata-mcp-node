@@ -197,10 +197,11 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     const listeners = new Map<string, Array<(event: any) => void>>();
     const classes = new Set<string>();
     const styles: string[] = [];
-    const mapElement = { clientWidth: 600, dataset: {} as Record<string, string>, querySelectorAll: () => [], querySelector: () => null };
+    let mapRemoved = false;
+    const mapElement = { clientWidth: 600, dataset: {} as Record<string, string>, querySelectorAll: () => [], querySelector: () => null, remove: () => { mapRemoved = true; } };
     const root = {
       innerHTML: "", querySelector: () => null,
-      querySelectorAll: (selector: string) => selector === "[data-map]" ? [mapElement] : [],
+      querySelectorAll: (selector: string) => selector === "[data-map]" || selector === "[data-map]:not([data-drawn])" && !mapElement.dataset.drawn ? [mapElement] : [],
     };
     const classList = { toggle: (name: string, on: boolean) => on ? classes.add(name) : classes.delete(name) };
     const parent = { postMessage: () => undefined };
@@ -229,7 +230,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     new Function("window", "document", "matchMedia", "mapboxgl", widgetScript)(window, document, () => ({ matches: systemDark }), mapboxgl);
     const dispatch = (type: string, event: any) => (listeners.get(type) ?? []).forEach((listener) => listener(event));
     const render = () => dispatch("message", { source: parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [{ price: 325000, coordinates: { latitude: 51.38, longitude: -2.36 } }] } } } });
-    return { classes, styles, parent, dispatch, render, root, window, mapboxgl, mapboxListeners };
+    return { classes, styles, parent, dispatch, render, root, window, mapboxgl, mapboxListeners, mapRemoved: () => mapRemoved };
   }
 
   const chatgpt = harness(false, { theme: "dark" });
@@ -255,6 +256,12 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   delayed.window.mapboxgl = delayed.mapboxgl;
   delayed.mapboxListeners.get("load")?.();
   assert.equal(delayed.styles[0], "mapbox://styles/mapbox/light-v11");
+
+  const failed = harness();
+  failed.window.mapboxgl = undefined;
+  failed.render();
+  failed.mapboxListeners.get("error")?.();
+  assert.equal(failed.mapRemoved(), true);
 
   const detail = harness();
   detail.dispatch("message", { source: detail.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: {
@@ -463,6 +470,8 @@ test("get_home returns clearly labelled, widget-ready postcode facts when no UPR
       "/crime/": { total_crimes: 14, latest_month: "2026-08" },
       "/schools/nearby": { schools: [{ name: "Area Primary", distance_km: 0.5, ofsted: { rating: "Good" } }] },
       "/broadband/": { max_download_speed: 1000 },
+      "/deprivation/": { area: "Bath 001", overall_decile: 8 },
+      "/price-growth/BA2/": { annual_growth_percent: 3.2 },
     },
   });
   try {
@@ -476,11 +485,41 @@ test("get_home returns clearly labelled, widget-ready postcode facts when no UPR
       broadband: { max_download_speed: 1000 },
       schools: [{ name: "Area Primary", distance_km: 0.5, ofsted_rating: "Good" }],
       crime: { level: "14 recorded crimes (2026-08)", total: 14, period: "2026-08" },
+      deprivation: { area: "Bath 001", overall_decile: 8 },
+      price_growth: { annual_growth_percent: 3.2 },
     });
+    assert.equal("unavailable" in enrichment, false);
     assert.equal(requests.some((url) => url.pathname === "/address/find/" || url.pathname.includes("/core/")), false);
     assert.ok(requests.some((url) => url.pathname === "/schools/nearby"));
     assert.ok(requests.some((url) => url.pathname === "/price-growth/BA2/"));
   } finally { await stop(); }
+});
+
+test("get_home reports complete and partial area enrichment failures", async () => {
+  const areaPaths = ["/crime/", "/schools/nearby", "/broadband/", "/deprivation/", "/price-growth/BA2/"];
+  const allFailed = await start({ detail: { building_number: null, building_name: null }, status: Object.fromEntries(areaPaths.map((path) => [path, 402])), logger: () => {} });
+  try {
+    const answer = await allFailed.mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+    assert.deepEqual((answer.structuredContent as Record<string, unknown>)["enrichment"], {
+      available: false,
+      reason: "Not available right now.",
+      unavailable: ["crime", "schools", "broadband", "deprivation", "price_growth"],
+    });
+  } finally { await allFailed.stop(); }
+
+  const partial = await start({
+    detail: { building_number: null, building_name: null },
+    status: { "/crime/": 402 },
+    responseBody: { "/broadband/": { max_download_speed: 1000 }, "/deprivation/": {}, "/price-growth/BA2/": {} },
+    logger: () => {},
+  });
+  try {
+    const answer = await partial.mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+    const enrichment = (answer.structuredContent as Record<string, unknown>)["enrichment"] as Record<string, unknown>;
+    assert.equal(enrichment["available"], true);
+    assert.deepEqual(enrichment["unavailable"], ["crime"]);
+    assert.deepEqual(enrichment["area"], { broadband: { max_download_speed: 1000 } });
+  } finally { await partial.stop(); }
 });
 
 test("get_home reverse geocodes coordinates when property details omit the postcode", async () => {

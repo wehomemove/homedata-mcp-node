@@ -653,7 +653,8 @@ export class HomeClient {
     }
 
     const area = postcode ? await this.areaEnrichment(postcode) : null;
-    if (definite) this.listingRoutes.set(listingId, area ? { kind: "area", postcode: String(area["postcode"]) } : { kind: "none" });
+    if (definite && area?.["scope"] === "area") this.listingRoutes.set(listingId, { kind: "area", postcode: String(area["postcode"]) });
+    else if (definite && !area) this.listingRoutes.set(listingId, { kind: "none" });
     return area ?? { ...NO_ENRICHMENT };
   }
 
@@ -661,14 +662,23 @@ export class HomeClient {
   private async areaEnrichment(postcode: string): Promise<JsonObject | null> {
     try {
       const area = await this.area(postcode);
+      const names = ["crime", "schools", "broadband", "deprivation", "price_growth"];
+      const unavailable = names.filter((name) => isUnavailable(area[name]));
+      if (unavailable.length === names.length) return { ...UNAVAILABLE, unavailable };
+      const facts = buyerPropertyFacts(area);
+      for (const name of ["deprivation", "price_growth"] as const) {
+        const value = area[name];
+        if (!isUnavailable(value) && Object.keys(object(value)).length) facts[name] = value;
+      }
       return {
         available: true,
         scope: "area",
         postcode: area["postcode"],
         notice: "These are postcode-level area facts. They are not facts about this home.",
+        ...(unavailable.length ? { unavailable } : {}),
         // The standalone area tool keeps the complete source answers. The home
         // widget gets the same small, stable buyer-facing shape as home facts.
-        area: buyerPropertyFacts(area),
+        area: facts,
       };
     } catch (error) {
       if (!(error instanceof HomeError)) throw error;
