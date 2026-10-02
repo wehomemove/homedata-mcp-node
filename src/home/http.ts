@@ -177,6 +177,7 @@ async function main(): Promise<void> {
   if (!apiKey) throw new Error("HOMEDATA_API_KEY is required for Home listing enrichment");
   const client = new HomeClient({
     homeBaseUrl: (process.env["HOME_BASE_URL"] ?? "").trim() || undefined,
+    listingViewSecret: (process.env["HOME_MCP_LISTING_VIEW_SECRET"] ?? "").trim() || undefined,
     homedata: new HomedataClient({ apiKey, baseUrl: (process.env["HOMEDATA_BASE_URL"] ?? "").trim() || undefined, version: VERSION }),
   });
   const handler = createHomeHttpHandler({

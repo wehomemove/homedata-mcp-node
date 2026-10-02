@@ -36,7 +36,7 @@ export const HOME_ACCOUNT_INSTRUCTIONS = "Signed-in users can keep saved searche
 export const HOME_TOOLS: readonly Tool[] = [
   {
     name: "search_homes", title: "Search homes",
-    description: "Search current UK homes for sale or to rent by location, price, bedrooms, property type, new-build status and market signals. Can find homes reduced within the last N days, on the market for at least N days, or newly added within the last N days. Market-signal searches check up to three source pages and clearly say when further results were not checked. Returns compact cards with time on market, reduction and under-offer dates. Use this when someone wants to find homes or refine a previous property search.",
+    description: "Search current UK homes for sale or to rent by location, price, bedrooms, property type, new-build status and market signals. Can find homes reduced within the last N days, on the market for at least N days, or newly added within the last N days. Market-signal dates are sent to the source and verified on the returned page; the answer clearly says when more source pages remain. Returns compact cards with time on market, reduction and under-offer dates. Use this when someone wants to find homes or refine a previous property search.",
     inputSchema: obj({
       location: string("Town, city, county or UK postcode."),
       listing_type: string("Whether the user wants to buy or rent.", ["sale", "rent"]),
@@ -48,7 +48,7 @@ export const HOME_TOOLS: readonly Tool[] = [
       on_market_at_least_days: { type: "integer", minimum: 1, description: "Only return homes that have been listed for at least N days." },
       new_within_days: { type: "integer", minimum: 1, description: "Only return homes first added in the last N days." },
       sort: string("Result order.", ["newest", "oldest", "price_asc", "price_desc"]),
-      page: { type: "integer", minimum: 1, maximum: 100, description: "Source results page, starting at 1. For a market-signal search with results_limited true, repeat the same search using its next_page value to continue without gaps or duplicates." },
+      page: { type: "integer", minimum: 1, maximum: 100, description: "Source results page, starting at 1. For a market-signal search with results_limited true, repeat the same search using its next_page value to check the next source page." },
     }, ["location", "listing_type"]),
   },
   {
