@@ -242,6 +242,7 @@ export function trimCard(value: unknown): JsonObject {
     under_offer_date: p["first_offer_date"] ?? null,
     image: absoluteHomeUrl(object(primary)["thumbnail_cdn_url"] ?? object(primary)["cdn_url"] ?? p["main_image"]),
     agent: p["agent_name"] ?? null,
+    agent_logo: absoluteHomeUrl(p["agent_logo"] ?? p["agent_logo_url"]),
     coordinates: {
       latitude: p["latitude"] ?? object(p["coordinates"])["latitude"] ?? null,
       longitude: p["longitude"] ?? object(p["coordinates"])["longitude"] ?? null,

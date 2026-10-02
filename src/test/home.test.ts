@@ -22,7 +22,7 @@ import { HOME_RULES } from "../home/plugin.js";
 import { MAPBOX_GL_ASSET_PREFIX } from "../home/mapbox-assets.js";
 import { buildHomeServer, HOME_TOOLS } from "../home/server.js";
 import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
-import { HOME_WIDGET_HTML, HOME_WIDGET_URI, homeMapLayout, homeMapProject, homePinLabel, humaniseDaysListed } from "../home/widget.js";
+import { HOME_WIDGET_HTML, HOME_WIDGET_URI, homeAreaRing, homeMapLayout, homeMapProject, homePinLabel, humaniseDaysListed } from "../home/widget.js";
 
 const ID = "b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
 const ID2 = "c9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
@@ -177,6 +177,28 @@ test("the generated dependency-free widget script is valid JavaScript", () => {
   assert.match(script, /risk\('Crime',p\.crime/);
 });
 
+test("the widget uses home.co.uk's colours: no pastel pink tints, pink outlines or grey Mapbox styles", () => {
+  const css = HOME_WIDGET_HTML.match(/<style>([\s\S]*)<\/style>/)?.[1] ?? "";
+  for (const banned of ["#fdf2f8", "#fce7f3", "#ffe4e6", "#fbcfe8", "#f9a8d4", "#321d2a", "#9d174d", "#be185d", "#db2777", "#ec489955"]) {
+    assert.ok(!HOME_WIDGET_HTML.toLowerCase().includes(banned), `banned tint ${banned}`);
+  }
+  assert.doesNotMatch(HOME_WIDGET_HTML, /light-v11|dark-v11/);
+  // Pink appears only in the gradients, the glass pill's shadow, the selected pin and the map wash: never as a border or outline.
+  assert.doesNotMatch(css, /(border|outline)[^;{}]*(#ec4899|#f43f5e|236,72,153)/);
+  assert.match(css, /\.card\{[^}]*border:1px solid var\(--line\)/);
+  assert.match(css, /linear-gradient\(to right,rgba\(236,72,153,\.5\),rgba\(244,63,94,\.5\),rgba\(249,115,22,\.5\)\)/);
+});
+
+test("the area wash hull pads every home by 400 m and closes", () => {
+  const ring = homeAreaRing([{ latitude: 52.63, longitude: 1.29 }, { latitude: 52.64, longitude: 1.31 }]);
+  assert.deepEqual(ring[0], ring.at(-1));
+  const lats = ring.map(([, lat]) => lat), lngs = ring.map(([lng]) => lng);
+  assert.ok(Math.abs(Math.min(...lats) - (52.63 - 400 / 111320)) < 1e-6);
+  assert.ok(Math.abs(Math.max(...lats) - (52.64 + 400 / 111320)) < 1e-6);
+  assert.ok(Math.min(...lngs) < 1.29 && Math.max(...lngs) > 1.31);
+  assert.deepEqual(homeAreaRing([]), []);
+});
+
 test("listing descriptions become clean plain-text paragraphs", () => {
   assert.equal(
     cleanListingDescription('<p>A bright &amp; airy home.</p><p>Two bedrooms<br>Near the park&nbsp;&#163;.</p><script>ignore()</script>'),
@@ -199,7 +221,8 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     const classes = new Set<string>();
     const styles: string[] = [];
     let mapRemoved = false;
-    const mapElement = { clientWidth: 600, dataset: {} as Record<string, string>, querySelectorAll: () => [], querySelector: () => null, remove: () => { mapRemoved = true; } };
+    const mapClasses = new Set<string>();
+    const mapElement = { clientWidth: 600, dataset: {} as Record<string, string>, classList: { toggle: (name: string, on: boolean) => on ? mapClasses.add(name) : mapClasses.delete(name) }, querySelectorAll: () => [], querySelector: () => null, remove: () => { mapRemoved = true; } };
     const root = {
       innerHTML: "", querySelector: () => null,
       querySelectorAll: (selector: string) => selector === "[data-map]" || selector === "[data-map]:not([data-drawn])" && !mapElement.dataset.drawn ? [mapElement] : [],
@@ -210,19 +233,28 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
       parent, openai, mapboxgl: undefined as unknown,
       addEventListener: (type: string, listener: (event: any) => void) => listeners.set(type, [...(listeners.get(type) ?? []), listener]),
     };
-    const button = () => ({
-      dataset: {} as Record<string, string>, className: "", type: "", textContent: "",
+    const button = () => { const pin = {
+      dataset: {} as Record<string, string>, className: "", type: "", textContent: "", innerHTML: "",
       classList: { contains: () => false, toggle: () => undefined },
       matches: (selector: string) => selector === "[data-index]", setAttribute: () => undefined,
       addEventListener: () => undefined,
-    });
+    }; pins.push(pin); return pin; };
     const mapboxListeners = new Map<string, () => void>();
     const mapboxScript = { addEventListener: (type: string, listener: () => void) => mapboxListeners.set(type, listener) };
     const document = { getElementById: (id: string) => id === "root" ? root : id === "home-mapbox" ? mapboxScript : null, documentElement: { classList }, createElement: button };
+    const pins: Array<{ className: string; innerHTML: string }> = [];
+    const layers: Array<{ id: string; type: string; paint: Record<string, unknown> }> = [];
+    const mapEvents = new Map<string, () => void>();
     class FakeMap {
       constructor(options: { style: string }) { styles.push(options.style); }
       addControl() {} jumpTo() {} fitBounds() {} remove() {}
       setStyle(style: string) { styles.push(style); }
+      on(type: string, listener: () => void) { mapEvents.set(type, listener); }
+      getZoom() { return 12; }
+      getSource(id: string) { return id === "composite" ? {} : layers.find((layer) => layer.id === id); }
+      getLayer(id: string) { return layers.find((layer) => layer.id === id); }
+      addSource(id: string) { layers.push({ id, type: "source", paint: {} }); }
+      addLayer(layer: { id: string; type: string; paint: Record<string, unknown> }) { layers.push(layer); }
     }
     class Marker { setLngLat() { return this; } addTo() { return this; } }
     class Bounds { extend() { return this; } }
@@ -231,7 +263,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     new Function("window", "document", "matchMedia", "mapboxgl", widgetScript)(window, document, () => ({ matches: systemDark }), mapboxgl);
     const dispatch = (type: string, event: any) => (listeners.get(type) ?? []).forEach((listener) => listener(event));
     const render = () => dispatch("message", { source: parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [{ price: 325000, coordinates: { latitude: 51.38, longitude: -2.36 } }] } } } });
-    return { classes, styles, parent, dispatch, render, root, window, mapboxgl, mapboxListeners, mapRemoved: () => mapRemoved };
+    return { pins, layers, mapEvents, mapClasses, classes, styles, parent, dispatch, render, root, window, mapboxgl, mapboxListeners, mapRemoved: () => mapRemoved };
   }
 
   const chatgpt = harness(false, { theme: "dark" });
@@ -239,7 +271,28 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   chatgpt.render();
   chatgpt.dispatch("openai:set_globals", { detail: { globals: { theme: "light" } } });
   assert.ok(chatgpt.classes.has("light"));
-  assert.equal(chatgpt.styles.at(-1), "mapbox://styles/mapbox/light-v11");
+  assert.equal(chatgpt.styles.at(-1), "mapbox://styles/mapbox/streets-v12");
+
+  // home.co.uk's map: status-coloured speech bubbles that become gradient hearts when zoomed out, 3D buildings and the faint pink area wash.
+  assert.ok(chatgpt.mapClasses.has("far"));
+  assert.match(chatgpt.pins[0]!.innerHTML, /url\(#heart-default\)/);
+  assert.match(chatgpt.pins[0]!.innerHTML, /<span class="bubble">£325k<\/span>/);
+  chatgpt.mapEvents.get("style.load")?.();
+  assert.deepEqual(chatgpt.layers.map((layer) => layer.id), ["home-buildings", "home-area", "home-area-fill", "home-area-line"]);
+  assert.deepEqual(chatgpt.layers[0]!.paint["fill-extrusion-color"], "#d4d0c8");
+  assert.deepEqual(chatgpt.layers[2]!.paint, { "fill-color": "#ec4899", "fill-opacity": 0.06 });
+
+  const statuses = harness();
+  statuses.dispatch("message", { source: statuses.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [
+    { price: 1, coordinates: { latitude: 51.38, longitude: -2.36 } },
+    { price: 2, status: "Sold STC", coordinates: { latitude: 51.38, longitude: -2.36 } },
+    { price: 3, reduced_date: "2026-09-01", coordinates: { latitude: 51.38, longitude: -2.36 } },
+    { price: 4, new_build: true, new_listing: true, coordinates: { latitude: 51.38, longitude: -2.36 } },
+  ] } } } });
+  assert.deepEqual(statuses.pins.map((pin) => pin.className), ["pin  active", "pin offer", "pin reduced", "pin newbuild"]);
+  assert.match(statuses.root.innerHTML, /<span class="card-tag"><i class="card-tag-dot"><\/i>New<\/span>/);
+  assert.match(statuses.root.innerHTML, /<span class="card-tag card-tag-dark">Under offer<\/span>/);
+  assert.match(statuses.root.innerHTML, /<span class="glass">New build<\/span>/);
 
   const mcp = harness();
   mcp.dispatch("message", { source: mcp.parent, data: { jsonrpc: "2.0", id: "home-ui-init", result: { hostContext: { theme: "dark" } } } });
@@ -247,7 +300,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
 
   const system = harness(true);
   system.render();
-  assert.equal(system.styles[0], "mapbox://styles/mapbox/dark-v11");
+  assert.equal(system.styles[0], "mapbox://styles/mapbox/navigation-night-v1");
 
   const delayed = harness();
   delayed.window.mapboxgl = undefined;
@@ -256,7 +309,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   assert.equal(delayed.styles.length, 0);
   delayed.window.mapboxgl = delayed.mapboxgl;
   delayed.mapboxListeners.get("load")?.();
-  assert.equal(delayed.styles[0], "mapbox://styles/mapbox/light-v11");
+  assert.equal(delayed.styles[0], "mapbox://styles/mapbox/streets-v12");
 
   const failed = harness();
   failed.window.mapboxgl = undefined;
@@ -295,11 +348,11 @@ test("render tools reuse supplied homes without another search and keep text fal
   } finally { await stop(); }
 });
 
-test("Home publishes a v4 MCP Apps resource without a map surface when the browser token is absent", async () => {
+test("Home publishes a v5 MCP Apps resource without a map surface when the browser token is absent", async () => {
   const { mcp, stop } = await start();
   try {
     const resources = await mcp.listResources();
-    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v4.html"]);
+    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v5.html"]);
     const resource = await mcp.readResource({ uri: resources.resources[0]!.uri });
     const content = resource.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
     assert.equal(content.mimeType, "text/html;profile=mcp-app");
