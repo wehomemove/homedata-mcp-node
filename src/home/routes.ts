@@ -235,7 +235,7 @@ export class MapboxRoutes {
       mode: travel,
       minutes: limit,
       ...(ids.length ? {
-        summary: `${inside.length} of ${homes.length} ${homes.length === 1 ? "home is" : "homes are"} within ${journey} of ${place.name}.`,
+        summary: `${inside.length} of ${homes.length} ${homes.length === 1 ? "home" : "homes"} within ${journey} of ${place.name}.`,
         homes_inside: inside,
         homes_outside: outside,
         ...(notChecked.length ? { homes_not_checked: notChecked } : {}),
