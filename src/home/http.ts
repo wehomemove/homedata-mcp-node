@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { randomBytes } from "node:crypto";
 import { isIP } from "node:net";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
@@ -133,6 +134,10 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     noStoreOnErrors(res);
     const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
+    if (requestPath === "/widget-check-in") {
+      if (req.method !== "GET" && req.method !== "HEAD") { res.setHeader("Allow", "GET, HEAD"); return void send(res, 405, { error: "method_not_allowed" }); }
+      return void res.writeHead(204, { "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*", "Content-Length": "0" }).end();
+    }
     const mapboxAsset = MAPBOX_GL_ASSETS.get(requestPath);
     if (mapboxAsset) {
       if (req.method !== "GET" && req.method !== "HEAD") { res.setHeader("Allow", "GET, HEAD"); return void send(res, 405, { error: "method_not_allowed" }); }
@@ -177,7 +182,7 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
     const server = buildHomeServer(
       options.client,
       account ? { tools: account, token: bearerToken(req), onRefused: (challenge) => { refused ??= challenge; } } : undefined,
-      { mapboxToken: options.mapboxToken, assetOrigin, routes },
+      { mapboxToken: options.mapboxToken, assetOrigin, routes, widgetViewId: randomBytes(12).toString("hex") },
     );
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });

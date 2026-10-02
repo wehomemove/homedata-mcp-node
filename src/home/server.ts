@@ -217,7 +217,7 @@ function positive(args: Record<string, unknown>, name: string, allowZero = false
   return value;
 }
 
-export function buildHomeServer(client: HomeClient, account?: HomeAccount, options: { mapboxToken?: string; assetOrigin?: string; routes?: MapboxRoutes } = {}): Server {
+export function buildHomeServer(client: HomeClient, account?: HomeAccount, options: { mapboxToken?: string; assetOrigin?: string; routes?: MapboxRoutes; widgetViewId?: string } = {}): Server {
   const routes = options.routes;
   const instructions = [HOME_INSTRUCTIONS, ...(routes ? [HOME_ROUTE_INSTRUCTIONS] : []), ...(account ? [HOME_ACCOUNT_INSTRUCTIONS] : [])].join(" ");
   const server = new Server({ name: "home", version: VERSION }, { capabilities: { tools: {}, resources: {} }, instructions });
@@ -228,7 +228,7 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
     const requestedVersion = request.params.uri.match(/^ui:\/\/home\/listings-and-detail-v([1-9]\d*)\.html$/)?.[1];
     if (!requestedVersion || Number(requestedVersion) > HOME_WIDGET_VERSION) throw new Error("Unknown Home UI resource");
     const mapboxDomains = options.mapboxToken ? ["https://api.mapbox.com", "https://events.mapbox.com"] : [];
-    const assetDomains = options.mapboxToken && options.assetOrigin ? [options.assetOrigin] : [];
+    const assetDomains = options.assetOrigin ? [options.assetOrigin] : [];
     const csp = {
       connectDomains: mapboxDomains,
       resourceDomains: ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", ...assetDomains, ...mapboxDomains],
@@ -238,6 +238,9 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
       mimeType: "text/html;profile=mcp-app",
       text: HOME_WIDGET_HTML
         .replace("__HOME_MAPBOX_ASSETS__", options.mapboxToken && options.assetOrigin ? mapboxAssetTags(options.assetOrigin) : "")
+        .replaceAll("__HOME_CHECK_IN_ORIGIN__", options.assetOrigin ?? "")
+        .replaceAll("__HOME_CHECK_IN_HOST__", options.assetOrigin ? new URL(options.assetOrigin).hostname : "")
+        .replaceAll("__HOME_VIEW_ID__", options.widgetViewId ?? "")
         .replace("__HOME_MAPBOX_TOKEN__", JSON.stringify(options.mapboxToken ?? "")),
       _meta: {
         ui: { prefersBorder: false, domain: "https://mcp.home.co.uk", csp },
