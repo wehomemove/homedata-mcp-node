@@ -24,6 +24,7 @@ const ROOT = join(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 type FixtureOptions = {
   detail?: Record<string, unknown>;
   address?: unknown;
+  reverseGeocode?: unknown;
   status?: Record<string, number>;
 };
 
@@ -34,6 +35,7 @@ function fixtures(options: FixtureOptions = {}) {
     let body: unknown = {};
     if (url.pathname.startsWith("/api/for-sale/")) body = { displayLocation: "Bath", total: 2, pagination: { current_page: 1, last_page: 1 }, properties: [ID, ID2].map((listing_id) => ({ listing_id, latest_price: 325000, bedrooms: 3, agent_name: "Search Agent", added_date: "2026-10-01", reduced_date: "2026-09-20", first_offer_date: "2026-10-02", days_listed: 12, card_html: "MUST NOT LEAK", images: [{ cdn_url: "https://cdn.home.co.uk/full.jpg", thumbnail_cdn_url: "https://cdn.home.co.uk/one.jpg", is_primary: true }] })) };
     else if (url.pathname.startsWith("/api/property-details/")) body = { id: url.pathname.split("/").pop(), latest_price: 325000, building_number: "12", street_name: "Heritage Close", town_name: "Bath", postcode: "BA2 8TJ", description: "Full description", images: ["/api/image/one"], agent_name: "Example Agent", ...options.detail };
+    else if (url.pathname === "/api/reverse-geocode") body = options.reverseGeocode ?? { success: true, place_name: "Heritage Close, Bath, BA2 8TJ, United Kingdom", context: [{ id: "postcode.123", text: "BA2 8TJ" }] };
     else if (url.pathname === "/address/find/") body = options.address ?? { results: [{ uprn: "100012345678", postcode: "BA2 8TJ", building_number: "12", full_address: "12 Heritage Close, Bath, BA2 8TJ" }] };
     else if (url.pathname === "/property/100012345678/core/") body = { epc: { rating: "C" }, council_tax: { band: "D" }, flood: { risk: "low" } };
     else body = { source: url.pathname };
@@ -127,6 +129,31 @@ test("get_home returns clearly labelled postcode facts when no UPRN can be found
     assert.equal(requests.some((url) => url.pathname === "/address/find/" || url.pathname.includes("/core/")), false);
     assert.ok(requests.some((url) => url.pathname === "/schools/nearby"));
     assert.ok(requests.some((url) => url.pathname === "/price-growth/BA2/"));
+  } finally { await stop(); }
+});
+
+test("get_home reverse geocodes coordinates when property details omit the postcode", async () => {
+  const { mcp, requests, stop } = await start({ detail: { postcode: null, building_number: null, building_name: null, street_name: null, town_name: null, latitude: 51.357, longitude: -2.37 } });
+  try {
+    const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+    const enrichment = (answer.structuredContent as Record<string, unknown>)["enrichment"] as Record<string, unknown>;
+    assert.equal(enrichment["scope"], "area");
+    assert.equal(enrichment["postcode"], "BA2 8TJ");
+    const reverse = requests.find((url) => url.pathname === "/api/reverse-geocode");
+    assert.equal(reverse?.searchParams.get("lat"), "51.357");
+    assert.equal(reverse?.searchParams.get("lng"), "-2.37");
+    assert.ok(requests.some((url) => url.pathname === "/api/for-sale/BA2%208TJ/"));
+  } finally { await stop(); }
+});
+
+test("get_home reports unavailable only when it has no UPRN, postcode or coordinates", async () => {
+  const { mcp, requests, stop } = await start({ detail: { uprn: null, postcode: null, building_number: null, building_name: null, street_name: null, town_name: null, latitude: null, longitude: null } });
+  try {
+    const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+    const enrichment = (answer.structuredContent as Record<string, unknown>)["enrichment"] as Record<string, unknown>;
+    assert.equal(enrichment["available"], false);
+    assert.match(String(enrichment["reason"]), /No UPRN or valid full postcode/);
+    assert.equal(requests.some((url) => url.hostname === "data.test"), false);
   } finally { await stop(); }
 });
 

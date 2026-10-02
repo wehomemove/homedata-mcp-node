@@ -37,6 +37,11 @@ function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function coordinate(value: unknown): string | null {
+  const numeric = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(numeric) ? String(numeric) : null;
+}
+
 function absoluteHomeUrl(value: unknown): string | null {
   const path = text(value);
   if (!path) return null;
@@ -122,7 +127,8 @@ export class HomeClient {
     if (!Object.keys(detail).length) throw new HomeError("Home was not found");
     // The lightweight detail endpoint carries the description and property facts;
     // the postcode search carries the complete photo set, agent and listing dates.
-    const postcode = text(detail["postcode"]);
+    let postcode = text(detail["postcode"]);
+    if (!postcode) postcode = await this.postcodeAt(detail["latitude"], detail["longitude"]);
     const transaction = detail["transaction_type"] === "Rent" || detail["is_for_sale"] === false ? "to-rent" : "for-sale";
     let listing: JsonObject = {};
     if (postcode) {
@@ -130,7 +136,7 @@ export class HomeClient {
       listing = object((Array.isArray(search["properties"]) ? search["properties"] : []).find((p) => String(object(p)["listing_id"] ?? object(p)["id"]) === listingId));
     }
     const card = { ...detail, ...listing, listing_id: listingId };
-    const address = [detail["building_name"], detail["building_number"], detail["street_name"], detail["locality"], detail["town_name"], detail["postcode"]]
+    const address = [detail["building_name"], detail["building_number"], detail["street_name"], detail["locality"], detail["town_name"], postcode]
       .filter((v) => typeof v === "string" && v.trim()).join(", ");
     return {
       ...trimCard(card),
@@ -217,6 +223,21 @@ export class HomeClient {
   private async propertyEnrichment(uprn: string, postcode: string | null, source: "listing_uprn" | "exact_address_match"): Promise<JsonObject> {
     const core = await this.data(`/property/${encodeURIComponent(uprn)}/core/`, {});
     return { available: true, scope: "home", source, uprn, postcode, property: core };
+  }
+
+  private async postcodeAt(latitude: unknown, longitude: unknown): Promise<string | null> {
+    const lat = coordinate(latitude); const lng = coordinate(longitude);
+    if (!lat || !lng) return null;
+    let result: JsonObject;
+    try { result = object(await this.homeGet("/api/reverse-geocode", { lat, lng })); }
+    catch (error) { if (error instanceof HomeUpstreamError) return null; throw error; }
+    if (result["success"] !== true) return null;
+    const context = Array.isArray(result["context"]) ? result["context"].map(object) : [];
+    const postcodeContext = context.find((item) => text(item["id"])?.startsWith("postcode"));
+    const candidate = text(postcodeContext?.["text"])
+      ?? text(result["place_name"])?.match(/[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}/i)?.[0]
+      ?? null;
+    return candidate && POSTCODE.test(candidate) ? candidate : null;
   }
 
   private sameAddress(candidate: JsonObject, postcode: string, buildingNumber: string | null, buildingName: string | null): boolean {
