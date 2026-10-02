@@ -74,6 +74,13 @@ table below maps every 0.1.0 tool.
 | `get_comparables` | removed: not offered through the MCP |
 
 ### Added
+The separate Home app endpoint now prefers a `uprn` published in property
+details, then tries an exact address match. Home does not yet populate that
+field in live details, so currently exact matches receive home-scoped facts and
+unmatched listings receive explicitly labelled postcode-area facts. Published
+coordinates recover a missing postcode; only listings with none of those
+identifiers remain unavailable.
+
 The property tiers (`property_discovery`, `property_address`, `property_base`,
 `property_core`, `property_complete`, `property_custom`), property attributes,
 `property_lr_titles`, `address_postcode`, `risks`, `deprivation`, price trends,
