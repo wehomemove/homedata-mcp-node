@@ -333,6 +333,15 @@ test("Home serves the exact integrity-pinned Mapbox client bytes referenced by t
       assert.equal(response.headers.get("access-control-allow-origin"), "*");
       const bytes = Buffer.from(await response.arrayBuffer());
       assert.equal(`sha384-${createHash("sha384").update(bytes).digest("base64")}`, tag[1]);
+
+      const head = await fetch(base + path, { method: "HEAD" });
+      assert.equal(head.status, 200);
+      assert.equal((await head.arrayBuffer()).byteLength, 0);
+      assert.equal(head.headers.get("content-length"), String(bytes.length));
+
+      const refused = await fetch(base + path, { method: "POST" });
+      assert.equal(refused.status, 405);
+      assert.equal(refused.headers.get("allow"), "GET, HEAD");
     }
     assert.match(content.text ?? "", /mapboxToken="pk\.browser-token"/);
     assert.match(content.text ?? "", /new gl\.Map/);
