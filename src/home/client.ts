@@ -217,6 +217,30 @@ export class HomeClient {
     };
   }
 
+  /**
+   * Where a saved search should look. atlas's runner ignores free-text
+   * `location` and falls back to a national search, so resolve it here the
+   * same way search_homes does: a boundary slug when home.co.uk matched a
+   * boundary, and its centre and radius as the fallback the runner uses when
+   * that slug is unknown to it.
+   */
+  async savedSearchArea(location: string, rent: boolean): Promise<JsonObject> {
+    const place = text(location);
+    if (!place) throw new HomeError("search_criteria.location is required");
+    const raw = object(await this.homeGet(`/api/${rent ? "to-rent" : "for-sale"}/${encodeURIComponent(place)}/`, { per_page: "1" }));
+    const lat = Number(raw["centerLat"]); const lng = Number(raw["centerLng"]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new HomeError(`home.co.uk could not match ${place} to an area; try a town or postcode`);
+    const boundary = raw["hasBoundarySearch"] === true;
+    const radius = Number(raw["radiusMiles"]);
+    return {
+      location: place,
+      ...(boundary && slug(place) ? { location_slug: slug(place) } : {}),
+      lat, lng,
+      radius: !boundary && Number.isFinite(radius) && radius > 0 ? Math.min(radius, 50) : 3,
+      area_name: text(raw["displayLocation"]) ?? place,
+    };
+  }
+
   private matchesMarketSignals(property: JsonObject, args: SearchArgs): boolean {
     if (args.on_market_at_least_days !== undefined) {
       const days = Number(property["days_listed"]);

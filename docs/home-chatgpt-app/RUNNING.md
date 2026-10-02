@@ -1,6 +1,6 @@
 # Home ChatGPT app endpoint
 
-Home is a separate, public, read-only MCP surface. It reuses this repository's stateless Streamable HTTP pattern but does not change the `homedata-mcp` command or published npm package.
+Home is a separate, public MCP surface: search and detail tools are read-only and need no sign-in; saved searches and price alerts need a home.co.uk sign-in. It reuses this repository's stateless Streamable HTTP pattern but does not change the `homedata-mcp` command or published npm package.
 
 ## Run locally
 
@@ -10,7 +10,7 @@ npm run build
 HOMEDATA_API_KEY=... HOME_MCP_PATH=/mcp PORT=4177 npm run home:http
 ```
 
-The Homedata key is held only by the server and enriches listing details. ChatGPT and other callers use every Home tool without authentication. `HOME_BASE_URL` and `HOMEDATA_BASE_URL` exist for staging and tests; production should leave both unset.
+The Homedata key is held only by the server and enriches listing details. ChatGPT and other callers use the search, detail, area and calculator tools without authentication; the account tools are described under [Saved searches and price alerts](#saved-searches-and-price-alerts). `HOME_BASE_URL` and `HOMEDATA_BASE_URL` exist for staging and tests; production should leave both unset.
 
 `MCP_CALLS_PER_MINUTE` defaults to 30 per caller. `HOME_ENRICHMENTS_PER_MINUTE` separately defaults to four homes per caller because those lookups use the server-held Homedata key; a four-home comparison consumes all four units. A home with a UPRN uses one Homedata request, an exact address match uses two, and the postcode fallback uses five (or six after an unsuccessful address match). The default therefore caps the worst case at 24 Homedata requests per caller per minute. Coordinate-to-postcode recovery uses Home's reverse-geocode endpoint and does not use the Homedata key. Set `HOME_CLIENT_IP_HEADER=cf-connecting-ip` only behind the trusted proxy configuration that removes caller-supplied copies of that header. Without it, limits use the direct socket address. Invalid limit values prevent startup rather than silently removing the cap.
 
@@ -67,3 +67,15 @@ Search reads home.co.uk's public JSON. Search responses deliberately omit HTML c
 The inline component has no third-party JavaScript. Its resource policy permits listing images only from `home.co.uk` and `cdn.home.co.uk`, plus tiles from `tile.openstreetmap.org`; it permits no network connections. The component supports inline and fullscreen presentation, measures and redraws its map when the host resizes it, and collapses to a single column on narrow screens. The public OpenStreetMap tile service is suitable for this initial low-volume surface, but production traffic must move to a tile service with a usage agreement before it grows materially.
 
 One-home and comparison responses first use `uprn` from property details when Home publishes it, then try an exact address match. Today Home does not yet populate that field, so exact matches receive `scope: "home"`; listings that cannot be matched receive `scope: "area"` with explicitly labelled postcode facts. When details omit a postcode, published coordinates are reverse-geocoded first. Only a listing with no usable UPRN, postcode or coordinates is reported as unavailable.
+
+## Saved searches and price alerts
+
+Nine account tools run on the user's own home.co.uk account: `list_saved_searches`, `create_saved_search`, `pause_saved_search`, `delete_saved_search`, `get_saved_search_new_results` (scope `home.saved-searches`) and `list_price_alerts`, `create_price_alert`, `pause_price_alert`, `delete_price_alert` (scope `home.price-alerts`). atlas owns them (`app/Services/Mcp/ConsumerMcpServer.php`) and is the OAuth server.
+
+- Listing is anonymous. Each account tool declares `oauth2` with its one scope; every other tool stays `noauth`.
+- `/.well-known/oauth-protected-resource` (and the same with the MCP path appended) publishes `resource` = `HOME_MCP_RESOURCE` (default `https://mcp.home.co.uk`, the origin, no path), `authorization_servers` = [`HOME_OAUTH_ISSUER`] (default `https://home.co.uk`) and both scopes. It is never cached.
+- A call with a bearer token is forwarded, with that token, to `HOME_ACCOUNT_MCP_URL` (default `https://home.co.uk/api/mcp`). atlas checks the token, and only accepts tokens whose resource is its `OAUTH_MCP_RESOURCE`, so that must equal `HOME_MCP_RESOURCE`. Nothing here checks, caches or logs the token.
+- A call without a token, or one atlas answers 401, returns the tool error with `_meta["mcp/www_authenticate"]`, which ChatGPT turns into the sign-in button. A token missing the tool's scope gets the same with `error="insufficient_scope"`. atlas being down or erroring returns "Not available right now." with no challenge, so an outage never signs the user out.
+- `create_saved_search` takes a `location`. atlas's runner ignores free text and would search the whole country, so the endpoint resolves the location through home.co.uk's search JSON and sends `location_slug` (when home.co.uk matched a boundary) plus `lat`, `lng` and `radius`, which the runner uses when the slug is unknown to it.
+- `create_saved_search` offers only `for_sale`, `to_rent` and `new_builds`. atlas stores a `sold` search but its runner returns nothing for it (no email, no new results), so the endpoint neither advertises nor forwards it.
+- `HOME_ACCOUNTS=off` lists the search tools only and publishes no OAuth metadata.

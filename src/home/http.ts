@@ -8,6 +8,7 @@ import { isMain } from "../entry.js";
 import { checkAppsChallenge, checkCallsPerMinute, noStoreOnErrors } from "../http.js";
 import { VERSION } from "../index.js";
 import { MinuteLimiter } from "../limiter.js";
+import { AccountTools, DEFAULT_ACCOUNT_MCP_URL, DEFAULT_ISSUER, DEFAULT_RESOURCE, protectedResourceMetadata, type AccountSettings } from "./account.js";
 import { HomeClient } from "./client.js";
 import { buildHomeServer } from "./server.js";
 
@@ -20,6 +21,12 @@ export interface HomeHttpOptions {
   clientIpHeader?: string;
   /** The plugin portal's domain token, served at /.well-known/openai-apps-challenge; unset answers 404. */
   appsChallenge?: string;
+  /**
+   * Saved searches and price alerts on the user's home.co.uk account. When set,
+   * the account tools are listed (oauth2), protected-resource metadata is
+   * published, and a signed-in call is forwarded to atlas with its bearer.
+   */
+  account?: AccountSettings;
   now?: () => number;
 }
 const send = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => res.writeHead(status, { "Content-Type": "application/json", ...headers }).end(JSON.stringify(body));
@@ -65,6 +72,13 @@ function callerAddress(req: IncomingMessage, trustedHeader?: string): string {
   return req.socket.remoteAddress ?? "unknown";
 }
 
+/** The caller's bearer token, or null. Never logged: it only ever goes to atlas. */
+function bearerToken(req: IncomingMessage): string | null {
+  const header = req.headers["authorization"];
+  const match = typeof header === "string" ? /^Bearer\s+(\S+)$/i.exec(header) : null;
+  return match ? match[1]! : null;
+}
+
 function enrichmentUnits(call: ToolCall): number {
   if (call.name === "get_home") return 1;
   if (call.name !== "compare_homes") return 0;
@@ -72,13 +86,17 @@ function enrichmentUnits(call: ToolCall): number {
   return Array.isArray(ids) ? Math.max(1, ids.length) : 1;
 }
 
-/** The same stateless Streamable HTTP shape as the Homedata app, for a public no-auth surface. */
+/**
+ * The same stateless Streamable HTTP shape as the Homedata app. Search tools
+ * are no-auth; the account tools need a home.co.uk sign-in, which atlas checks.
+ */
 export function createHomeHttpHandler(options: HomeHttpOptions) {
   const path = options.mcpPath ?? "/mcp";
   if (!path.startsWith("/")) throw new Error("HOME_MCP_PATH must start with /");
   const now = options.now ?? Date.now;
   const callLimits = new CallerLimits(options.callsPerMinute ?? 30, now);
   const enrichmentLimits = new CallerLimits(options.enrichmentsPerMinute ?? 4, now);
+  const account = options.account ? new AccountTools(options.account, options.client) : undefined;
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     noStoreOnErrors(res);
     const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
@@ -87,6 +105,12 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
       if (!options.appsChallenge) return void send(res, 404, { error: "not_found" });
       // Exactly the token: OpenAI rejects JSON, a list or a trailing newline.
       return void res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" }).end(options.appsChallenge);
+    }
+    // RFC 9728, at the root and with the MCP path appended. Never cached, so a
+    // change to the OAuth settings takes effect at once.
+    if (options.account && req.method === "GET" &&
+        (requestPath === "/.well-known/oauth-protected-resource" || requestPath === `/.well-known/oauth-protected-resource${path}`)) {
+      return void send(res, 200, protectedResourceMetadata(options.account), { "Cache-Control": "no-store" });
     }
     if (requestPath !== path) return void send(res, 404, { error: "not_found" });
     if (req.method !== "POST") { res.setHeader("Allow", "POST"); return void send(res, 405, { error: "method_not_allowed" }); }
@@ -99,11 +123,33 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
         (enrichmentCount && !enrichmentLimits.take(caller, enrichmentCount))) {
       return void send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" });
     }
-    const server = buildHomeServer(options.client);
+    const server = buildHomeServer(options.client, account ? { tools: account, token: bearerToken(req) } : undefined);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });
     await server.connect(transport);
     await transport.handleRequest(req, res, body);
+  };
+}
+
+/** An https URL with no query, fragment or credentials; http only for this machine. */
+function checkUrl(name: string, raw: string, origin = false): string {
+  let url: URL;
+  try { url = new URL(raw); } catch { throw new Error(`${name} must be an absolute URL`); }
+  const local = url.protocol === "http:" && ["127.0.0.1", "localhost"].includes(url.hostname);
+  if ((url.protocol !== "https:" && !local) || url.search || url.hash || url.username || url.password) throw new Error(`${name} must be an https URL with no query, fragment or credentials`);
+  if (origin && url.pathname !== "/") throw new Error(`${name} must be an origin with no path, such as ${DEFAULT_RESOURCE}`);
+  return origin ? url.origin : raw.replace(/\/+$/, "");
+}
+
+/** Account settings from the environment; HOME_ACCOUNTS=off lists the search tools only. */
+export function accountFromEnv(env: NodeJS.ProcessEnv): AccountSettings | undefined {
+  const switchValue = (env["HOME_ACCOUNTS"] ?? "").trim();
+  if (switchValue === "off") return undefined;
+  if (switchValue !== "" && switchValue !== "on") throw new Error("HOME_ACCOUNTS must be on or off");
+  return {
+    resource: checkUrl("HOME_MCP_RESOURCE", (env["HOME_MCP_RESOURCE"] ?? "").trim() || DEFAULT_RESOURCE, true),
+    issuer: checkUrl("HOME_OAUTH_ISSUER", (env["HOME_OAUTH_ISSUER"] ?? "").trim() || DEFAULT_ISSUER),
+    accountMcpUrl: checkUrl("HOME_ACCOUNT_MCP_URL", (env["HOME_ACCOUNT_MCP_URL"] ?? "").trim() || DEFAULT_ACCOUNT_MCP_URL),
   };
 }
 
@@ -121,6 +167,7 @@ async function main(): Promise<void> {
     enrichmentsPerMinute: checkCallsPerMinute(process.env["HOME_ENRICHMENTS_PER_MINUTE"] || "4"),
     clientIpHeader: (process.env["HOME_CLIENT_IP_HEADER"] ?? "").trim() || undefined,
     appsChallenge: checkAppsChallenge(process.env["OPENAI_APPS_CHALLENGE"]),
+    account: accountFromEnv(process.env),
   });
   const port = Number(process.env["PORT"] || 4177); const host = process.env["HOST"] || "127.0.0.1";
   createServer((req, res) => void handler(req, res).catch((error) => { console.error("[home-mcp-http] request failed:", error); if (!res.headersSent) send(res, 500, { error: "internal_error" }); })).listen(port, host, () => console.error(`home-mcp-http ${VERSION} listening on http://${host}:${port}`));
