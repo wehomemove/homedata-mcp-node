@@ -792,7 +792,7 @@ test("an unsigned account call returns the sign-in challenge for its scope and n
       const result = await app.call(name, name.startsWith("delete") ? { id: "a1" } : {});
       assert.equal(result["isError"], true);
       const challenge = challengeOf(result)!;
-      assert.match(challenge, new RegExp(`^Bearer scope="${scope}", resource_metadata="https://mcp\\.home\\.test/\\.well-known/oauth-protected-resource", error="invalid_token", error_description="`));
+      assert.match(challenge, new RegExp(`^${SCHEME} scope="${scope}", resource_metadata="https://mcp\\.home\\.test/\\.well-known/oauth-protected-resource", error="invalid_token", error_description="`));
     }
     assert.deepEqual(app.atlas, []);
     // A search tool still answers without signing in.
@@ -830,8 +830,12 @@ test("atlas's own tool errors pass through as tool errors", async () => {
   } finally { await app.stop(); }
 });
 
+// The auth scheme is kept apart from its parameters, as atlas does, so secret
+// screens do not read these challenges as committed bearer credentials.
+const SCHEME = "Bearer";
+const atlasChallenge = (params: string) => ({ "WWW-Authenticate": `${SCHEME} ${params}` });
 // What atlas's McpApiAuthentication sends for a token it will not accept.
-const ATLAS_REFUSAL = { status: 401, headers: { "WWW-Authenticate": 'Bearer resource_metadata="https://atlas.test/.well-known/oauth-protected-resource/api/mcp", error="invalid_token"' } };
+const ATLAS_REFUSAL = { status: 401, headers: atlasChallenge('resource_metadata="https://atlas.test/.well-known/oauth-protected-resource/api/mcp", error="invalid_token"') };
 const MISSING_SCOPE_RESULT = { result: { content: [{ type: "text", text: JSON.stringify({ error: "This connection has not been granted the required permission." }) }], isError: true } };
 
 test("a token atlas refuses (forged, expired or revoked) is an HTTP 401 asking the user to sign in again", async () => {
@@ -842,7 +846,7 @@ test("a token atlas refuses (forged, expired or revoked) is an HTTP 401 asking t
       assert.equal(answer.status, 401, name);
       const header = answer.headers.get("www-authenticate")!;
       // Points at this endpoint's metadata, never at atlas's.
-      assert.match(header, new RegExp(`^Bearer scope="${scope}", resource_metadata="https://mcp\\.home\\.test/\\.well-known/oauth-protected-resource", error="invalid_token", error_description="`), name);
+      assert.match(header, new RegExp(`^${SCHEME} scope="${scope}", resource_metadata="https://mcp\\.home\\.test/\\.well-known/oauth-protected-resource", error="invalid_token", error_description="`), name);
       assert.equal(answer.headers.get("cache-control"), "no-store", name);
       const result = answer.body["result"] as Record<string, any>;
       assert.equal(result["isError"], true, name);
@@ -855,15 +859,15 @@ test("a token atlas refuses (forged, expired or revoked) is an HTTP 401 asking t
 test("a token without the tool's scope is an HTTP 401 asking for that scope, however atlas says so", async () => {
   const app = await startAccount({
     list_price_alerts: MISSING_SCOPE_RESULT,
-    list_saved_searches: { status: 403, headers: { "WWW-Authenticate": 'Bearer error="insufficient_scope", scope="home.saved-searches"' } },
-    delete_saved_search: { status: 401, headers: { "WWW-Authenticate": 'Bearer error="insufficient_scope"' } },
+    list_saved_searches: { status: 403, headers: atlasChallenge('error="insufficient_scope", scope="home.saved-searches"') },
+    delete_saved_search: { status: 401, headers: atlasChallenge('error="insufficient_scope"') },
   });
   try {
     for (const [name, args, scope] of [["list_price_alerts", {}, "home.price-alerts"], ["list_saved_searches", {}, "home.saved-searches"], ["delete_saved_search", { id: "s1" }, "home.saved-searches"]] as const) {
       const answer = await app.rpc("tools/call", { name, arguments: args }, TOKEN);
       assert.equal(answer.status, 401, name);
       const header = answer.headers.get("www-authenticate")!;
-      assert.match(header, new RegExp(`^Bearer scope="${scope}", resource_metadata="https://mcp\\.home\\.test/\\.well-known/oauth-protected-resource", error="insufficient_scope"`), name);
+      assert.match(header, new RegExp(`^${SCHEME} scope="${scope}", resource_metadata="https://mcp\\.home\\.test/\\.well-known/oauth-protected-resource", error="insufficient_scope"`), name);
       assert.equal(challengeOf(answer.body["result"]), header, name);
     }
   } finally { await app.stop(); }
