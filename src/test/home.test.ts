@@ -20,7 +20,7 @@ import { accountFromEnv, createHomeHttpHandler } from "../home/http.js";
 import { HOME_RULES } from "../home/plugin.js";
 import { buildHomeServer, HOME_TOOLS } from "../home/server.js";
 import { buildManifest, readSkills, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
-import { HOME_WIDGET_HTML, homeMapLayout, homeMapProject, homePinLabel } from "../home/widget.js";
+import { HOME_WIDGET_HTML, HOME_WIDGET_URI, homeMapLayout, homeMapProject, homePinLabel } from "../home/widget.js";
 
 const ID = "b9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
 const ID2 = "c9f9c51d-987e-41f6-88cb-ffe1d8f2e01b";
@@ -80,7 +80,7 @@ function fixtures(options: FixtureOptions = {}) {
   return { client: new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, logger: options.logger }), requests };
 }
 
-async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; clientIpHeader?: string; appsChallenge?: string; account?: AccountSettings } = {}) {
+async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; mapsPerMinute?: number; clientIpHeader?: string; appsChallenge?: string; account?: AccountSettings; mapboxToken?: string; mapOrigin?: string; fetchImpl?: typeof fetch } = {}) {
   const { client, requests } = fixtures(fixtureOptions);
   const handler = createHomeHttpHandler({ client, callsPerMinute: 20, ...httpOptions });
   const http: HttpServer = createServer((req, res) => void handler(req, res));
@@ -179,11 +179,11 @@ test("render tools reuse supplied homes without another search and keep text fal
   } finally { await stop(); }
 });
 
-test("Home publishes one MCP Apps resource with a narrow image and tile CSP", async () => {
+test("Home publishes a v3 MCP Apps resource without any map surface when the server token is absent", async () => {
   const { mcp, stop } = await start();
   try {
     const resources = await mcp.listResources();
-    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v2.html"]);
+    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v3.html"]);
     const resource = await mcp.readResource({ uri: resources.resources[0]!.uri });
     const content = resource.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
     assert.equal(content.mimeType, "text/html;profile=mcp-app");
@@ -193,8 +193,56 @@ test("Home publishes one MCP Apps resource with a narrow image and tile CSP", as
     assert.match(content.text ?? "", /@media\(max-width:700px\)/);
     const ui = content._meta?.["ui"] as { csp?: { connectDomains?: string[]; resourceDomains?: string[] } };
     assert.deepEqual(ui.csp?.connectDomains, []);
-    assert.deepEqual(ui.csp?.resourceDomains, ["https://home.co.uk", "https://cdn.home.co.uk", "https://tile.openstreetmap.org"]);
-    assert.doesNotMatch(JSON.stringify(content._meta), /google|mapbox|rightmove|zoopla/i);
+    assert.deepEqual(ui.csp?.resourceDomains, ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com"]);
+    assert.doesNotMatch(content.text ?? "", /openstreetmap|tile\.openstreetmap/i);
+    assert.match(content.text ?? "", /mapsEnabled=false/);
+  } finally { await stop(); }
+});
+
+test("Home proxies and caches Mapbox static images without exposing its server token", async () => {
+  const upstream: URL[] = [];
+  const signals: Array<AbortSignal | null | undefined> = [];
+  const mapFetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    upstream.push(new URL(String(input)));
+    signals.push(init?.signal);
+    return new Response(Uint8Array.from([137, 80, 78, 71]), { headers: { "Content-Type": "image/png" } });
+  }) as typeof fetch;
+  const { base, mcp, stop } = await start({}, { mapboxToken: "sk.server-secret", mapOrigin: "https://staging-mcp.home.co.uk", fetchImpl: mapFetch });
+  try {
+    const resource = await mcp.readResource({ uri: HOME_WIDGET_URI });
+    const content = resource.contents[0] as { text?: string; _meta?: Record<string, unknown> };
+    assert.match(content.text ?? "", /mapsEnabled=true/);
+    assert.doesNotMatch(content.text ?? "", /sk\.server-secret/);
+    const ui = content._meta?.["ui"] as { csp?: { resourceDomains?: string[] } };
+    assert.ok(ui.csp?.resourceDomains?.includes("https://staging-mcp.home.co.uk"));
+    assert.match(content.text ?? "", /mapOrigin="https:\/\/staging-mcp\.home\.co\.uk"/);
+    const path = "/maps/static?theme=light&points=51.38%2C-2.36%3B51.39%2C-2.35";
+    const first = await fetch(base + path); const second = await fetch(base + path);
+    assert.equal(first.status, 200); assert.equal(first.headers.get("content-type"), "image/png");
+    assert.equal(second.status, 200); assert.equal(upstream.length, 1);
+    assert.equal(upstream[0]!.hostname, "api.mapbox.com");
+    assert.equal(upstream[0]!.searchParams.get("access_token"), "sk.server-secret");
+    assert.ok(signals[0] instanceof AbortSignal);
+    assert.equal((await fetch(base + "/maps/static?points=bad")).status, 400);
+  } finally { await stop(); }
+});
+
+test("Home limits distinct uncached maps per caller but serves cache hits without spending the allowance", async () => {
+  let upstreamCalls = 0;
+  const mapFetch = (async () => {
+    upstreamCalls++;
+    return new Response(Uint8Array.from([137, 80, 78, 71]), { headers: { "Content-Type": "image/png" } });
+  }) as typeof fetch;
+  const { base, stop } = await start({}, { mapboxToken: "sk.rate-limit", mapsPerMinute: 2, fetchImpl: mapFetch });
+  try {
+    const first = "/maps/static?points=50.001%2C-1.001";
+    assert.equal((await fetch(base + first)).status, 200);
+    assert.equal((await fetch(base + first)).status, 200);
+    assert.equal((await fetch(base + "/maps/static?points=50.002%2C-1.002")).status, 200);
+    const refused = await fetch(base + "/maps/static?points=50.003%2C-1.003");
+    assert.equal(refused.status, 429);
+    assert.equal(refused.headers.get("retry-after"), "60");
+    assert.equal(upstreamCalls, 2);
   } finally { await stop(); }
 });
 
