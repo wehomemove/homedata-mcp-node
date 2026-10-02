@@ -121,6 +121,44 @@ test("search translates filters and strips the multi-megabyte response to card f
   } finally { await stop(); }
 });
 
+test("render tools reuse supplied homes without another search and keep text fallbacks", async () => {
+  const { mcp, requests, stop } = await start();
+  try {
+    const searched = await mcp.callTool({ name: "search_homes", arguments: { location: "Bath", listing_type: "sale" } });
+    const homes = (searched.structuredContent as { homes: unknown[] }).homes;
+    const before = requests.length;
+    const listingRender = await mcp.callTool({ name: "render_home_listings", arguments: { title: "Three-bed homes", homes: [homes[1]] } });
+    assert.equal(requests.length, before);
+    assert.deepEqual(listingRender.structuredContent, { view: "listings", title: "Three-bed homes", homes: [homes[1]] });
+    assert.match((listingRender.content as Array<{ text: string }>)[0]!.text, /Three-bed homes/);
+
+    const detail = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
+    const beforeDetailRender = requests.length;
+    const detailRender = await mcp.callTool({ name: "render_home_detail", arguments: { home: detail.structuredContent } });
+    assert.equal(requests.length, beforeDetailRender);
+    assert.equal((detailRender.structuredContent as { view: string }).view, "detail");
+  } finally { await stop(); }
+});
+
+test("Home publishes one MCP Apps resource with a narrow image and tile CSP", async () => {
+  const { mcp, stop } = await start();
+  try {
+    const resources = await mcp.listResources();
+    assert.deepEqual(resources.resources.map((resource) => resource.uri), ["ui://home/listings-and-detail-v1.html"]);
+    const resource = await mcp.readResource({ uri: resources.resources[0]!.uri });
+    const content = resource.contents[0] as { mimeType?: string; text?: string; _meta?: Record<string, unknown> };
+    assert.equal(content.mimeType, "text/html;profile=mcp-app");
+    assert.match(content.text ?? "", /ui\/notifications\/tool-result/);
+    assert.match(content.text ?? "", /ui\/initialize/);
+    assert.match(content.text ?? "", /ui\/notifications\/initialized/);
+    assert.match(content.text ?? "", /@media\(max-width:700px\)/);
+    const ui = content._meta?.["ui"] as { csp?: { connectDomains?: string[]; resourceDomains?: string[] } };
+    assert.deepEqual(ui.csp?.connectDomains, []);
+    assert.deepEqual(ui.csp?.resourceDomains, ["https://home.co.uk", "https://cdn.home.co.uk", "https://tile.openstreetmap.org"]);
+    assert.doesNotMatch(JSON.stringify(content._meta), /google|mapbox|rightmove|zoopla/i);
+  } finally { await stop(); }
+});
+
 test("search applies market signals across at most three pages and reports incomplete coverage", async () => {
   const requests: URL[] = [];
   const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {

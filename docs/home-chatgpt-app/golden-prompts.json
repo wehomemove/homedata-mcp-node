@@ -5,7 +5,7 @@
     {
       "id": "search-family-home", "kind": "indirect", "review": true,
       "prompt": "Find me three-bedroom houses for sale in Bath up to £500,000, newest first.",
-      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "sale", "min_beds": 3, "max_price": 500000, "sort": "newest"}}], "outcome": "Calls search_homes once with Bath, sale, at least three bedrooms, at most £500,000 and newest first, then shows matching homes with asking price, bedrooms, photo, date added, status and a home.co.uk link. Every home shown has three or more bedrooms and an asking price of £500,000 or less."}
+      "expect": {"calls": [{"tool": "search_homes", "args": {"location": "Bath", "listing_type": "sale", "min_beds": 3, "max_price": 500000, "sort": "newest"}}, {"tool": "render_home_listings", "args": {}}], "outcome": "Calls search_homes once with Bath, sale, at least three bedrooms, at most £500,000 and newest first, then passes the chosen results to render_home_listings for cards and a map without another search. Every home shown has three or more bedrooms and an asking price of £500,000 or less."}
     },
     {
       "id": "new-build-search", "kind": "indirect", "review": true,
@@ -45,7 +45,7 @@
     {
       "id": "open-result", "kind": "followup", "review": false,
       "prompt": "(after search-family-home) Tell me everything about the first one, including EPC, flood risk and broadband.",
-      "expect": {"calls": [{"tool": "get_home", "args": {}}], "outcome": "Reuses the first listing ID and returns its full listing plus available Homedata enrichment."}
+      "expect": {"calls": [{"tool": "get_home", "args": {}}, {"tool": "render_home_detail", "args": {}}], "outcome": "Reuses the first listing ID and passes its full listing plus available Homedata enrichment to the detail gallery."}
     },
     {
       "id": "compare-shortlist", "kind": "indirect", "review": false,
