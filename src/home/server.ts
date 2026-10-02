@@ -12,6 +12,7 @@ import { ACCOUNT_TOOLS, isAccountTool, type AccountTools } from "./account.js";
 import { HomeClient, HomeError, HomeUpstreamError, type SearchArgs, type SoldArgs } from "./client.js";
 import { HOME_WIDGET_HTML, HOME_WIDGET_URI, HOME_WIDGET_VERSION } from "./widget.js";
 import { mapboxAssetTags } from "./mapbox-assets.js";
+import { homeWidgetAssetValues } from "./widget-assets.js";
 import { PLACE_KINDS, TRAVEL_MODES, type MapboxRoutes } from "./routes.js";
 import { WISHES } from "./wishes.js";
 
@@ -219,6 +220,7 @@ function positive(args: Record<string, unknown>, name: string, allowZero = false
 
 export function buildHomeServer(client: HomeClient, account?: HomeAccount, options: { mapboxToken?: string; assetOrigin?: string; routes?: MapboxRoutes; widgetViewId?: string } = {}): Server {
   const routes = options.routes;
+  const assetOrigin = options.assetOrigin ?? "https://mcp.home.co.uk";
   const instructions = [HOME_INSTRUCTIONS, ...(routes ? [HOME_ROUTE_INSTRUCTIONS] : []), ...(account ? [HOME_ACCOUNT_INSTRUCTIONS] : [])].join(" ");
   const server = new Server({ name: "home", version: VERSION }, { capabilities: { tools: {}, resources: {} }, instructions });
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
@@ -228,20 +230,27 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
     const requestedVersion = request.params.uri.match(/^ui:\/\/home\/listings-and-detail-v([1-9]\d*)\.html$/)?.[1];
     if (!requestedVersion || Number(requestedVersion) > HOME_WIDGET_VERSION) throw new Error("Unknown Home UI resource");
     const mapboxDomains = options.mapboxToken ? ["https://api.mapbox.com", "https://events.mapbox.com"] : [];
-    const assetDomains = options.assetOrigin ? [options.assetOrigin] : [];
+    const assetDomains = [assetOrigin];
     const csp = {
       connectDomains: mapboxDomains,
       resourceDomains: ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", ...assetDomains, ...mapboxDomains],
     };
+    const { scriptPath, cssPath, scriptIntegrity, cssIntegrity } = homeWidgetAssetValues();
+    const attribute = (value: string) => value.replace(/[&"<>]/g, (character) => ({ "&": "&amp;", '"': "&quot;", "<": "&lt;", ">": "&gt;" })[character]!);
     return { contents: [{
       uri: request.params.uri,
       mimeType: "text/html;profile=mcp-app",
       text: HOME_WIDGET_HTML
-        .replace("__HOME_MAPBOX_ASSETS__", options.mapboxToken && options.assetOrigin ? mapboxAssetTags(options.assetOrigin) : "")
-        .replaceAll("__HOME_CHECK_IN_ORIGIN__", options.assetOrigin ?? "")
-        .replaceAll("__HOME_CHECK_IN_HOST__", options.assetOrigin ? new URL(options.assetOrigin).hostname : "")
+        .replace("__HOME_MAPBOX_ASSETS__", options.mapboxToken ? mapboxAssetTags(assetOrigin) : "")
+        .replaceAll("__HOME_ASSET_ORIGIN__", attribute(assetOrigin))
+        .replaceAll("__HOME_CHECK_IN_ORIGIN__", attribute(assetOrigin))
+        .replaceAll("__HOME_CHECK_IN_HOST__", new URL(assetOrigin).hostname)
         .replaceAll("__HOME_VIEW_ID__", options.widgetViewId ?? "")
-        .replace("__HOME_MAPBOX_TOKEN__", JSON.stringify(options.mapboxToken ?? "")),
+        .replace("__HOME_MAPBOX_TOKEN__", attribute(options.mapboxToken ?? ""))
+        .replace("__HOME_SCRIPT_PATH__", scriptPath)
+        .replace("__HOME_CSS_PATH__", cssPath)
+        .replace("__HOME_SCRIPT_INTEGRITY__", scriptIntegrity)
+        .replace("__HOME_CSS_INTEGRITY__", cssIntegrity),
       _meta: {
         ui: { prefersBorder: false, domain: "https://mcp.home.co.uk", csp },
         "openai/widgetDescription": "A responsive carousel, shortlist, honest listing evidence and map for chosen homes, or a photo gallery and facts for one home.",

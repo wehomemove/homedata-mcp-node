@@ -12,14 +12,15 @@
  * Writes listings, map, detail and shortlist shots, each -light and -dark, to
  * docs/home-chatgpt-app/screenshots/.
  */
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { chromium } from "playwright-core";
 
-import { HOME_WIDGET_HTML } from "../dist/home/widget.js";
+import { HOME_WIDGET_CSS, HOME_WIDGET_HTML, HOME_WIDGET_SCRIPT } from "../dist/home/widget.js";
+import { HOME_WIDGET_CSS_PATH, HOME_WIDGET_SCRIPT_PATH } from "../dist/home/widget-assets.js";
 
 const root = resolve(import.meta.dirname, "..");
 const out = (name) => resolve(root, "docs/home-chatgpt-app/screenshots", name);
@@ -62,9 +63,20 @@ console.log(`live data: ${search.total} homes, ${search.homes_matching_every_wis
 
 const mapboxRoot = `${pathToFileURL(resolve(root, "node_modules/mapbox-gl/dist")).href}/`;
 const assets = `<link rel="stylesheet" href="${mapboxRoot}mapbox-gl.css"><script id="home-mapbox" src="${mapboxRoot}mapbox-gl.js"></script>`;
-const html = HOME_WIDGET_HTML.replace("__HOME_MAPBOX_ASSETS__", assets).replace("__HOME_MAPBOX_TOKEN__", JSON.stringify(token));
-const temporary = join(tmpdir(), `home-widget-${process.pid}.html`);
-await writeFile(temporary, html);
+const temporaryDir = await mkdtemp(join(tmpdir(), "home-widget-"));
+const scriptUrl = pathToFileURL(join(temporaryDir, "widget.js")).href;
+const cssUrl = pathToFileURL(join(temporaryDir, "widget.css")).href;
+const html = HOME_WIDGET_HTML
+  .replace("__HOME_MAPBOX_ASSETS__", assets)
+  .replace("__HOME_ASSET_ORIGIN____HOME_CSS_PATH__", cssUrl)
+  .replace("__HOME_ASSET_ORIGIN____HOME_SCRIPT_PATH__", scriptUrl)
+  .replace(/ integrity="__HOME_(?:CSS|SCRIPT)_INTEGRITY__"/g, "")
+  .replaceAll("__HOME_CHECK_IN_ORIGIN__", "")
+  .replaceAll("__HOME_CHECK_IN_HOST__", "")
+  .replaceAll("__HOME_VIEW_ID__", "")
+  .replace("__HOME_MAPBOX_TOKEN__", token);
+const temporary = join(temporaryDir, "index.html");
+await Promise.all([writeFile(temporary, html), writeFile(join(temporaryDir, "widget.js"), HOME_WIDGET_SCRIPT), writeFile(join(temporaryDir, "widget.css"), HOME_WIDGET_CSS)]);
 
 const browser = await chromium.launch({
   executablePath: chromePath,
@@ -121,5 +133,5 @@ try {
   }
 } finally {
   await browser.close();
-  await rm(temporary, { force: true });
+  await rm(temporaryDir, { force: true, recursive: true });
 }
