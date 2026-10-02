@@ -118,7 +118,7 @@ export function buildHomeServer(client: HomeClient): Server {
       }
     } catch (error) {
       if (error instanceof HomeError) return result({ error: "invalid_request", detail: error.message }, true);
-      if (error instanceof HomeUpstreamError) return result({ error: "upstream_unavailable", detail: error.message }, true);
+      if (error instanceof HomeUpstreamError) return result({ available: false, reason: "Not available right now." }, true);
       throw error;
     }
   });
