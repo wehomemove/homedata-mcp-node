@@ -664,6 +664,24 @@ test("Home keeps every earlier listings-and-detail template address serving the 
   } finally { await stop(); }
 });
 
+test("nothing in the widget page can hold back ChatGPT's ready signal", async () => {
+  // ChatGPT's sandbox shows the panel only once the widget document reaches
+  // DOMContentLoaded (desktop log 2026-10-05: frame committed, never ready).
+  // A script without async or defer stops the parser until it has downloaded,
+  // and a classic script also waits for every stylesheet before it, so each
+  // script must be async. The old Mapbox address stays served for open pages.
+  for (const mapboxToken of [undefined, "pk.browser-token"]) {
+    const { base, mcp, stop } = await start({}, mapboxToken ? { mapboxToken } : {});
+    try {
+      const html = ((await mcp.readResource({ uri: HOME_WIDGET_URI })).contents[0] as { text?: string }).text ?? "";
+      const scripts = html.match(/<script\b[^>]*>/g) ?? [];
+      assert.equal(scripts.length, mapboxToken ? 2 : 1, `scripts with token ${mapboxToken}`);
+      for (const tag of scripts) assert.match(tag, /\sasync[\s>]/, tag);
+      if (mapboxToken) assert.equal((await fetch(`${base}/assets/mapbox-gl/v3.15.0/mapbox-gl.js`, { method: "HEAD" })).status, 200);
+    } finally { await stop(); }
+  }
+});
+
 test("Home serves the exact integrity-pinned Mapbox client bytes referenced by the widget", async () => {
   const { base, mcp, stop } = await start({}, { mapboxToken: "pk.browser-token" });
   try {
