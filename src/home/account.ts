@@ -47,12 +47,14 @@ const obj = (properties: Schema, required: string[] = []): Schema => ({
 const id = (what: string): Schema => ({ type: "string", description: `The ${what} id returned by the matching list tool.` });
 const paused: Schema = { type: "boolean", description: "True to pause, false to resume." };
 
-// Reads change nothing; creating or pausing changes only the user's own account, and
-// deleting cannot be undone. None of them reach anyone but the signed-in user.
+// Reads change nothing and stay inside the user's own account. Creating, pausing and
+// deleting change what home.co.uk emails the user, so they act through a system
+// outside ChatGPT and are open-world; OpenAI's review flags them otherwise. Deleting
+// cannot be undone.
 const READ: Annotations = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
-const CREATE: Annotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
-const PAUSE: Annotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
-const DELETE: Annotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
+const CREATE: Annotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true };
+const PAUSE: Annotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true };
+const DELETE: Annotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true };
 
 const PROPERTY_TYPES = ["detached", "semi_detached", "terraced", "flat"];
 

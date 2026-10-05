@@ -122,6 +122,8 @@ Tests replay answers recorded live in Bath (`src/test/fixtures/home-routes.json`
 
 Nine account tools run on the user's own home.co.uk account: `list_saved_searches`, `create_saved_search`, `pause_saved_search`, `delete_saved_search`, `get_saved_search_new_results` (scope `home.saved-searches`) and `list_price_alerts`, `create_price_alert`, `pause_price_alert`, `delete_price_alert` (scope `home.price-alerts`). atlas owns them (`app/Services/Mcp/ConsumerMcpServer.php`) and is the OAuth server.
 
+The create, pause and delete tools are marked `openWorldHint: true`; the three reads are `false`. OpenAI's text says a private account "isn't open-world solely because it is externally hosted", but its review scanner (2026-10-05) flagged `create_saved_search` and `pause_price_alert` as interacting with "an independently controlled external system", because they change what home.co.uk emails the user. Every write is marked the same way so the pair it has not flagged yet is not the next finding.
+
 - Listing is anonymous. Each account tool declares `oauth2` with its one scope; every other tool stays `noauth`.
 - `/.well-known/oauth-protected-resource` (and the same with the MCP path appended) publishes `resource` = `HOME_MCP_RESOURCE` (default `https://mcp.home.co.uk`, the origin, no path), `authorization_servers` = [`HOME_OAUTH_ISSUER`] (default `https://home.co.uk`) and both scopes. It is never cached.
 - A call with a bearer token is forwarded, with that token, to `HOME_ACCOUNT_MCP_URL` (default `https://home.co.uk/api/mcp`). atlas checks the token, and only accepts tokens whose resource is its `OAUTH_MCP_RESOURCE`, so that must equal `HOME_MCP_RESOURCE`. Nothing here checks, caches or logs the token.
