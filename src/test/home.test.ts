@@ -328,7 +328,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     const mapboxListeners = new Map<string, () => void>();
     const mapboxScript = { addEventListener: (type: string, listener: () => void) => mapboxListeners.set(type, listener) };
     const config = { dataset: { checkInOrigin: "https://mcp.home.co.uk", viewId: "0123456789abcdef01234567", mapboxToken } };
-    const document = { getElementById: (id: string) => id === "root" ? root : id === "home-mapbox" ? mapboxScript : id === "home-widget-config" ? config : null, documentElement: { classList, scrollHeight: 900 }, body: { getBoundingClientRect: () => ({ height: contentHeight }), appendChild: (el: FakeButton) => appended.push(el) }, createElement: button, activeElement: null, addEventListener: (type: string, listener: (event: any) => void) => docListeners.set(type, listener) };
+    const document = { getElementById: (id: string) => id === "root" ? root : id === "home-mapbox" ? mapboxScript : id === "home-widget-config" ? config : null, documentElement: { classList, scrollHeight: 900 }, body: { children: [] as unknown[], getBoundingClientRect: () => ({ height: contentHeight }), appendChild: (el: FakeButton) => appended.push(el) }, createElement: button, activeElement: null, addEventListener: (type: string, listener: (event: any) => void) => docListeners.set(type, listener) };
     const flights: Array<{ how: string; pitch?: number; bearing?: number; zoom?: number; duration?: number }> = [];
     const loadListeners: Array<() => void> = [];
     const layers: Array<{ id: string; type: string; paint: Record<string, unknown> }> = [];
