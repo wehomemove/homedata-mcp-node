@@ -1573,12 +1573,12 @@ test("with account settings the nine account tools are listed as oauth2 with the
     assert.deepEqual(new Set(Object.values(scopes)), new Set(["home.saved-searches", "home.price-alerts"]));
     assert.ok(Object.entries(scopes).every(([name, scope]) => scope === (name.includes("saved_search") ? "home.saved-searches" : "home.price-alerts")));
 
-    // Write annotations: reads change nothing, deletes are destructive, none reach outside the user's account.
+    // Write annotations: reads change nothing and stay closed-world; writes change what home.co.uk emails, so are open-world; deletes are destructive.
     const hints = Object.fromEntries(tools.filter((t) => t["name"] in scopes).map((t) => [t["name"], t["annotations"]]));
     for (const name of ["list_saved_searches", "get_saved_search_new_results", "list_price_alerts"]) assert.deepEqual(hints[name], { readOnlyHint: true, destructiveHint: false, openWorldHint: false }, name);
-    for (const name of ["create_saved_search", "create_price_alert"]) assert.deepEqual(hints[name], { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, name);
-    for (const name of ["pause_saved_search", "pause_price_alert"]) assert.deepEqual(hints[name], { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, name);
-    for (const name of ["delete_saved_search", "delete_price_alert"]) assert.deepEqual(hints[name], { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false }, name);
+    for (const name of ["create_saved_search", "create_price_alert"]) assert.deepEqual(hints[name], { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }, name);
+    for (const name of ["pause_saved_search", "pause_price_alert"]) assert.deepEqual(hints[name], { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true }, name);
+    for (const name of ["delete_saved_search", "delete_price_alert"]) assert.deepEqual(hints[name], { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true }, name);
 
     assert.deepEqual(checkGoldenSet(golden as GoldenSet, tools as never), []);
     assert.deepEqual(app.atlas, [], "listing never calls atlas");
