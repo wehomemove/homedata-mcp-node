@@ -64,6 +64,7 @@ export const HOME_TOOLS: readonly Tool[] = [
     name: "get_home", title: "Get one home",
     description: "Get one home in full: every available photo, complete description, agent, listing history and key facts, enriched through Homedata with EPC, council tax, flood and other risks, broadband, schools and crime. Use this after search_homes when someone asks about one result.",
     inputSchema: obj({ listing_id: string("The UUID returned by search_homes.") }, ["listing_id"]),
+    _meta: { "openai/widgetAccessible": true, ui: { visibility: ["model", "app"] } },
   },
   {
     name: "compare_homes", title: "Compare homes",
