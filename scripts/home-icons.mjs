@@ -18,6 +18,7 @@ export const HOME_ICONS = {
   heart: 'regular/heart',
   'heart-saved': 'fill/heart-fill',
   view: 'regular/arrow-up-right',
+  back: 'regular/arrow-left',
   bed: 'regular/bed',
   bath: 'regular/bathtub',
   type: 'regular/house',

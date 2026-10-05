@@ -121,6 +121,11 @@ test("without account settings Home lists its no-auth read-only data and render 
       const uri = (tool._meta?.["ui"] as { resourceUri?: string } | undefined)?.resourceUri;
       assert.equal(Boolean(uri), renderNames.has(tool.name), `${tool.name} UI resource linkage`);
     }
+    for (const name of ["get_home", "compare_homes"]) {
+      const tool = tools.find((t) => t.name === name)!;
+      assert.equal(tool._meta?.["openai/widgetAccessible"], true, `${name} is callable from the widget`);
+      assert.deepEqual(tool._meta?.["ui"], { visibility: ["model", "app"] }, name);
+    }
     const compare = tools.find((tool) => tool.name === "compare_homes")!;
     assert.equal(compare._meta?.["openai/widgetAccessible"], true);
     assert.deepEqual(compare._meta?.["ui"], { visibility: ["model", "app"] });
@@ -266,6 +271,11 @@ test("listing descriptions become clean plain-text paragraphs", () => {
     cleanListingDescription('<p>A bright &amp; airy home.</p><p>Two bedrooms<br>Near the park&nbsp;&#163;.</p><script>ignore()</script>'),
     "A bright & airy home.\n\nTwo bedrooms\n\nNear the park £.",
   );
+  // Lines an agent hard-wrapped mid-sentence are rejoined; real paragraphs stay apart.
+  assert.equal(
+    cleanListingDescription("1 Bethel Court comprises the eastern central core<br><br>of the original Bethel Hospital, a Grade II* Listed<br><br>building, built in 1713.<br><br>Ground Floor: Hall, Access to<br><br>Cellar and Courtyard.<br><br>Off Street Parking for two cars."),
+    "1 Bethel Court comprises the eastern central core of the original Bethel Hospital, a Grade II* Listed building, built in 1713.\n\nGround Floor: Hall, Access to Cellar and Courtyard.\n\nOff Street Parking for two cars.",
+  );
   assert.equal(cleanListingDescription(" <div> </div> "), null);
 });
 
@@ -296,7 +306,9 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
         return [control];
       },
     };
-    const classList = { toggle: (name: string, on: boolean) => on ? classes.add(name) : classes.delete(name) };
+    const classList = { toggle: (name: string, on: boolean) => on ? classes.add(name) : classes.delete(name), add: (name: string) => classes.add(name), remove: (name: string) => classes.delete(name) };
+    const appended: FakeButton[] = [];
+    const docListeners = new Map<string, (event: any) => void>();
     const messages: any[] = [];
     const checkIns: string[] = [];
     const parent = { postMessage: (message: any) => messages.push(message) };
@@ -304,11 +316,11 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
       parent, openai, mapboxgl: undefined as unknown,
       addEventListener: (type: string, listener: (event: any) => void) => listeners.set(type, [...(listeners.get(type) ?? []), listener]),
     };
-    type FakeButton = { dataset: Record<string, string>; className: string; type: string; textContent: string; innerHTML: string; onclick?: () => void; classList: { contains(name: string): boolean; toggle(): void; add(name: string): void; remove(): void }; matches(selector: string): boolean; setAttribute(): void; addEventListener(type: string, listener: (event: any) => void): void; fire(type: string): void };
+    type FakeButton = { dataset: Record<string, string>; className: string; type: string; textContent: string; innerHTML: string; onclick?: () => void; classList: { contains(name: string): boolean; toggle(): void; add(name: string): void; remove(name: string): void }; scrollTop: number; querySelector(selector: string): null; querySelectorAll(selector: string): never[]; matches(selector: string): boolean; setAttribute(): void; addEventListener(type: string, listener: (event: any) => void): void; fire(type: string): void };
     const created: FakeButton[] = [];
     const button = (): FakeButton => { const on = new Map<string, (event: any) => void>(); const pin: FakeButton = {
       dataset: {}, className: "", type: "", textContent: "", innerHTML: "",
-      classList: { contains: (name: string) => pin.className.split(" ").includes(name), toggle: () => undefined, add: (name: string) => { pin.className += " " + name; }, remove: () => undefined },
+      classList: { contains: (name: string) => pin.className.split(" ").includes(name), toggle: () => undefined, add: (name: string) => { pin.className += " " + name; }, remove: (name: string) => { pin.className = pin.className.split(" ").filter((c) => c !== name).join(" "); } }, scrollTop: 0, querySelector: () => null, querySelectorAll: () => [],
       matches: (selector: string) => selector === "[data-index]", setAttribute: () => undefined,
       addEventListener: (type: string, listener: (event: any) => void) => on.set(type, listener),
       fire: (type: string) => on.get(type)?.({ type, target: {} }),
@@ -316,7 +328,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
     const mapboxListeners = new Map<string, () => void>();
     const mapboxScript = { addEventListener: (type: string, listener: () => void) => mapboxListeners.set(type, listener) };
     const config = { dataset: { checkInOrigin: "https://mcp.home.co.uk", viewId: "0123456789abcdef01234567", mapboxToken } };
-    const document = { getElementById: (id: string) => id === "root" ? root : id === "home-mapbox" ? mapboxScript : id === "home-widget-config" ? config : null, documentElement: { classList, scrollHeight: 900 }, body: { getBoundingClientRect: () => ({ height: contentHeight }) }, createElement: button };
+    const document = { getElementById: (id: string) => id === "root" ? root : id === "home-mapbox" ? mapboxScript : id === "home-widget-config" ? config : null, documentElement: { classList, scrollHeight: 900 }, body: { getBoundingClientRect: () => ({ height: contentHeight }), appendChild: (el: FakeButton) => appended.push(el) }, createElement: button, activeElement: null, addEventListener: (type: string, listener: (event: any) => void) => docListeners.set(type, listener) };
     const flights: Array<{ how: string; pitch?: number; bearing?: number; zoom?: number; duration?: number }> = [];
     const loadListeners: Array<() => void> = [];
     const layers: Array<{ id: string; type: string; paint: Record<string, unknown> }> = [];
@@ -347,7 +359,8 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
       assert.ok(control?.onclick, `${selector} is clickable`);
       control.onclick({ stopPropagation() {} });
     };
-    return { get pins() { return created.filter((pin) => !pin.className.startsWith("map-reset")); }, created, flights, loadListeners, layers, mapEvents, mapClasses, classes, styles, messages, checkIns, parent, dispatch, render, root, window, mapboxgl, mapboxListeners, mapRemoved: () => mapRemoved, setContentHeight: (height: number) => { contentHeight = height; }, runTimers: () => { for (const fn of [...timers.values()]) fn(); timers.clear(); }, click };
+    const pressKey = (key: string) => docListeners.get("keydown")?.({ key });
+    return { appended, pressKey, get pins() { return created.filter((pin) => !pin.className.startsWith("map-reset")); }, created, flights, loadListeners, layers, mapEvents, mapClasses, classes, styles, messages, checkIns, parent, dispatch, render, root, window, mapboxgl, mapboxListeners, mapRemoved: () => mapRemoved, setContentHeight: (height: number) => { contentHeight = height; }, runTimers: () => { for (const fn of [...timers.values()]) fn(); timers.clear(); }, click };
   }
 
   const home = { id: "strict-home", price: 410000 };
@@ -530,6 +543,39 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   assert.deepEqual(plannerCalls, [["plan_viewings", { listing_ids: ["home-a", "home-b"] }]]);
   assert.match(planner.root.innerHTML, /Your viewing day/);
   assert.match(planner.root.innerHTML, /6 min driving/);
+
+  // A card or pin opens the home in a sheet inside the widget: the card's facts at once,
+  // then get_home's full detail; Esc slides it away. A second visit reuses the answer.
+  const getHomeCalls: Array<[string, Record<string, unknown>]> = [];
+  const sheetView = harness(false, { callTool: async (name: string, args: Record<string, unknown>) => {
+    // get_home answers with the home itself as structuredContent, and may know less than the card (address null).
+    getHomeCalls.push([name, args]); return { structuredContent: { id: "home-a", address: null, price: 400000, agent: { name: null, branch: null, logo: null }, photos: ["https://home.co.uk/thumb/d/5ef9f6a796ca979b"], description: "A full description from get_home." } };
+  } });
+  sheetView.dispatch("message", { source: sheetView.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [{ id: "home-a", address: "1 Card Street", price: 400000, agent: "Card Agents", image: "https://cdn.home.co.uk/listings/home-a/real.jpg", coordinates: { latitude: 51.38, longitude: -2.36 } }] } } } });
+  sheetView.pins[0]!.fire("mouseenter");
+  assert.equal(sheetView.appended.length, 0, "hover does not open the sheet");
+  sheetView.pins[0]!.fire("click");
+  sheetView.runTimers();
+  const panel = sheetView.appended[0]!;
+  assert.match(panel.className, /^sheet\b.*\bopen\b/);
+  assert.match(panel.innerHTML, /1 Card Street/);
+  assert.match(panel.innerHTML, /sheet-loading/);
+  assert.deepEqual(getHomeCalls, [["get_home", { listing_id: "home-a" }]]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.match(panel.innerHTML, /A full description from get_home\./);
+  assert.match(panel.innerHTML, /1 Card Street/, "an empty field in get_home never replaces what the card knew");
+  assert.doesNotMatch(panel.innerHTML, /taking a moment/);
+  assert.match(panel.innerHTML, /Card Agents/, "an agent with no name never replaces the card's agent");
+  assert.match(panel.innerHTML, /real\.jpg/);
+  assert.doesNotMatch(panel.innerHTML, /thumb\/d\//, "the default illustration never replaces a real photo");
+  assert.match(panel.innerHTML, /class="detail settled"/, "the full detail swaps in without replaying the entrance");
+  assert.doesNotMatch(panel.innerHTML, /sheet-loading/);
+  sheetView.pressKey("Escape");
+  assert.doesNotMatch(panel.className, /\bopen\b/);
+  sheetView.pins[0]!.fire("click");
+  sheetView.runTimers();
+  assert.match(panel.className, /\bopen\b/);
+  assert.equal(getHomeCalls.length, 1, "a home already fetched is not fetched again");
 
   const noRouteTool = harness(false, { widgetState: { shortlist: ["home-a", "home-b"] } }, "");
   noRouteTool.dispatch("message", { source: noRouteTool.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [{ id: "home-a" }, { id: "home-b" }] } } } });

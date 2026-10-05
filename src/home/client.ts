@@ -204,6 +204,15 @@ export function cleanListingDescription(value: unknown): string | null {
     .split("\n")
     .map((line) => line.replace(/[\t\f\v ]+/g, " ").trim())
     .filter(Boolean)
+    // Some agents hard-wrap mid-sentence with <br>: a line that does not end a sentence
+    // continues into the next when that starts lower case or the line ends on a joining word.
+    .reduce((paragraphs: string[], line) => {
+      const previous = paragraphs[paragraphs.length - 1];
+      const continues = previous !== undefined && !/[.!?:;)]$/.test(previous) &&
+        (/^[a-z]/.test(line) || /\b(?:a|an|and|at|by|for|from|in|of|on|or|the|to|with)$/i.test(previous));
+      if (continues) paragraphs[paragraphs.length - 1] = `${previous} ${line}`; else paragraphs.push(line);
+      return paragraphs;
+    }, [])
     .join("\n\n")
     .trim();
   return decoded || null;
