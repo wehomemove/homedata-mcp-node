@@ -304,22 +304,28 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
       parent, openai, mapboxgl: undefined as unknown,
       addEventListener: (type: string, listener: (event: any) => void) => listeners.set(type, [...(listeners.get(type) ?? []), listener]),
     };
-    const button = () => { const pin = {
-      dataset: {} as Record<string, string>, className: "", type: "", textContent: "", innerHTML: "",
-      classList: { contains: () => false, toggle: () => undefined },
+    type FakeButton = { dataset: Record<string, string>; className: string; type: string; textContent: string; innerHTML: string; onclick?: () => void; classList: { contains(name: string): boolean; toggle(): void; add(name: string): void; remove(): void }; matches(selector: string): boolean; setAttribute(): void; addEventListener(type: string, listener: (event: any) => void): void; fire(type: string): void };
+    const created: FakeButton[] = [];
+    const button = (): FakeButton => { const on = new Map<string, (event: any) => void>(); const pin: FakeButton = {
+      dataset: {}, className: "", type: "", textContent: "", innerHTML: "",
+      classList: { contains: (name: string) => pin.className.split(" ").includes(name), toggle: () => undefined, add: (name: string) => { pin.className += " " + name; }, remove: () => undefined },
       matches: (selector: string) => selector === "[data-index]", setAttribute: () => undefined,
-      addEventListener: () => undefined,
-    }; pins.push(pin); return pin; };
+      addEventListener: (type: string, listener: (event: any) => void) => on.set(type, listener),
+      fire: (type: string) => on.get(type)?.({ type, target: {} }),
+    }; created.push(pin); return pin; };
     const mapboxListeners = new Map<string, () => void>();
     const mapboxScript = { addEventListener: (type: string, listener: () => void) => mapboxListeners.set(type, listener) };
     const config = { dataset: { checkInOrigin: "https://mcp.home.co.uk", viewId: "0123456789abcdef01234567", mapboxToken } };
     const document = { getElementById: (id: string) => id === "root" ? root : id === "home-mapbox" ? mapboxScript : id === "home-widget-config" ? config : null, documentElement: { classList, scrollHeight: 900 }, body: { getBoundingClientRect: () => ({ height: contentHeight }) }, createElement: button };
-    const pins: Array<{ className: string; innerHTML: string }> = [];
+    const flights: Array<{ how: string; pitch?: number; bearing?: number; zoom?: number; duration?: number }> = [];
+    const loadListeners: Array<() => void> = [];
     const layers: Array<{ id: string; type: string; paint: Record<string, unknown> }> = [];
     const mapEvents = new Map<string, () => void>();
     class FakeMap {
       constructor(options: { style: string }) { styles.push(options.style); }
-      addControl() {} jumpTo() {} fitBounds() {} remove() {}
+      addControl() {} jumpTo() {} fitBounds() {} remove() {} easeTo() {}
+      flyTo(options: { pitch?: number; bearing?: number; zoom?: number; duration?: number }) { flights.push({ how: "fly", pitch: options.pitch, bearing: options.bearing, zoom: options.zoom, duration: options.duration }); }
+      once(type: string, listener: () => void) { if (type === "load") loadListeners.push(listener); }
       setStyle(style: string) { styles.push(style); }
       on(type: string, listener: () => void) { mapEvents.set(type, listener); }
       getZoom() { return 12; }
@@ -341,7 +347,7 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
       assert.ok(control?.onclick, `${selector} is clickable`);
       control.onclick({ stopPropagation() {} });
     };
-    return { pins, layers, mapEvents, mapClasses, classes, styles, messages, checkIns, parent, dispatch, render, root, window, mapboxgl, mapboxListeners, mapRemoved: () => mapRemoved, setContentHeight: (height: number) => { contentHeight = height; }, runTimers: () => { for (const fn of [...timers.values()]) fn(); timers.clear(); }, click };
+    return { get pins() { return created.filter((pin) => !pin.className.startsWith("map-reset")); }, created, flights, loadListeners, layers, mapEvents, mapClasses, classes, styles, messages, checkIns, parent, dispatch, render, root, window, mapboxgl, mapboxListeners, mapRemoved: () => mapRemoved, setContentHeight: (height: number) => { contentHeight = height; }, runTimers: () => { for (const fn of [...timers.values()]) fn(); timers.clear(); }, click };
   }
 
   const home = { id: "strict-home", price: 410000 };
@@ -399,7 +405,21 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   assert.match(chatgpt.pins[0]!.innerHTML, /<span class="bubble">£325k<\/span>/);
   chatgpt.mapEvents.get("style.load")?.();
   assert.deepEqual(chatgpt.layers.map((layer) => layer.id), ["home-buildings"]);
-  assert.deepEqual(chatgpt.layers[0]!.paint["fill-extrusion-color"], "#d4d0c8");
+  assert.deepEqual(chatgpt.layers[0]!.paint["fill-extrusion-color"], "#dfe5ec");
+  assert.equal(chatgpt.layers[0]!.paint["fill-extrusion-opacity"], .85);
+
+  // Atlas's camera: once the map has loaded it flies in, tilted, to the selected home;
+  // hovering a pin only highlights it, clicking flies and tilts to it.
+  assert.equal(chatgpt.flights.length, 0);
+  chatgpt.loadListeners.forEach((listener) => listener());
+  chatgpt.runTimers();
+  assert.deepEqual(chatgpt.flights, [{ how: "fly", pitch: 45, bearing: -10, zoom: 16.2, duration: 3000 }]);
+  const reset = chatgpt.created.find((el) => el.className.startsWith("map-reset"))!;
+  assert.match(reset.className, /shown/, "after a flight the map offers the way back to all homes");
+  chatgpt.pins[0]!.fire("mouseenter");
+  assert.equal(chatgpt.flights.length, 1, "hover does not move the camera");
+  chatgpt.pins[0]!.fire("click");
+  assert.deepEqual(chatgpt.flights[1], { how: "fly", pitch: 56, bearing: -20, zoom: 16.6, duration: 1700 });
 
   const statuses = harness();
   statuses.dispatch("message", { source: statuses.parent, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes: [
@@ -585,6 +605,12 @@ test("Home publishes a v13 MCP Apps resource with only external script and style
     assert.match(HOME_WIDGET_SCRIPT, /ui\/initialize/);
     assert.match(HOME_WIDGET_SCRIPT, /ui\/notifications\/initialized/);
     assert.match(HOME_WIDGET_CSS, /@media\(max-width:700px\)/);
+    // ChatGPT's sandbox injects html,body,#root{margin:0;padding:0}; the shell's padding must outrank it,
+    // the page must paint its own white, and cards keep their width on narrow screens.
+    assert.match(HOME_WIDGET_CSS, /#root\.shell,\.shell\{[^}]*padding:clamp\(20px/);
+    assert.match(HOME_WIDGET_CSS, /@media\(max-width:700px\)\{#root\.shell,\.shell\{padding:18px 16px\}/);
+    assert.match(HOME_WIDGET_CSS, /html,body\{background:var\(--paper\)\}/);
+    assert.doesNotMatch(HOME_WIDGET_CSS, /\.card\{flex-basis:/);
     const ui = content._meta?.["ui"] as { csp?: { connectDomains?: string[]; resourceDomains?: string[] } };
     assert.deepEqual(ui.csp?.connectDomains, []);
     assert.deepEqual(ui.csp?.resourceDomains, ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://mcp.home.co.uk"]);
