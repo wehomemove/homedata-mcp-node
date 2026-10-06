@@ -74,10 +74,10 @@ test("Enter and Space on the card's own controls keep their own action and never
     const event = w.key(save, name);
     assert.equal(event.defaultPrevented, false, `${JSON.stringify(name)} on Save keeps the button's own activation`);
   }
-  const view = w.card(0).querySelector("a") as HTMLElement;
-  assert.ok(view, "the card has its View link");
+  const view = w.card(0).querySelector("[data-open]") as HTMLButtonElement;
+  assert.ok(view, "the card has its View button");
   view.focus();
-  assert.equal(w.key(view, "Enter").defaultPrevented, false, "Enter on View keeps the link's navigation");
+  assert.equal(w.key(view, "Enter").defaultPrevented, false, "Enter on View is left to the button's own activation");
   await w.settle();
   assert.deepEqual(JSON.parse(JSON.stringify(w.calls)), []);
   assert.equal(w.sheet()?.classList.contains("open") ?? false, false);
@@ -87,6 +87,19 @@ test("Enter and Space on the card's own controls keep their own action and never
   await w.settle();
   assert.deepEqual(JSON.parse(JSON.stringify(w.calls)), [["get_home", { listing_id: "home-a" }]]);
   assert.ok(w.sheet()!.classList.contains("open"));
+});
+
+test("a card's View opens the details in the app, never a new page", async () => {
+  const w = widget(async () => ({ structuredContent: { id: "home-b", description: "Full." } }));
+  const view = w.card(1).querySelector("[data-open]") as HTMLButtonElement;
+  assert.equal(view.tagName, "BUTTON");
+  assert.equal(w.card(1).querySelector("a"), null, "no card control leaves the app");
+  assert.match(view.innerHTML, /<svg/);
+  view.click();
+  await w.settle();
+  assert.deepEqual(JSON.parse(JSON.stringify(w.calls)), [["get_home", { listing_id: "home-b" }]]);
+  assert.ok(w.sheet()!.classList.contains("open"));
+  assert.match(w.sheet()!.innerHTML, /home\.co\.uk/, "home.co.uk is still one click away inside the details");
 });
 
 test("focus stays in the sheet through the detail arriving or failing, the results behind are inert, and Esc returns to the card", async () => {
