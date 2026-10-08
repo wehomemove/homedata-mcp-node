@@ -242,6 +242,25 @@ function absoluteHomeUrl(value: unknown): string | null {
   try { return new URL(path, DEFAULT_HOME_URL).toString(); } catch { return null; }
 }
 
+/** One listing photo: the full image for galleries and its thumbnail for cards. */
+export type HomePhoto = { full: string; thumb: string | null };
+/** Most photos a listing sends the widget; listings carry up to about ninety. */
+export const HOME_PHOTO_LIMIT = 30;
+
+/** A search property's photos in listing order: the primary first, then by sort order, images only. */
+export function orderedPhotos(value: unknown): HomePhoto[] {
+  const images = (Array.isArray(object(value)["images"]) ? object(value)["images"] as unknown[] : []).map(object)
+    .filter((image) => image["media_type"] === undefined || image["media_type"] === "image");
+  const rank = (image: JsonObject) => (image["is_primary"] === true ? -1 : 0);
+  const order = (image: JsonObject) => (typeof image["sort_order"] === "number" ? image["sort_order"] as number : Number.MAX_SAFE_INTEGER);
+  return images
+    .map((image, index) => ({ image, index }))
+    .sort((a, b) => rank(a.image) - rank(b.image) || order(a.image) - order(b.image) || a.index - b.index)
+    .map(({ image }) => ({ full: absoluteHomeUrl(image["cdn_url"] ?? image["thumbnail_cdn_url"]), thumb: absoluteHomeUrl(image["thumbnail_cdn_url"]) }))
+    .filter((photo): photo is HomePhoto => photo.full !== null)
+    .slice(0, HOME_PHOTO_LIMIT);
+}
+
 /** Only fields useful on a search card. Never return card_html, boundaries or pre-rendered map pins. */
 export function trimCard(value: unknown): JsonObject {
   const p = object(value);
@@ -288,6 +307,8 @@ export class HomeClient {
   private readonly listingTexts: TtlCache<string | null>;
   private readonly listingLocations: TtlCache<HomeLocation>;
   private readonly publicListingIdentities: TtlCache<PublicListingIdentity>;
+  /** Each listing's ordered photos from its last search, for the widget only (never model context). */
+  private readonly listingPhotos: TtlCache<HomePhoto[]>;
 
   constructor(private readonly options: HomeClientOptions) {
     this.homeBaseUrl = (options.homeBaseUrl ?? DEFAULT_HOME_URL).replace(/\/+$/, "");
@@ -303,6 +324,12 @@ export class HomeClient {
     this.listingTexts = new TtlCache(2_000, LISTING_TEXT_TTL_MS, clock);
     this.listingLocations = new TtlCache(2_000, LISTING_TEXT_TTL_MS, clock);
     this.publicListingIdentities = new TtlCache(2_000, LISTING_TEXT_TTL_MS, clock);
+    this.listingPhotos = new TtlCache(2_000, LISTING_TEXT_TTL_MS, clock);
+  }
+
+  /** The photos search last saw for a listing, in listing order, if it is still held. */
+  photosFor(listingId: string): HomePhoto[] | undefined {
+    return this.listingPhotos.peek(listingId);
   }
 
   /** Hit and miss counts for health. A home hit is one Homedata core lookup not spent. */
@@ -557,6 +584,8 @@ export class HomeClient {
       const card = trimCard(property);
       const listingId = card["id"];
       const address = card["address"];
+      const photos = orderedPhotos(property);
+      if (typeof listingId === "string" && UUID.test(listingId) && photos.length) this.listingPhotos.set(listingId, photos);
       if (typeof listingId !== "string" || !UUID.test(listingId)) continue;
       if (typeof address !== "string" || !address.trim()) {
         this.publicListingIdentities.delete(listingId);

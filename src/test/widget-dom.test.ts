@@ -11,7 +11,7 @@ import { HOME_WIDGET_SCRIPT } from "../home/widget.js";
  */
 type Camera = { center: { lng: number; lat: number }; zoom: number; pitch: number; bearing: number };
 
-function widget(callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>) {
+function widget(callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>, meta?: Record<string, unknown>, imageOf?: Record<string, string>) {
   const dom = new JSDOM(
     '<!doctype html><html><body><main id="root" class="shell"><div class="empty">Finding beautiful homes…</div></main>' +
     '<div id="home-widget-config" hidden data-check-in-origin="" data-view-id="" data-mapbox-token="pk.test"></div></body></html>',
@@ -43,12 +43,15 @@ function widget(callTool: (name: string, args: Record<string, unknown>) => Promi
   window["matchMedia"] = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   window["openai"] = { callTool: (name: string, args: Record<string, unknown>) => { calls.push([name, args]); return callTool(name, args); } };
   Object.defineProperty(dom.window.HTMLElement.prototype, "clientWidth", { get: () => 600 });
+  const scrolls: Array<{ cls: string; left: number }> = [];
+  (dom.window.HTMLElement.prototype as any).scrollTo = function (this: HTMLElement, o: { left: number }) { scrolls.push({ cls: this.className, left: o.left }); this.scrollLeft = o.left; };
   dom.window.eval(HOME_WIDGET_SCRIPT);
   const homes = [
     { id: "home-a", address: "1 Card Street", price: 400000, url: "https://home.co.uk/property/home-a", image: "https://cdn.home.co.uk/a.jpg", coordinates: { latitude: 51.38, longitude: -2.36 } },
     { id: "home-b", address: "2 Card Street", price: 500000, url: "https://home.co.uk/property/home-b", image: "https://cdn.home.co.uk/b.jpg", coordinates: { latitude: 51.39, longitude: -2.35 } },
   ];
-  dom.window.dispatchEvent(new dom.window.MessageEvent("message", { source: dom.window as any, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes } } } }));
+  for (const home of homes) if (imageOf?.[home.id]) home.image = imageOf[home.id]!;
+  dom.window.dispatchEvent(new dom.window.MessageEvent("message", { source: dom.window as any, data: { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { structuredContent: { view: "listings", homes }, ...(meta ? { _meta: meta } : {}) } } }));
   const key = (target: Element, key: string, shiftKey = false) => {
     const event = new dom.window.KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true });
     target.dispatchEvent(event);
@@ -57,7 +60,7 @@ function widget(callTool: (name: string, args: Record<string, unknown>) => Promi
   const card = (i: number) => document.querySelector(`.card[data-index="${i}"]`) as HTMLElement;
   const sheet = () => document.querySelector(".sheet") as HTMLElement | null;
   const settle = (ms = 40) => new Promise((resolve) => setTimeout(resolve, ms));
-  return { dom, document, camera, calls, moves, key, card, sheet, settle, root: document.getElementById("root")! };
+  return { dom, document, camera, calls, moves, scrolls, key, card, sheet, settle, root: document.getElementById("root")! };
 }
 
 function deferred() {
@@ -147,4 +150,53 @@ test("closing the sheet returns the listings map to the camera the user had", as
   w.key(w.document.body, "Escape");
   assert.deepEqual(w.camera, before, "Back restores the user's own view, not the home's close-up");
   assert.deepEqual(w.moves.slice(-2), ["stop", "ease"], "any flight still running is stopped before easing back");
+});
+
+test("cards and the sheet slide through the listing's own photos, starting on the card's photo", async () => {
+  const uuid = (n: number) => `0000000${n}-0000-4000-8000-000000000000`;
+  const full = (n: number) => `https://cdn.home.co.uk/listings/home-a/images/${uuid(n)}.jpg`;
+  const thumb = (n: number) => `https://cdn.home.co.uk/listings/home-a/images/thumbnails/${uuid(n)}.jpg`;
+  const gallery = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ full: full(n), thumb: thumb(n) }));
+  const answer = deferred();
+  const w = widget(() => answer.promise, { "home/photos": { "home-a": gallery } });
+  const media = w.card(0).querySelector(".media")!;
+  const imgs = Array.from(media.querySelectorAll("img.photo")).map((img) => img.getAttribute("src"));
+  assert.deepEqual(imgs, gallery.map((p) => p.thumb), "the card carries every photo as a thumbnail, in listing order");
+  assert.equal(media.querySelector(".photo-count")?.textContent, "1 / 8", "more than six photos show a counter, not dots");
+  const next = media.querySelector('[data-photo="1"]') as HTMLButtonElement;
+  const prev = media.querySelector('[data-photo="-1"]') as HTMLButtonElement;
+  assert.ok(next && prev, "the card photo has glass chevrons");
+  next.click();
+  assert.deepEqual(w.scrolls.at(-1), { cls: "photo-strip", left: 600 });
+  prev.click(); prev.click();
+  assert.deepEqual(w.scrolls.at(-1), { cls: "photo-strip", left: 7 * 600 }, "previous from the first photo wraps to the last");
+  await w.settle();
+  assert.deepEqual(JSON.parse(JSON.stringify(w.calls)), [], "a chevron never opens the home");
+  assert.equal(w.sheet()?.classList.contains("open") ?? false, false);
+
+  // The sheet opens straight away on the card's photo with the whole gallery, before get_home answers.
+  w.card(0).focus();
+  w.key(w.card(0), "Enter");
+  await w.settle();
+  const hero = w.sheet()!.querySelector(".hero")!;
+  assert.deepEqual(Array.from(hero.querySelectorAll("img")).map((img) => img.getAttribute("src")), gallery.map((p) => p.full));
+  assert.equal(w.sheet()!.querySelector(".counter")?.textContent, "1 / 8");
+  // get_home's own gallery arrives in another order; the sheet keeps the card's photo first.
+  answer.resolve({ structuredContent: { id: "home-a", photos: [full(5), full(1), full(2)], description: "Full." } });
+  await w.settle();
+  assert.equal(w.sheet()!.querySelector(".hero img")!.getAttribute("src"), full(1));
+  w.key(w.document.activeElement!, "ArrowRight");
+  assert.deepEqual(w.scrolls.at(-1), { cls: "hero", left: 600 }, "the arrow keys move the gallery");
+});
+
+test("without the server's photos the sheet still starts on the card's photo", async () => {
+  const at = (u: string) => `https://cdn.home.co.uk/listings/home-b/images/${u}.jpg`;
+  const lead = "0000000c-0000-4000-8000-000000000000";
+  // The card shows the listing's lead thumbnail; get_home lists the same photo second.
+  const w = widget(async () => ({ structuredContent: { id: "home-b", photos: [at("0000000a-0000-4000-8000-000000000000"), at(lead), at("0000000d-0000-4000-8000-000000000000")] } }), undefined,
+    { "home-b": `https://cdn.home.co.uk/listings/home-b/images/thumbnails/${lead}.jpg` });
+  (w.card(1).querySelector("[data-open]") as HTMLButtonElement).click();
+  await w.settle();
+  assert.equal(w.sheet()!.querySelector(".hero img")!.getAttribute("src"), at(lead), "the full-size version of the card's photo leads");
+  assert.equal(w.sheet()!.querySelector(".counter")?.textContent, "1 / 3", "the thumbnail is not counted twice");
 });

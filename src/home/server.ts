@@ -9,7 +9,7 @@ import {
 
 import { VERSION } from "../index.js";
 import { ACCOUNT_TOOLS, isAccountTool, type AccountTools } from "./account.js";
-import { HomeClient, HomeError, HomeUpstreamError, type SearchArgs, type SoldArgs } from "./client.js";
+import { HomeClient, HomeError, HomeUpstreamError, type HomePhoto, type SearchArgs, type SoldArgs } from "./client.js";
 import { HOME_WIDGET_HTML, HOME_WIDGET_URI, HOME_WIDGET_VERSION } from "./widget.js";
 import { mapboxAssetTags } from "./mapbox-assets.js";
 import { homeWidgetAssetValues } from "./widget-assets.js";
@@ -187,24 +187,39 @@ function accountTools() {
   });
 }
 
-function result(body: unknown, isError = false): CallToolResult {
+function result(body: unknown, isError = false, meta?: Record<string, unknown>): CallToolResult {
   const structuredContent = body !== null && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : { data: body };
-  return { content: [{ type: "text", text: JSON.stringify(body, null, 2) }], structuredContent, ...(isError ? { isError: true } : {}) };
+  return { content: [{ type: "text", text: JSON.stringify(body, null, 2) }], structuredContent, ...(isError ? { isError: true } : {}), ...(meta ? { _meta: meta } : {}) };
 }
 
-function renderListings(args: Record<string, unknown>): CallToolResult {
+/**
+ * Every photo search saw for these homes, keyed by listing id, for the widget's galleries.
+ * It travels in _meta, which the host gives the widget but not the model: thirty signed
+ * URLs a home would cost the conversation thousands of tokens.
+ */
+function photoMeta(client: HomeClient, homes: unknown[]): Record<string, unknown> | undefined {
+  const photos: Record<string, HomePhoto[]> = {};
+  for (const home of homes) {
+    const id = (home as Record<string, unknown>)?.["id"] ?? (home as Record<string, unknown>)?.["listing_id"];
+    const held = typeof id === "string" ? client.photosFor(id) : undefined;
+    if (typeof id === "string" && held?.length) photos[id] = held;
+  }
+  return Object.keys(photos).length ? { "home/photos": photos } : undefined;
+}
+
+function renderListings(args: Record<string, unknown>, client: HomeClient): CallToolResult {
   if (!Array.isArray(args["homes"]) || args["homes"].length < 1 || args["homes"].length > 20 || !args["homes"].every((home) => home !== null && typeof home === "object" && !Array.isArray(home))) {
     throw new HomeError("homes must contain one to twenty home objects returned by search_homes");
   }
   const title = typeof args["title"] === "string" && args["title"].trim() ? args["title"].trim().slice(0, 120) : "Homes";
   const optional = (name: "commute" | "route") => args[name] !== undefined && args[name] !== null && typeof args[name] === "object" && !Array.isArray(args[name]) ? { [name]: args[name] } : {};
-  return result({ view: "listings", title, homes: args["homes"], ...optional("commute"), ...optional("route") });
+  return result({ view: "listings", title, homes: args["homes"], ...optional("commute"), ...optional("route") }, false, photoMeta(client, args["homes"] as unknown[]));
 }
 
-function renderDetail(args: Record<string, unknown>): CallToolResult {
+function renderDetail(args: Record<string, unknown>, client: HomeClient): CallToolResult {
   const home = args["home"];
   if (home === null || typeof home !== "object" || Array.isArray(home)) throw new HomeError("home must be the complete object returned by get_home");
-  return result({ view: "detail", home });
+  return result({ view: "detail", home }, false, photoMeta(client, [home]));
 }
 
 function finite(args: Record<string, unknown>, name: string): number {
@@ -307,8 +322,8 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
         }
         case "commute_filter": if (routes) return result(await routes.commute(client, args)); break;
         case "plan_viewings": if (routes) return result(await routes.viewings(client, args)); break;
-        case "render_home_listings": return renderListings(args);
-        case "render_home_detail": return renderDetail(args);
+        case "render_home_listings": return renderListings(args, client);
+        case "render_home_detail": return renderDetail(args, client);
       }
       return result({ error: "unknown_tool", detail: request.params.name }, true);
     } catch (error) {

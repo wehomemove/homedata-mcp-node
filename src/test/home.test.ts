@@ -15,7 +15,7 @@ import golden from "../../docs/home-chatgpt-app/golden-prompts.json" with { type
 import { HomedataClient } from "../client.js";
 import { checkGoldenSet, type GoldenSet } from "../golden.js";
 import { TtlCache } from "../home/cache.js";
-import { cleanListingDescription, HomeClient, HomeUpstreamError, type HomeClientOptions } from "../home/client.js";
+import { HOME_PHOTO_LIMIT, orderedPhotos, cleanListingDescription, HomeClient, HomeUpstreamError, type HomeClientOptions } from "../home/client.js";
 import { ACCOUNT_TOOLS, SAVED_SEARCH_TYPES, type AccountSettings } from "../home/account.js";
 import { accountFromEnv, createHomeHttpHandler, mapboxTokenFromEnv } from "../home/http.js";
 import { HOME_RULES } from "../home/plugin.js";
@@ -618,6 +618,28 @@ test("the widget follows ChatGPT events, MCP host context and the system fallbac
   } } } });
   assert.doesNotMatch(detail.root.innerHTML, /Know before you view/);
   for (const rendered of [toolInput, structuredResult, statuses, routes, wishes, detail]) assertNoInlineMarkup(rendered.root.innerHTML);
+});
+
+test("a listing's photos reach the widget in listing order through _meta, never the model", async () => {
+  const image = (n: number, extra: Record<string, unknown> = {}) => ({ cdn_url: `https://cdn.home.co.uk/listings/x/images/0000000${n}-0000-4000-8000-000000000000.jpg`, thumbnail_cdn_url: `https://cdn.home.co.uk/listings/x/images/thumbnails/0000000${n}-0000-4000-8000-000000000000.jpg`, media_type: "image", ...extra });
+  const ordered = orderedPhotos({ images: [image(3, { sort_order: 2 }), { cdn_url: "https://cdn.home.co.uk/v.mp4", media_type: "video", sort_order: 0 }, image(1, { sort_order: 5, is_primary: true }), image(2, { sort_order: 1 })] });
+  assert.deepEqual(ordered.map((photo) => photo.full.match(/0000000(\d)/)?.[1]), ["1", "2", "3"], "primary first, then sort order, images only");
+  assert.match(ordered[0]!.thumb!, /\/thumbnails\//);
+  assert.equal(orderedPhotos({ images: Array.from({ length: 90 }, (_, n) => ({ cdn_url: `https://cdn.home.co.uk/${n}.jpg` })) }).length, HOME_PHOTO_LIMIT);
+
+  const { mcp, stop } = await start();
+  try {
+    const searched = await mcp.callTool({ name: "search_homes", arguments: { location: "Bath", listing_type: "sale" } });
+    const homes = (searched.structuredContent as { homes: Array<{ id: string }> }).homes;
+    const rendered = await mcp.callTool({ name: "render_home_listings", arguments: { title: "Homes", homes } });
+    const photos = (rendered._meta as Record<string, any>)["home/photos"];
+    assert.deepEqual(photos[homes[0]!.id], [{ full: "https://cdn.home.co.uk/full.jpg", thumb: "https://cdn.home.co.uk/one.jpg" }]);
+    assert.doesNotMatch(JSON.stringify(rendered.structuredContent) + JSON.stringify(rendered.content), /full\.jpg/, "photo lists stay out of what the model reads");
+    const detail = await mcp.callTool({ name: "render_home_detail", arguments: { home: homes[1] } });
+    assert.ok((detail._meta as Record<string, any>)["home/photos"][homes[1]!.id], "the detail view gets its gallery too");
+    const unknown = await mcp.callTool({ name: "render_home_listings", arguments: { title: "Homes", homes: [{ id: "never-searched" }] } });
+    assert.equal(unknown._meta, undefined, "no photos are invented for a home search never saw");
+  } finally { await stop(); }
 });
 
 test("render tools reuse supplied homes without another search and keep text fallbacks", async () => {
