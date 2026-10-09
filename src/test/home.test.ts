@@ -1469,6 +1469,47 @@ test("cached homes do not count towards the per-caller enrichment cap", async ()
   } finally { await stop(); }
 });
 
+for (const reason of ["no_match", "multiple_matches"]) {
+  test(`address match 422 ${reason} is remembered and repeat views stay outside the enrichment cap`, async () => {
+    const logs: unknown[] = [];
+    const { base, requests, stop } = await start({
+      status: { "/address/match/": 422 },
+      responseBody: { "/address/match/": { reason } },
+      logger: (message, detail) => logs.push([message, detail]),
+    }, { enrichmentsPerMinute: 1 });
+    const post = (id: number, listingId: string) => fetch(base + "/mcp", {
+      method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "get_home", arguments: { listing_id: listingId } } }),
+    });
+    try {
+      for (const id of [1, 2]) {
+        const response = await post(id, ID);
+        assert.equal(response.status, 200, "repeat non-matches need no enrichment unit");
+        const answer = await response.json() as { result: { structuredContent: { enrichment: { scope: string } } } };
+        assert.equal(answer.result.structuredContent.enrichment.scope, "area");
+      }
+      assert.equal(requests.filter((url) => url.pathname === "/address/match/").length, 1);
+      assert.deepEqual(logs, [], "a normal non-match is not logged as an outage");
+      assert.equal((await post(3, ID2)).status, 429, "a new listing still needs an enrichment unit");
+    } finally { await stop(); }
+  });
+}
+
+for (const status of [402, 503, 502, 422]) {
+  test(`address match failure ${status} stays retryable`, async () => {
+    const { client, requests } = fixtures({
+      status: { "/address/match/": status },
+      responseBody: { "/address/match/": { reason: "unexpected_failure" } },
+      logger: () => {},
+    });
+    for (let i = 0; i < 2; i++) {
+      await client.home(ID);
+      assert.equal(client.enrichmentCached(ID), false);
+    }
+    assert.equal(requests.filter((url) => url.pathname === "/address/match/").length, 2);
+  });
+}
+
 test("Home source and tests stay out of the npm package", () => {
   const cache = mkdtempSync(join(tmpdir(), "home-npm-pack-"));
   try {

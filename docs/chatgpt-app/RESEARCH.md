@@ -72,7 +72,7 @@ From [Authentication](https://developers.openai.com/plugins/build/auth):
   or JWT bearer assertions, nor can it present custom API keys or
   customer-provided mTLS certificates."
 - The two options are **`noauth`** (anonymous tools) and **OAuth 2.1** following
-  the MCP authorization spec: authorization code + PKCE (`S258`),
+  the MCP authorization spec: authorization code + PKCE (`S256`),
   protected-resource metadata at `/.well-known/oauth-protected-resource`, an
   authorization server publishing RFC 8414 or OIDC discovery, the `resource`
   parameter echoed into the token audience, and client registration by CIMD
@@ -193,8 +193,9 @@ MEASURED from source:
   With no key, only the two signup helpers are listed.
 - **Tools: 58 data tools generated from the vendored Playground manifest**
   (`src/manifest/tools.json`), plus `start_homedata_signup` and
-  `check_homedata_api_key`. **57 are GET requests; listing_address is a POST that resolves a listing ID**, so every one is honestly
-  `readOnlyHint: true, destructiveHint: false`.
+  `check_homedata_api_key`. 57 are GET requests; `listing_address` is a POST that resolves a listing ID.
+  The curated ChatGPT tools are all GETs and carry
+  `readOnlyHint: true, destructiveHint: false`; `listing_address` is outside that set.
 - Uses the low-level `Server` class with hand-written list/call handlers. It
   sets no `title`, `outputSchema` or `annotations`.
 - Descriptions and server instructions **state token prices**. The server
@@ -263,7 +264,7 @@ once it returns full data.
 
 - Recommended design: thor becomes the OAuth 2.1 authorization server. Users
   sign in with their homedata.co.uk login. Laravel Passport is one option; it
-  needs PKCE S258, RFC 8414 metadata, CIMD or DCR, `resource` echoed into
+  needs PKCE S256, RFC 8414 metadata, CIMD or DCR, `resource` echoed into
   `aud`, and RFC 9207 `iss`. An external provider such as Auth0 or Stytch,
   federated to thor, is the alternative.
 - The MCP server becomes the resource server. It verifies the token, resolves
