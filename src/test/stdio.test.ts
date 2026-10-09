@@ -37,8 +37,8 @@ async function standInApi(): Promise<{ url: string; received: Received[]; close:
     });
     res.writeHead(200, {
       "Content-Type": "application/json",
-      "X-Tokens-Charged": "2",
-      "X-Tokens-Balance": "998",
+      "X-Tokens-Charged": "5",
+      "X-Tokens-Balance": "995",
     });
     res.end(JSON.stringify({ echo: url.pathname }));
   });
@@ -73,16 +73,16 @@ test("stdio round trip", async () => {
     [...tools().map((t) => t.name), ...staticTools().map((t) => t.name)].sort(),
   );
 
-  const result = await client.callTool({ name: "address_find", arguments: { q: "10 Downing Street" } });
-  assert.deepEqual(result.structuredContent, { echo: "/address/find/" });
-  assert.deepEqual(result._meta, { homedata: { tokens_charged: "2", tokens_balance: "998" } });
+  const result = await client.callTool({ name: "address_match", arguments: { address: "10 Downing Street", postcode: "SW1A 2AA" } });
+  assert.deepEqual(result.structuredContent, { echo: "/address/match/" });
+  assert.deepEqual(result._meta, { homedata: { tokens_charged: "5", tokens_balance: "995" } });
 
   await client.callTool({ name: "check_homedata_api_key", arguments: {} });
 
   assert.deepEqual(
     api.received,
-    [{ path: "/address/find/", query: { q: "10 Downing Street" }, authorization: "Api-Key hk_test_smoke" }],
-    "expected exactly one API request, from address_find; the key check must send none",
+    [{ path: "/address/match/", query: { address: "10 Downing Street", postcode: "SW1A 2AA" }, authorization: "Api-Key hk_test_smoke" }],
+    "expected exactly one API request, from address_match; the key check must send none",
   );
   await client.close();
 });

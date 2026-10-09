@@ -57,7 +57,7 @@ export class HomedataClient {
     });
   }
 
-  async send(method: string, path: string, query: Record<string, string> = {}): Promise<ApiResponse> {
+  async send(method: string, path: string, query: Record<string, string> = {}, requestBody?: Record<string, unknown>, headers: Record<string, string> = {}): Promise<ApiResponse> {
     const url = new URL(this.baseUrl + path);
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== null) url.searchParams.set(key, value);
@@ -71,8 +71,11 @@ export class HomedataClient {
         headers: {
           ...(this.apiKey ? { Authorization: `Api-Key ${this.apiKey}` } : {}),
           Accept: "application/json",
+          ...headers,
+          ...(requestBody ? { "Content-Type": "application/json" } : {}),
           "User-Agent": this.userAgent,
         },
+        ...(requestBody ? { body: JSON.stringify(requestBody) } : {}),
         signal: controller.signal,
       });
       // Read the body ONCE: response.json() consumes the stream, so a later

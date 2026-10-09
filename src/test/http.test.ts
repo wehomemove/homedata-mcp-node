@@ -100,11 +100,11 @@ test("no ChatGPT-visible text mentions what a call costs", async () => {
 });
 
 test("a tool call reaches the API and keeps spend out of the model's text", async () => {
-  const { client, sent, stop } = await start();
-  const result = await client.callTool({ name: "address_find", arguments: { q: "10 Downing Street" } });
+  const { client, sent, stop } = await start({ headers: { "Content-Type": "application/json", "X-Tokens-Charged": "5" } });
+  const result = await client.callTool({ name: "address_match", arguments: { address: "10 Downing Street", postcode: "SW1A 2AA" } });
   assert.notEqual(result.isError, true);
-  assert.deepEqual(sent, ["/address/find/"]);
-  assert.deepEqual(result._meta, { homedata: { tokens_charged: "2" } });
+  assert.deepEqual(sent, ["/address/match/"]);
+  assert.deepEqual(result._meta, { homedata: { tokens_charged: "5" } });
   await stop();
 });
 

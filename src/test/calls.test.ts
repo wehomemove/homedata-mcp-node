@@ -104,3 +104,13 @@ test("one of an alternative group is required", () => {
   );
   assert.doesNotThrow(() => buildRequest(spec("crime"), { postcode: "SW1A 2AA" }));
 });
+
+test("listing address sends JSON with a fresh idempotency key per request", () => {
+  const first = buildRequest(spec("listing_address"), { listing_id: "listing-uuid" });
+  const second = buildRequest(spec("listing_address"), { listing_id: "listing-uuid" });
+  assert.equal(first.method, "POST");
+  assert.deepEqual(first.query, {});
+  assert.deepEqual(first.body, { listing_id: "listing-uuid" });
+  assert.match(first.headers?.["Idempotency-Key"] ?? "", /^[0-9a-f-]{36}$/);
+  assert.notEqual(first.headers?.["Idempotency-Key"], second.headers?.["Idempotency-Key"]);
+});

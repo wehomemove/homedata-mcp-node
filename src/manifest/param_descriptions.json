@@ -1,7 +1,7 @@
 {
   "_comment": "Argument help shown to AI clients. Keys are a parameter name (applies to every tool) or tool_name.parameter (wins). The Playground's own hints are UI copy and are not used.",
   "defaults": {
-    "uprn": "Unique Property Reference Number, digits only. Find one with address_find or address_postcode.",
+    "uprn": "Unique Property Reference Number, digits only. Find one with address_match or address_postcode.",
     "postcode": "UK postcode, for example SW1A 2AA. Spaces optional.",
     "outcode": "The first half of a UK postcode, for example SW1A, E1 or M1.",
     "lat": "Latitude (WGS84). Use with lng instead of a postcode.",
@@ -17,11 +17,10 @@
     "q": "What to search for."
   },
   "tools": {
-    "address_find.q": "Address, postcode or place to search for, for example '10 Downing Street' or 'SW1A 2AA'.",
     "boundaries.q": "Area name to search for, for example 'Hackney', 'Camden' or 'Norwich'.",
     "property_custom.with": "Comma-separated add-ons to include, or 'all' for every one. Each add-on adds its own price to the call.",
     "risks.risk_type": "Which hazard to screen for, or 'all' for every hazard in one response.",
-    "risks.uprn": "Unique Property Reference Number, digits only. Find one with address_find or address_postcode.",
+    "risks.uprn": "Unique Property Reference Number, digits only. Find one with address_match or address_postcode.",
     "planning.radius_km": "Search radius in kilometres. Defaults to 0.5. Values above 5 are reduced to 5.",
     "planning.type": "Filter by application type, for example Full, Outline, Heritage, Trees or Conditions.",
     "planning.status": "Filter by decision status: Undecided, Approved, Refused or Withdrawn.",
@@ -37,6 +36,13 @@
     "calc_mortgage.rate": "Annual interest rate as a percentage, for example 4.5 for 4.5%.",
     "calc_mortgage.term": "Mortgage term in years.",
     "schools.radius_km": "Search radius in kilometres. Defaults to 3. Values above 10 are reduced to 10.",
-    "planning.days": "Only include applications from the last N days. Defaults to 90. Values above 365 are reduced to 365."
+    "planning.days": "Only include applications from the last N days. Defaults to 90. Values above 365 are reduced to 365.",
+    "address_match.address": "Submitted street address, for example 10 Downing Street.",
+    "address_match.postcode": "Postcode for the submitted address, for example SW1A 2AA.",
+    "listing_address.listing_id": "Listing UUID you already hold from a separately obtained listing API result. This MCP does not provide listing search or IDs; a self-serve key alone does not provide access to the source listing endpoints.",
+    "property_sale_events.sale": "Sale ID you already hold from a separately obtained property listings API result. This MCP does not provide listing search or sale IDs.",
+    "property_sale_events.listing": "Listing UUID you already hold from a separately obtained property listings API result. This MCP does not provide listing search or IDs; a self-serve key alone does not provide access to the source listing endpoints.",
+    "property_sale_events.event_type": "Filter by event type.",
+    "property_sale_events.ordering": "Order sale events by date, price or event type."
   }
 }

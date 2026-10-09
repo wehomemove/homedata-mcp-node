@@ -1,5 +1,5 @@
 {
-  "address_find": "Find UK addresses from free text: an address, a postcode or a place name. Returns matching addresses with their UPRN, which every property tool takes. Costs 2 tokens.",
+  "address_match": "Match a submitted UK street address and postcode to a UPRN. A 200 response returns the address-level retrieve body plus address_resolution. Costs 5 tokens only on a match; HTTP 422 no_match or multiple_matches spends no tokens.",
   "address_postcode": "List every registered address at a UK postcode, with the UPRN for each one. Costs 2 tokens.",
   "amenities_all": "Every amenity group near a property in one response: food, education, healthcare, financial, civic, worship, culture, convenience, green spaces, transport and shops. Costs 5 tokens.",
   "amenities_civic": "Civic places near a property: post offices, town halls, courthouses, fire and police stations, community centres. Costs 1 token.",
@@ -26,6 +26,7 @@
   "broadband": "Broadband availability at a postcode: average and maximum download and upload speeds, superfast, ultrafast, gigabit and full-fibre coverage, and how many premises are covered. From Ofcom Connected Nations. Costs 1 token.",
   "calc_mortgage": "Work out a mortgage from price, deposit, rate and term: monthly payment, total repayment, total interest, and loan-to-value and loan-to-income ratios. Free: no tokens spent, and no API key needed.",
   "calc_stamp_duty": "Work out Stamp Duty Land Tax for England and Northern Ireland: total tax, effective rate and a band-by-band breakdown, for a main residence, a first-time buyer or an additional property. Free: no tokens spent, and no API key needed.",
+  "check_homedata_api_key": "Check whether this server has a Homedata API key configured and what to do next if it has not. Makes no API call, so it never spends anything.",
   "council_tax": "Council tax band for a property, with the billing authority name and its official code. For the yearly and monthly charge in pounds, use council_tax_full instead. Costs 3 tokens.",
   "council_tax_full": "The full council tax record for a property: band, billing authority and its official code, this year's yearly and monthly charge in pounds, the 1991 valuation bounds behind the band, and the fiscal year. Costs 5 tokens.",
   "crime": "Recorded crime near a postcode or coordinates, by category and month, from Police UK. Costs 1 token.",
@@ -40,6 +41,7 @@
   "healthcare_hospitals": "Registered hospitals near a property, with name, address, postcode, region, distance and a link to the official register record. England only. Costs 1 token.",
   "healthcare_pharmacies": "Pharmacies near a property, with name, address, phone and website where known. Costs 1 token.",
   "listed_buildings": "Listed buildings within a radius of a postcode: Grade I, II* and II entries with name, location, listing date and a link to the official record. Costs 3 tokens.",
+  "listing_address": "Reveal a listing’s UPRN and full address using its listing UUID. Costs 20 tokens on the first reveal; subsequent reveals by the same organisation are free.",
   "planning": "Planning applications near a postcode or coordinates: type, status, description and decision date, with filters for recency, type and status. Costs 5 tokens.",
   "postcode_profile": "One-call summary of a postcode: deprivation, crime, average property price, nearby schools, transport and broadband. Cheaper than calling those tools separately. The first call for a postcode is slow, because the parts are gathered and combined when you ask for them; the result is then cached, so asking again for the same postcode is fast. Wait for the first call rather than retrying it — retrying abandons the work already in progress and starts it over. Costs 1 token.",
   "price_distributions": "How property prices are spread across an outcode area: percentiles, median and transaction counts by property type. Costs 1 token.",
@@ -52,9 +54,9 @@
   "property_custom": "Build your own property record: the base record plus only the add-ons you ask for, so you pay for exactly what you use. Call property_discovery first to see which add-ons a property has. Costs 1 token plus the price of each add-on requested.",
   "property_discovery": "The cheap first call for a property: which data is available for it, what each add-on costs, and the shortcuts to each tier. Also the quickest way to check whether a UPRN is one we hold. Costs 1 token.",
   "property_lr_titles": "Land Registry title records for a property: tenure, title number and registered owner where held. Costs 10 tokens.",
+  "property_sale_events": "Return the event timeline for a sale ID or listing UUID, optionally filtered and ordered. Costs 20 tokens.",
   "risks": "Environmental risk screening for a property: flood, radon, noise, landfill, coal and other mining, invasive plants and air quality. Ask for one hazard, or for all of them in a single response. Costs 1 token; 5 tokens when risk_type is all.",
   "schools": "Schools near a postcode, with Ofsted rating, phase, pupil numbers and distance, from the Department for Education register. England only. Costs 1 token.",
   "solar": "Solar potential for a property: usable roof area, estimated yearly generation, savings, payback period and carbon saved. Costs 5 tokens.",
-  "start_homedata_signup": "Get a Homedata API key so the property data tools can be used: returns the sign-up link and the steps to follow. Makes no API call.",
-  "check_homedata_api_key": "Check whether this server has a Homedata API key configured and what to do next if it has not. Makes no API call, so it never spends anything."
+  "start_homedata_signup": "Get a Homedata API key so the property data tools can be used: returns the sign-up link and the steps to follow. Makes no API call."
 }

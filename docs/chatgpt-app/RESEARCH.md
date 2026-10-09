@@ -72,7 +72,7 @@ From [Authentication](https://developers.openai.com/plugins/build/auth):
   or JWT bearer assertions, nor can it present custom API keys or
   customer-provided mTLS certificates."
 - The two options are **`noauth`** (anonymous tools) and **OAuth 2.1** following
-  the MCP authorization spec: authorization code + PKCE (`S256`),
+  the MCP authorization spec: authorization code + PKCE (`S258`),
   protected-resource metadata at `/.well-known/oauth-protected-resource`, an
   authorization server publishing RFC 8414 or OIDC discovery, the `resource`
   parameter echoed into the token audience, and client registration by CIMD
@@ -191,9 +191,9 @@ MEASURED from source:
 - **Auth: one `HOMEDATA_API_KEY` from the environment**, sent to
   `https://api.homedata.co.uk` as `Authorization: Api-Key …` (`src/client.ts`).
   With no key, only the two signup helpers are listed.
-- **Tools: 56 data tools generated from the vendored Playground manifest**
+- **Tools: 58 data tools generated from the vendored Playground manifest**
   (`src/manifest/tools.json`), plus `start_homedata_signup` and
-  `check_homedata_api_key`. **All 56 are GET requests**, so every one is honestly
+  `check_homedata_api_key`. **57 are GET requests; listing_address is a POST that resolves a listing ID**, so every one is honestly
   `readOnlyHint: true, destructiveHint: false`.
 - Uses the low-level `Server` class with hand-written list/call handlers. It
   sets no `title`, `outputSchema` or `annotations`.
@@ -222,7 +222,7 @@ Loki charges tokens per key.
 | Title, output schema, explicit annotations on every tool | none set | Add them in the HTTP profile. |
 | No pricing in listing copy. Tool descriptions are model-readable fields. | token prices in descriptions and instructions | A ChatGPT description profile without prices. Spend stays in `_meta`, which the model does not see. |
 | No selling of credits, no signup upsell | `start_homedata_signup` | Leave the signup helpers out of the ChatGPT surface. |
-| A focused tool surface built from user goals | 56 endpoint mirrors | Start with a curated subset (below) and grow from the golden set. |
+| A focused tool surface built from user goals | 58 endpoint mirrors | Start with a curated subset (below) and grow from the golden set. |
 | Response minimisation | raw API bodies | Audit each exposed tool's payload for internal IDs and timestamps. |
 | Domain challenge, privacy, terms, support and website URLs | site exists | Confirm that the existing homedata.co.uk privacy policy covers this use. |
 | A reviewer demo account with no MFA | none | A dedicated Homedata org with a funded wallet. |
@@ -248,7 +248,7 @@ Loki charges tokens per key.
 
 First curated tool set (INFERRED from likely user goals, to be refined by the
 golden set):
-`address_find`, `address_postcode`, `property_core`, `attr_epc`,
+`address_match`, `address_postcode`, `property_core`, `attr_epc`,
 `council_tax`, `risks` (flood and other environmental risk), `planning`,
 `schools`, `broadband`, `crime`, `price_trends`, `price_growth`,
 `postcode_profile`, `deprivation` and `amenities_all`.
@@ -263,7 +263,7 @@ once it returns full data.
 
 - Recommended design: thor becomes the OAuth 2.1 authorization server. Users
   sign in with their homedata.co.uk login. Laravel Passport is one option; it
-  needs PKCE S256, RFC 8414 metadata, CIMD or DCR, `resource` echoed into
+  needs PKCE S258, RFC 8414 metadata, CIMD or DCR, `resource` echoed into
   `aud`, and RFC 9207 `iss`. An external provider such as Auth0 or Stytch,
   federated to thor, is the alternative.
 - The MCP server becomes the resource server. It verifies the token, resolves

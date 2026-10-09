@@ -9,7 +9,7 @@
       "prompt": "Use Homedata to check the flood risk at 10 Downing Street, London SW1A 2AA.",
       "expect": {
         "calls": [
-          { "tool": "address_find", "args": { "q": "10 Downing Street, London SW1A 2AA" } },
+          { "tool": "address_match", "args": { "address": "10 Downing Street, London", "postcode": "SW1A 2AA" } },
           { "tool": "risks", "args": { "risk_type": "flood" } }
         ],
         "outcome": "Matches exactly one address, 10 Downing Street, London SW1A 2AA (UPRN 100023336956). Reports river-and-sea flood risk as Very low (less than 1 in 1,000 annual chance) and surface-water flood risk as Low (between 1 in 1,000 and 1 in 100 annual chance)."
@@ -22,7 +22,7 @@
       "prompt": "What council tax band is 10 Downing Street, London SW1A 2AA in?",
       "expect": {
         "calls": [
-          { "tool": "address_find", "args": {} },
+          { "tool": "address_match", "args": {} },
           { "tool": "council_tax", "args": {} }
         ],
         "outcome": "Matches exactly one address, 10 Downing Street, London SW1A 2AA (UPRN 100023336956). Says the council-tax band is H and the billing authority is Westminster."
@@ -47,7 +47,7 @@
       "prompt": "I'm thinking of making an offer on 10 Downing Street, London SW1A 2AA. Give me the full picture on the property.",
       "expect": {
         "calls": [
-          { "tool": "address_find", "args": {} },
+          { "tool": "address_match", "args": {} },
           { "tool": "property_core", "args": {} }
         ],
         "outcome": "Matches exactly one residential property, 10 Downing Street, London SW1A 2AA (UPRN 100023336956), then uses one property_core call rather than many attribute calls. Identifies it as terraced and says there is no EPC certificate or property broadband record, council tax is band H under Westminster, river-and-sea flood risk is Very low, surface-water risk is Low, the nearest primary school is St Matthew's at 0.72 km, and an active Article 4 basement-development designation applies."
@@ -75,7 +75,7 @@
       "prompt": "Look up the EPC rating of the British Museum, Great Russell Street, London WC1B 3DG on Homedata.",
       "expect": {
         "calls": [
-          { "tool": "address_find", "args": {} },
+          { "tool": "address_match", "args": {} },
           { "tool": "attr_epc", "args": {} }
         ],
         "outcome": "Gives the current and potential rating and the assessment date, or says no certificate is held."
@@ -148,7 +148,7 @@
       "prompt": "What shops, cafes and parks are near the Tate Modern, Bankside, London SE1 9TG?",
       "expect": {
         "calls": [
-          { "tool": "address_find", "args": {} },
+          { "tool": "address_match", "args": {} },
           { "tool": "amenities_all", "args": {} }
         ],
         "outcome": "Groups nearby amenities by type."
@@ -171,7 +171,7 @@
       "prompt": "(after direct-flood-risk) And what about radon there?",
       "expect": {
         "calls": [{ "tool": "risks", "args": { "risk_type": "radon" } }],
-        "outcome": "Reuses the UPRN from the earlier answer: no second address_find."
+        "outcome": "Reuses the UPRN from the earlier answer: no second address_match."
       }
     },
     {
@@ -218,7 +218,7 @@
       "prompt": "How energy efficient is the house at 10 Downing Street, London SW1A 2AA?",
       "expect": {
         "calls": [
-          { "tool": "address_find", "args": {} },
+          { "tool": "address_match", "args": {} },
           { "tool": "attr_epc", "args": {} }
         ],
         "outcome": "Gives the current and potential energy efficiency rating and the assessment date, or says no certificate is held."
@@ -258,7 +258,7 @@
       "prompt": "Is there a doctor, a supermarket and a park near the British Museum, Great Russell Street, London WC1B 3DG?",
       "expect": {
         "calls": [
-          { "tool": "address_find", "args": {} },
+          { "tool": "address_match", "args": {} },
           { "tool": "amenities_all", "args": {} }
         ],
         "outcome": "Names the nearest healthcare, convenience or shop, and green-space amenities with their distances."
@@ -312,10 +312,9 @@
       "prompt": "What's the flood risk at 1 Rue de Rivoli, Paris?",
       "expect": {
         "calls": [],
-        "allowed": [{ "tool": "address_find", "args": {} }],
-        "outcome": "Says coverage is the United Kingdom only. It may try address_find once, which finds nothing; no property tool is called."
+        "outcome": "Says coverage is the United Kingdom only; no Homedata tool is called."
       },
-      "why": "UK-only data. Trying address_find is allowed and finds nothing; calling a property tool with a guessed UPRN is not."
+      "why": "UK-only data. Do not call address_match without a UK street address and postcode, or guess a UPRN."
     },
     {
       "id": "boundary-schools-scotland",

@@ -6,7 +6,7 @@
  * cannot drift apart: same names, same arguments, same requests, same prices.
  *
  *   homedata tools                              list the tools and their prices
- *   homedata address_find --q "10 Downing St"   run one
+ *   homedata address_match --address "10 Downing St" --postcode "SW1A 2AA"   run one
  *   homedata property_core --uprn 100023336956 --field epc
  *
  * Reads HOMEDATA_API_KEY from the environment. The calculators need no key.
@@ -141,7 +141,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     return 2;
   }
 
-  const response = await client.send(request.method, request.path, request.query);
+  const response = await client.send(request.method, request.path, request.query, request.body, request.headers);
   console.log(format(response.body, flags["compact"] === true, typeof flags["field"] === "string" ? flags["field"] : undefined));
   const charged = response.headers.get("X-Tokens-Charged");
   if (charged !== null) {

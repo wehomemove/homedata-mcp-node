@@ -100,7 +100,7 @@ test("review cases come from the golden set: five positive, three negative, real
   const cases = build().extensions["com.openai"].review!.test_cases!;
   assert.equal(cases.positive.length, 5);
   assert.equal(cases.negative.length, 3);
-  assert.equal(cases.positive[0]!.tools_triggered, "address_find, risks");
+  assert.equal(cases.positive[0]!.tools_triggered, "address_match, risks");
   assert.match(cases.negative.map((c) => c.prompt).join("\n"), /worth/);
 });
 

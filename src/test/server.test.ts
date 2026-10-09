@@ -12,6 +12,8 @@ interface Sent {
   method: string;
   path: string;
   query: Record<string, string>;
+  body?: unknown;
+  headers?: Record<string, string>;
 }
 
 async function connect(opts: { response?: () => Response; withKey?: boolean } = {}) {
@@ -23,6 +25,7 @@ async function connect(opts: { response?: () => Response; withKey?: boolean } = 
       method: init?.method ?? "GET",
       path: url.pathname,
       query: Object.fromEntries(url.searchParams.entries()),
+      ...(init?.body ? { body: JSON.parse(String(init.body)), headers: Object.fromEntries(new Headers(init.headers).entries()) } : {}),
     });
     return opts.response?.() ?? new Response(JSON.stringify({ ok: true }), {
       status: 200,
@@ -138,6 +141,11 @@ test("every tool sends one request to its manifest endpoint", async () => {
       spec.params.filter((p) => p.in === "query").map((p) => [p.name, String(args[p.name])]),
     );
     assert.deepEqual(sent[0]!.query, expectedQuery, spec.name);
+    if (spec.params.some((p) => p.in === "body")) {
+      assert.deepEqual(sent[0]!.body, Object.fromEntries(spec.params.filter((p) => p.in === "body").map((p) => [p.name, args[p.name]])));
+      assert.equal(sent[0]!.headers?.["content-type"], "application/json");
+      assert.match(sent[0]!.headers?.["idempotency-key"] ?? "", /^[0-9a-f-]{36}$/);
+    }
   }
   await client.close();
 });
@@ -184,3 +192,26 @@ test("a non-JSON error body is preserved", async () => {
   assert.match(JSON.stringify(result.structuredContent), /upstream is down/);
   await client.close();
 });
+
+for (const reason of [null, "no_match", "multiple_matches"] as const) {
+  test(`address_match preserves ${reason ?? "address resolution"} and charging`, async () => {
+    const status = reason ? 422 : 200;
+    const body = reason ? { reason } : { uprn: "100023336956", address_resolution: { match: "exact" } };
+    const { client, sent } = await connect({ response: () => new Response(JSON.stringify(body), {
+      status, headers: { "Content-Type": "application/json", "X-Tokens-Charged": reason ? "0" : "5" },
+    }) });
+    try {
+      const listed = (await client.listTools()).tools;
+      assert.ok(listed.some((tool) => tool.name === "address_match"));
+      assert.ok(!listed.some((tool) => tool.name === "address_" + "find"));
+      const result = await client.callTool({ name: "address_match", arguments: { address: "10 Downing Street", postcode: "SW1A 2AA" } });
+      assert.equal(result.isError === true, Boolean(reason));
+      assert.deepEqual(result.structuredContent, reason ? { error: "api_error", status_code: 422, detail: body } : body);
+      assert.deepEqual(result._meta, { homedata: { tokens_charged: reason ? "0" : "5" } });
+      for (const missing of [{ address: "10 Downing Street" }, { postcode: "SW1A 2AA" }, { q: "10 Downing Street" }]) {
+        assert.equal((await client.callTool({ name: "address_match", arguments: missing })).isError, true);
+      }
+      assert.deepEqual(sent, [{ method: "GET", path: "/address/match/", query: { address: "10 Downing Street", postcode: "SW1A 2AA" } }]);
+    } finally { await client.close(); }
+  });
+}

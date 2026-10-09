@@ -8,12 +8,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [1.0.0] - unreleased
 
 A rebuild. The tools are now exactly the self-serve endpoints of the Homedata
-Developer Playground: 56 data tools plus two signup helpers, built from a
+Developer Playground: 58 data tools plus two signup helpers, built from a
 manifest vendored from the Python package (`src/manifest/`, with the source
 commit and a hash per file in `SOURCE.json`). This is a breaking release; the
 table below maps every 0.1.0 tool.
 
 ### Changed
+- Re-vendored the current Python catalogue, including `property_sale_events` and `listing_address`. Listing address sends a JSON POST body and a fresh `Idempotency-Key`.
+- `address_find` is gone. Use `address_match` with a street address and postcode. It costs 5 tokens on a match and returns the address-level record plus `address_resolution`. HTTP 422 `no_match` or `multiple_matches` is never charged. The legacy API is hidden and retires on 1 December 2027.
 - Every tool is built from the vendored manifest: no hand-written tools, no
   per-tool zod schemas. Names, arguments, requests and prices match the
   Playground and the Python package, and CI runs the Python package's parity
@@ -56,7 +58,7 @@ table below maps every 0.1.0 tool.
 
 | 0.1.0 tool | 1.0.0 |
 |---|---|
-| `search_address` | `address_find` (argument `q`; the `postcode` filter is gone) |
+| `search_address` | `address_match` (required `address` and `postcode`) |
 | `lookup_property` | removed; use `property_base` or `property_core` |
 | `batch_property_lookup` | removed |
 | `lookup_epc` | `attr_epc` |

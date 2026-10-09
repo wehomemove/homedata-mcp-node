@@ -42,7 +42,7 @@ const STDIO_INSTRUCTIONS = [
   "Homedata answers questions about UK property: addresses and UPRNs, EPC, council tax, sale history,",
   "planning, environmental risk, schools, broadband, crime, local amenities and area statistics.",
   "",
-  "Start with `address_find` to turn an address into a UPRN, then use the UPRN tools. Postcode and",
+  "Call `address_match` with a street address and postcode to get a UPRN, then use the UPRN tools. Postcode and",
   "outcode tools cover the surrounding area.",
   "",
   "For a whole property, prefer one tier call over many small ones: `property_base` for the basics,",
@@ -57,7 +57,7 @@ const STDIO_INSTRUCTIONS = [
 // "Keep the most important details in the first 512 characters").
 const CHATGPT_INSTRUCTIONS = [
   "Homedata answers questions about specific UK properties and the areas around them.",
-  "Always start with `address_find` to turn the address the user gives into a UPRN, then pass that UPRN",
+  "For a specific property, call `address_match` with the street address and postcode to get a UPRN, then pass that UPRN",
   "to the property tools. For a whole-property question call `property_core` once rather than many small",
   "tools. Coverage is the United Kingdom only; say so plainly for addresses elsewhere.",
   "Postcode and outcode tools cover the surrounding area: for what an area is like to live in, call",
@@ -78,7 +78,7 @@ const CHATGPT_INSTRUCTIONS = [
  * instead. Add it back here once the profile returns full data.
  */
 export const CHATGPT_TOOLS = [
-  "address_find",
+  "address_match",
   "address_postcode",
   "property_core",
   "attr_epc",
@@ -104,11 +104,11 @@ export const CHATGPT_TOOLS = [
  * sale appear only as limits.
  */
 export const CHATGPT_DESCRIPTIONS: Readonly<Record<string, string>> = {
-  address_find:
-    "Find a UK address and its UPRN (Unique Property Reference Number) from what the user typed: a full or partial " +
-    "address, a building name, a postcode or a place. Every property tool takes the UPRN this returns. " +
-    "Use this when someone names a house, home, flat, building or street and you need to identify the property " +
-    "before answering anything about it. United Kingdom only.",
+  address_match:
+    "Match a submitted UK street address and postcode to one UPRN. Both arguments are required; ask for " +
+    "missing details before calling. Returns the address-level record and address_resolution metadata. " +
+    "If the API returns no_match or multiple_matches (HTTP 422), ask the user to clarify; never guess a UPRN. " +
+    "Use this when someone names a specific home and you need its UPRN before calling property tools. For only a postcode, use address_postcode. United Kingdom only.",
   address_postcode:
     "List every registered address at one UK postcode, with the UPRN for each. " +
     "Use this when someone asks which houses, flats or buildings are at a postcode, or gives only a postcode and " +

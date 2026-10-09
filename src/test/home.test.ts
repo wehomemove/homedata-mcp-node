@@ -52,7 +52,7 @@ function fixtures(options: FixtureOptions = {}) {
     if (url.pathname.startsWith("/api/for-sale/")) body = { displayLocation: "Bath", total: 2, pagination: { current_page: 1, last_page: 1 }, properties: [ID, ID2].map((listing_id, index) => ({ listing_id, latest_price: 325000, bedrooms: 3, postcode: "BA1 1LZ", is_new: true, latitude: 51.38 + index / 100, longitude: -2.36, agent_name: "Search Agent", added_date: "2026-10-01", reduced_date: "2026-09-20", first_offer_date: "2026-10-02", days_listed: 12, card_html: "MUST NOT LEAK", images: [{ cdn_url: "https://cdn.home.co.uk/full.jpg", thumbnail_cdn_url: "https://cdn.home.co.uk/one.jpg", is_primary: true }] })) };
     else if (url.pathname.startsWith("/api/property-details/")) body = { id: url.pathname.split("/").pop(), latest_price: 325000, building_number: "12", street_name: "Heritage Close", town_name: "Bath", postcode: "BA2 8TJ", description: "Full description", images: ["/api/image/one"], agent_name: "Example Agent", ...options.detail };
     else if (url.pathname === "/api/reverse-geocode") body = options.reverseGeocode ?? { success: true, place_name: "Heritage Close, Bath, BA2 8TJ, United Kingdom", context: [{ id: "postcode.123", text: "BA2 8TJ" }] };
-    else if (url.pathname === "/address/find/") body = options.address ?? { results: [{ uprn: "100012345678", postcode: "BA2 8TJ", building_number: "12", full_address: "12 Heritage Close, Bath, BA2 8TJ" }] };
+    else if (url.pathname === "/address/match/") body = options.address ?? { uprn: "100012345678", postcode: "BA2 8TJ", building_number: "12", full_address: "12 Heritage Close, Bath, BA2 8TJ", address_resolution: { match: "exact" } };
     else if (url.pathname === "/property/100012345678/core/") body = { epc: { rating: "C" }, council_tax: { band: "D" }, flood: { risk: "low" } };
     else if (url.pathname === "/sold-properties/ba1-1/") body = { isNationalSearch: false, total: 2, filters: { gid: 121 }, pagination: { current_page: 1, last_page: 1 }, properties: [] };
     else if (url.pathname === "/sold-properties/ba2-3/") body = { isNationalSearch: false, total: 40, filters: { gid: 122 }, pagination: { current_page: 1, last_page: 2, total: 40 }, properties: [SALE, { ...SALE, postcode: "BA2 3QQ", price: 410000 }] };
@@ -1031,7 +1031,11 @@ test("get_home falls back to an exact address match when details have no UPRN", 
     assert.equal(enrichment["scope"], "home");
     assert.equal(enrichment["source"], "exact_address_match");
     assert.equal("uprn" in enrichment, false);
-    assert.ok(requests.some((url) => url.pathname === "/address/find/"));
+    const match = requests.find((url) => url.pathname === "/address/match/");
+    assert.ok(match);
+    assert.equal(match.searchParams.get("postcode"), "BA2 8TJ");
+    assert.match(match.searchParams.get("address") ?? "", /12,? Heritage Close/);
+    assert.equal(match.searchParams.has("q"), false);
   } finally { await stop(); }
 });
 
@@ -1103,7 +1107,7 @@ test("get_home returns clearly labelled, widget-ready postcode facts when no UPR
       price_growth: { annual_growth_percent: 3.2 },
     });
     assert.equal("unavailable" in enrichment, false);
-    assert.equal(requests.some((url) => url.pathname === "/address/find/" || url.pathname.includes("/core/")), false);
+    assert.equal(requests.some((url) => url.pathname === "/address/match/" || url.pathname.includes("/core/")), false);
     assert.ok(requests.some((url) => url.pathname === "/schools/nearby"));
     assert.ok(requests.some((url) => url.pathname === "/price-growth/BA2/"));
   } finally { await stop(); }
@@ -1162,7 +1166,7 @@ test("get_home reports unavailable only when it has no UPRN, postcode or coordin
 });
 
 test("get_home never turns an inexact address candidate into home facts", async () => {
-  const { mcp, requests, stop } = await start({ address: { results: [{ uprn: "100012345678", postcode: "BA2 8TJ", building_number: "14", full_address: "14 Heritage Close, Bath, BA2 8TJ" }] } });
+  const { mcp, requests, stop } = await start({ address: { uprn: "100012345678", postcode: "BA2 8TJ", building_number: "14", full_address: "14 Heritage Close, Bath, BA2 8TJ", address_resolution: { match: "exact" } } });
   try {
     const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
     const enrichment = (answer.structuredContent as Record<string, unknown>)["enrichment"] as Record<string, unknown>;
@@ -1413,7 +1417,7 @@ test("a repeat view of a home spends no Homedata lookup for a day, and health co
     assert.deepEqual((second.structuredContent as Record<string, unknown>)["enrichment"], (first.structuredContent as Record<string, unknown>)["enrichment"]);
     assert.equal(((second.structuredContent as Record<string, unknown>)["enrichment"] as Record<string, unknown>)["source"], "exact_address_match");
     assert.equal(lookups("/property/100012345678/core/"), 1);
-    assert.equal(lookups("/address/find/"), 1, "the listing's resolved UPRN is remembered too");
+    assert.equal(lookups("/address/match/"), 1, "the listing's resolved UPRN is remembered too");
     // Another listing of the same home shares the UPRN's facts.
     await mcp.callTool({ name: "get_home", arguments: { listing_id: ID2 } });
     assert.equal(lookups("/property/100012345678/core/"), 1);
