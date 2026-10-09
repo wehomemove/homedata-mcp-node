@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 export interface ToolParam {
   name: string;
-  in: "path" | "query";
+  in: "path" | "query" | "body";
   type: "string" | "number";
   required: boolean;
   enum?: string[];
@@ -38,6 +38,7 @@ export interface ToolSpec {
   path: string;
   params: ToolParam[];
   tokens: ToolTokens;
+  idempotency_key?: boolean;
   path_rules?: Array<{ param: string; prefix: string; path: string }>;
 }
 

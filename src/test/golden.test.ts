@@ -70,7 +70,7 @@ test("allowed calls are checked like required ones, and negatives allow none", a
   const outside = set.cases.find((c) => c.id === "boundary-outside-uk")!;
   outside.expect.allowed = [{ tool: "address_lookup", args: {} }];
   const negative = set.cases.find((c) => c.kind === "negative")!;
-  negative.expect.allowed = [{ tool: "address_find", args: {} }];
+  negative.expect.allowed = [{ tool: "address_match", args: {} }];
 
   const problems = checkGoldenSet(set, tools).join("\n");
   assert.match(problems, /expects address_lookup, which the endpoint does not list/);

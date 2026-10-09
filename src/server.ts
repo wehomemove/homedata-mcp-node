@@ -58,7 +58,7 @@ export function profileTools(profile: Profile): ToolSpec[] {
 }
 
 /**
- * ChatGPT descriptor fields. Every catalogue tool is a GET against a bounded
+ * ChatGPT descriptor fields. Every curated ChatGPT tool is a GET against a bounded
  * dataset: it reads, never writes, and does not reach the open internet.
  *
  * outputSchema: OpenAI asks for one wherever a tool returns structured data.
@@ -190,7 +190,7 @@ export function buildServer(
       throw err;
     }
 
-    const response = await client.send(apiRequest.method, apiRequest.path, apiRequest.query);
+    const response = await client.send(apiRequest.method, apiRequest.path, apiRequest.query, apiRequest.body, apiRequest.headers);
     const outcome = response.statusCode >= 400 ? `API error ${response.statusCode}` : "ok";
     // Every 402 is a balance refusal (wallet or legacy credits), and every one
     // names a price or a top-up page. The spend metadata goes too: it carries

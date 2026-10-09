@@ -811,11 +811,17 @@ export class HomeClient {
     // Only a definite answer is remembered: a failed address lookup is retried next time.
     let definite = true;
     if (address && postcode && (buildingNumber || buildingName)) {
-      const found = await this.data("/address/find/", { q: address });
-      if (isUnavailable(found)) definite = false;
-      const body = object(found);
-      const candidates = Array.isArray(body["results"]) ? body["results"] : Array.isArray(found) ? found : [];
-      const match = candidates.map(object).find((candidate) => this.sameAddress(candidate, postcode, buildingNumber, buildingName));
+      const response = await this.options.homedata.send("GET", "/address/match/", { address, postcode });
+      const body = object(response.body);
+      // The client wraps API error bodies in detail. These two 422 reasons are
+      // definite non-matches, so remember the area/none route without retrying.
+      const reason = object(body["detail"])["reason"];
+      const nonMatch = response.statusCode === 422 && (reason === "no_match" || reason === "multiple_matches");
+      if (response.statusCode >= 400 && !nonMatch) {
+        definite = false;
+        this.logger("Home Homedata request failed: GET /address/match/", { statusCode: response.statusCode, body: response.body });
+      }
+      const match = response.statusCode === 200 && this.sameAddress(body, postcode, buildingNumber, buildingName) ? body : null;
       const matchedUprn = match?.["uprn"];
       if ((typeof matchedUprn === "string" || typeof matchedUprn === "number") && /^\d+$/.test(String(matchedUprn))) {
         this.listingRoutes.set(listingId, { kind: "home", uprn: String(matchedUprn), source: "exact_address_match" });
@@ -892,7 +898,7 @@ export class HomeClient {
     const sameIdentifier = (expected: string, field: unknown): boolean => {
       const direct = text(field);
       if (direct && compact(direct) === compact(expected)) return true;
-      // Address find commonly returns one formatted address rather than split
+      // Address match can return one formatted address rather than split
       // building fields. The first comma-delimited line is the building.
       const building = full.split(",", 1)[0]?.trim() ?? "";
       const escaped = expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

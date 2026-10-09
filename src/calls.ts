@@ -10,6 +10,7 @@
  * SDK does not validate arguments against a tool's inputSchema (measured), so
  * this is the only check there is.
  */
+import { randomUUID } from "node:crypto";
 import type { ToolParam, ToolSpec } from "./manifest.js";
 
 export class InvalidArguments extends Error {
@@ -23,6 +24,8 @@ export interface ApiRequest {
   method: string;
   path: string;
   query: Record<string, string>;
+  body?: Record<string, unknown>;
+  headers?: Record<string, string>;
 }
 
 export const asQueryValue = (value: unknown): string =>
@@ -110,11 +113,13 @@ export function buildRequest(spec: ToolSpec, args: Record<string, unknown>): Api
   const supplied = validateArguments(spec, args);
   let path = spec.path;
   const query: Record<string, string> = {};
+  const body: Record<string, unknown> = {};
 
   for (const param of spec.params) {
     if (!(param.name in supplied)) continue;
     const text = asQueryValue(supplied[param.name]);
     if (param.in === "path") path = path.replace(`{${param.name}}`, encodeURIComponent(text));
+    else if (param.in === "body") body[param.name] = supplied[param.name];
     else query[param.name] = text;
   }
 
@@ -126,7 +131,10 @@ export function buildRequest(spec: ToolSpec, args: Record<string, unknown>): Api
     }
   }
 
-  return { method: spec.method, path, query };
+  return { method: spec.method, path, query,
+    ...(Object.keys(body).length ? { body } : {}),
+    ...(spec.idempotency_key ? { headers: { "Idempotency-Key": randomUUID() } } : {}),
+  };
 }
 
 /** The JSON Schema an MCP client sees for a tool's arguments. */

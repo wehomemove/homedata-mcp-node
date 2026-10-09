@@ -2,10 +2,10 @@
   "schema_version": 1,
   "source": {
     "repository": "wehomemove/thor",
-    "commit": "63868e0f76536fcfc02936dedd45831e536c55cd",
+    "commit": "1e396e8309756f88ba36fce75be0d29d589aff91",
     "catalogue": "resources/js/Pages/Developer/Playground/Index.vue",
-    "catalogue_sha256": "12a2154a45b2280f28da3edca0bca1315d1184a74b628de515715d990e501c91",
-    "llms_full_api_surface_source_hash": "a9b4c23269a18452e3b4a718a41aed654bb8cfe41d8338fae2fdc88311a8eeea"
+    "catalogue_sha256": "0d14c743fec99010688a887a6685c4b1f8b829b61148b9146b9bc168b0661895",
+    "llms_full_api_surface_source_hash": "8e660fc7ae3a7ea28cb6adee5b5277ca7ed87f2170cf4e787ecc5f4f865501b9"
   },
   "rules": {
     "offered": "Playground ENDPOINTS entries with a path, not enterprise:true, not adminOnly:true",
@@ -14,28 +14,35 @@
   },
   "tools": [
     {
-      "name": "address_find",
-      "playground_id": "address-find",
-      "label": "Address Find",
+      "name": "address_match",
+      "playground_id": "address-match",
+      "label": "Address Match",
       "method": "GET",
-      "path": "/address/find/",
+      "path": "/address/match/",
       "params": [
         {
-          "name": "q",
+          "name": "address",
           "in": "query",
           "type": "string",
           "required": true,
-          "playground_hint": "Street address, postcode, or place name"
+          "playground_hint": "Submitted street address, not a search query"
+        },
+        {
+          "name": "postcode",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "playground_hint": "Postcode for the submitted address"
         }
       ],
       "tokens": {
-        "default": 2
+        "default": 5
       }
     },
     {
       "name": "property_discovery",
       "playground_id": "property-discovery",
-      "label": "Property — Discovery",
+      "label": "Property, Discovery",
       "method": "GET",
       "path": "/property/{uprn}/",
       "params": [
@@ -55,7 +62,7 @@
     {
       "name": "property_address",
       "playground_id": "property-address",
-      "label": "Property — Address tier",
+      "label": "Property, Address tier",
       "method": "GET",
       "path": "/property/{uprn}/address/",
       "params": [
@@ -75,7 +82,7 @@
     {
       "name": "property_base",
       "playground_id": "property-base",
-      "label": "Property — Base tier",
+      "label": "Property, Base tier",
       "method": "GET",
       "path": "/property/{uprn}/base/",
       "params": [
@@ -95,7 +102,7 @@
     {
       "name": "property_core",
       "playground_id": "property-core",
-      "label": "Property — Core tier",
+      "label": "Property, Core tier",
       "method": "GET",
       "path": "/property/{uprn}/core/",
       "params": [
@@ -115,7 +122,7 @@
     {
       "name": "property_complete",
       "playground_id": "property-complete",
-      "label": "Property — Complete tier",
+      "label": "Property, Complete tier",
       "method": "GET",
       "path": "/property/{uprn}/complete/",
       "params": [
@@ -135,7 +142,7 @@
     {
       "name": "property_custom",
       "playground_id": "property-custom",
-      "label": "Property — Custom (?with=…)",
+      "label": "Property, Custom (?with=…)",
       "method": "GET",
       "path": "/property/{uprn}/",
       "params": [
@@ -161,6 +168,7 @@
         "addons": {
           "address": 5,
           "rooms": 1,
+          "epc": 1,
           "lr_title": 1,
           "risks": 7,
           "council_tax": 3,
@@ -175,6 +183,70 @@
           "land": 1,
           "construction": 1
         }
+      }
+    },
+    {
+      "name": "property_sale_events",
+      "playground_id": "property-sale-events",
+      "label": "Sale Events",
+      "method": "GET",
+      "path": "/property_sale_events/",
+      "params": [
+        {
+          "name": "sale",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "pattern": "^\\d+$",
+          "playground_hint": "A sale ID, if you already hold one. For listing rows use the Listing UUID field below."
+        },
+        {
+          "name": "listing",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "alternative_to_previous": true,
+          "playground_hint": "Listing UUID from a /property_listings/ row's id field, equivalent to passing the sale ID."
+        },
+        {
+          "name": "event_type",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "enum": [
+            "Added",
+            "Added by another agent",
+            "Added by new agent",
+            "Reduced",
+            "Price Increased",
+            "Under offer",
+            "Sold STC",
+            "Sold STCM",
+            "Completed",
+            "Withdrawn",
+            "Sale Cancelled",
+            "Let agreed"
+          ],
+          "playground_hint": "Filter to a single event type, leave blank for all"
+        },
+        {
+          "name": "ordering",
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "enum": [
+            "-date",
+            "date",
+            "-price",
+            "price",
+            "event_type"
+          ],
+          "advanced": true,
+          "playground_hint": "-date newest first (default), date oldest first, -price highest first, price lowest first, event_type alphabetical"
+        }
+      ],
+      "tokens": {
+        "default": 20
       }
     },
     {
@@ -310,7 +382,7 @@
           "type": "string",
           "required": true,
           "pattern": "^\\d+$",
-          "playground_hint": "Unique Property Reference Number (12 digits) — must be a house, not a flat"
+          "playground_hint": "Unique Property Reference Number (12 digits), must be a house, not a flat"
         }
       ],
       "tokens": {
@@ -380,7 +452,7 @@
             "air_quality_today",
             "invasive_plants"
           ],
-          "playground_hint": "The screening band gives you a score; the flood layers below it give you the evidence — zones, history, defences and the 2080s outlook."
+          "playground_hint": "The screening band gives you a score; the flood layers below it give you the evidence: zones, history, defences and the 2080s outlook."
         },
         {
           "name": "uprn",
@@ -388,7 +460,7 @@
           "type": "string",
           "required": true,
           "pattern": "^\\d+$",
-          "playground_hint": "Property UPRN. Required — this endpoint returns 400 without it."
+          "playground_hint": "Property UPRN. Required: this endpoint returns 400 without it."
         }
       ],
       "tokens": {
@@ -416,7 +488,7 @@
           "in": "query",
           "type": "string",
           "required": true,
-          "playground_hint": "England only — try E1 6AN, SE1 7PB, LS1 1AA, or BS1 1AA"
+          "playground_hint": "England only, try E1 6AN, SE1 7PB, LS1 1AA, or BS1 1AA"
         }
       ],
       "tokens": {
@@ -493,7 +565,7 @@
           "type": "string",
           "required": true,
           "pattern": "^\\d+$",
-          "playground_hint": "UPRN of the property — use the UPRN finder above to look one up by address."
+          "playground_hint": "UPRN of the property, use the UPRN finder above to look one up by address."
         }
       ],
       "tokens": {
@@ -513,12 +585,32 @@
           "type": "string",
           "required": true,
           "pattern": "^\\d+$",
-          "playground_hint": "UPRN of the property — use the UPRN finder above to look one up by address."
+          "playground_hint": "UPRN of the property, use the UPRN finder above to look one up by address."
         }
       ],
       "tokens": {
         "default": 5
       }
+    },
+    {
+      "name": "listing_address",
+      "playground_id": "listing-address",
+      "label": "Unlock UPRN + Address",
+      "method": "POST",
+      "path": "/listing-address/",
+      "params": [
+        {
+          "name": "listing_id",
+          "in": "body",
+          "type": "string",
+          "required": true,
+          "playground_hint": "The id field from a Live Listings result."
+        }
+      ],
+      "tokens": {
+        "default": 20
+      },
+      "idempotency_key": true
     },
     {
       "name": "property_lr_titles",
@@ -571,7 +663,7 @@
           "in": "query",
           "type": "string",
           "required": false,
-          "playground_hint": "UK postcode — use this OR lat+lng below"
+          "playground_hint": "UK postcode, use this OR lat+lng below"
         },
         {
           "name": "lat",
@@ -579,7 +671,7 @@
           "type": "string",
           "required": false,
           "alternative_to_previous": true,
-          "playground_hint": "Latitude (WGS84) — alternative to postcode"
+          "playground_hint": "Latitude (WGS84), alternative to postcode"
         },
         {
           "name": "lng",
@@ -588,7 +680,7 @@
           "required": false,
           "alternative_to_previous": true,
           "paired_with": "lat",
-          "playground_hint": "Longitude (WGS84) — paired with latitude"
+          "playground_hint": "Longitude (WGS84), paired with latitude"
         },
         {
           "name": "radius_km",
@@ -596,7 +688,7 @@
           "type": "string",
           "required": false,
           "advanced": true,
-          "playground_hint": "Search radius in kilometres (default: 0.5, max: 5)"
+          "playground_hint": "Default 0.5km, up to 5km. Larger values are rejected here; the API itself reduces them to 5km."
         },
         {
           "name": "days",
@@ -605,7 +697,7 @@
           "required": false,
           "pattern": "^\\d+$",
           "advanced": true,
-          "playground_hint": "Applications from last N days (default: 90, max: 365)"
+          "playground_hint": "Applications from last N days. Default 90. Values above 365 are reduced to 365."
         },
         {
           "name": "type",
@@ -640,7 +732,7 @@
           "in": "query",
           "type": "string",
           "required": false,
-          "playground_hint": "UK postcode — use this OR lat+lng below"
+          "playground_hint": "UK postcode, use this OR lat+lng below"
         },
         {
           "name": "lat",
@@ -648,7 +740,7 @@
           "type": "string",
           "required": false,
           "alternative_to_previous": true,
-          "playground_hint": "Latitude (WGS84) — alternative to postcode"
+          "playground_hint": "Latitude (WGS84), alternative to postcode"
         },
         {
           "name": "lng",
@@ -657,7 +749,7 @@
           "required": false,
           "alternative_to_previous": true,
           "paired_with": "lat",
-          "playground_hint": "Longitude (WGS84) — paired with latitude"
+          "playground_hint": "Longitude (WGS84), paired with latitude"
         },
         {
           "name": "date",
@@ -665,7 +757,7 @@
           "type": "string",
           "required": false,
           "advanced": true,
-          "playground_hint": "YYYY-MM format — defaults to latest available"
+          "playground_hint": "YYYY-MM format, defaults to latest available"
         },
         {
           "name": "category",
@@ -750,14 +842,14 @@
           "in": "query",
           "type": "string",
           "required": true,
-          "playground_hint": "UK postcode (England only — e.g. SW1A 2AA, E1 6AN)"
+          "playground_hint": "UK postcode (England only, e.g. SW1A 2AA, E1 6AN)"
         },
         {
           "name": "radius_km",
           "in": "query",
           "type": "string",
           "required": false,
-          "playground_hint": "Search radius in kilometres — up to 10 (default: 3)"
+          "playground_hint": "Default 3km, up to 10km. Larger values are rejected here; the API itself reduces them to 10km."
         },
         {
           "name": "phase",
@@ -772,7 +864,7 @@
             "16 plus"
           ],
           "advanced": true,
-          "playground_hint": "Filter by education phase — leave blank for all"
+          "playground_hint": "Filter by education phase, leave blank for all"
         },
         {
           "name": "ofsted",
@@ -786,7 +878,7 @@
             "Inadequate"
           ],
           "advanced": true,
-          "playground_hint": "Filter by Ofsted inspection rating — leave blank for all"
+          "playground_hint": "Filter by Ofsted inspection rating, leave blank for all"
         },
         {
           "name": "limit",
@@ -794,7 +886,7 @@
           "type": "number",
           "required": false,
           "advanced": true,
-          "playground_hint": "Max results — 1 to 50 (default: 20)"
+          "playground_hint": "Default 20, up to 50. Larger values are rejected here; the API itself reduces them to 50."
         }
       ],
       "tokens": {
@@ -813,7 +905,7 @@
           "in": "query",
           "type": "string",
           "required": true,
-          "playground_hint": "UK postcode (e.g. SW1A 2AA or SW1A2AA — spaces optional)"
+          "playground_hint": "UK postcode (e.g. SW1A 2AA or SW1A2AA: spaces optional)"
         }
       ],
       "tokens": {
@@ -840,7 +932,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -867,7 +959,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -894,7 +986,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -921,7 +1013,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -948,7 +1040,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -975,7 +1067,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -1002,7 +1094,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -1029,7 +1121,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -1056,7 +1148,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -1083,7 +1175,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -1110,7 +1202,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -1137,7 +1229,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -1164,7 +1256,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -1191,7 +1283,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -1218,7 +1310,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 8km, max 25km."
+          "playground_hint": "Default 8km, up to 25km. Larger values are rejected here; the API itself reduces them to 25km."
         }
       ],
       "tokens": {
@@ -1245,7 +1337,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 1km, max 10km."
+          "playground_hint": "Default 1km, up to 10km. Larger values are rejected here; the API itself reduces them to 10km."
         }
       ],
       "tokens": {
@@ -1272,7 +1364,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 1km, max 10km."
+          "playground_hint": "Default 1km, up to 10km. Larger values are rejected here; the API itself reduces them to 10km."
         }
       ],
       "tokens": {
@@ -1299,7 +1391,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 1km, max 10km."
+          "playground_hint": "Default 1km, up to 10km. Larger values are rejected here; the API itself reduces them to 10km."
         }
       ],
       "tokens": {
@@ -1326,7 +1418,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 1km, max 10km."
+          "playground_hint": "Default 1km, up to 10km. Larger values are rejected here; the API itself reduces them to 10km."
         }
       ],
       "tokens": {
@@ -1353,7 +1445,7 @@
           "in": "query",
           "type": "number",
           "required": false,
-          "playground_hint": "Default 1km, max 10km."
+          "playground_hint": "Default 1km, up to 10km. Larger values are rejected here; the API itself reduces them to 10km."
         }
       ],
       "tokens": {
@@ -1372,7 +1464,7 @@
           "in": "query",
           "type": "string",
           "required": true,
-          "playground_hint": "UK postcode — resolves to MSOA area"
+          "playground_hint": "UK postcode, resolves to MSOA area"
         }
       ],
       "tokens": {
@@ -1391,7 +1483,7 @@
           "in": "query",
           "type": "string",
           "required": true,
-          "playground_hint": "UK postcode — radius is 1km by default."
+          "playground_hint": "UK postcode, radius is 1km by default."
         },
         {
           "name": "radius_km",
@@ -1399,7 +1491,7 @@
           "type": "number",
           "required": false,
           "advanced": true,
-          "playground_hint": "Search radius in km. Default 1, max 5."
+          "playground_hint": "Default 1km, up to 5km. Larger values are rejected here; the API itself reduces them to 5km."
         },
         {
           "name": "grade",
@@ -1412,7 +1504,7 @@
             "II"
           ],
           "advanced": true,
-          "playground_hint": "Filter to a single grade — leave blank for all."
+          "playground_hint": "Filter to a single grade, leave blank for all."
         }
       ],
       "tokens": {
@@ -1480,7 +1572,7 @@
           "in": "query",
           "type": "number",
           "required": true,
-          "playground_hint": "Non-negative integer — what you put down up-front."
+          "playground_hint": "Non-negative integer, what you put down up-front."
         },
         {
           "name": "rate",
@@ -1522,17 +1614,13 @@
       "billable": false,
       "http_requests": [],
       "params": [],
-      "purpose": "Reports whether HOMEDATA_API_KEY is set and active. TARGET contract: must not spend tokens. As of 0.4.0 it calls /address/find/ (2 tokens); T2 decides how to meet the contract.",
+      "purpose": "Reports whether HOMEDATA_API_KEY is configured locally. Makes no API call and spends no tokens.",
       "stub_description": "Check whether a Homedata API key is configured for this server and what to do next if it is not."
     }
   ],
   "excluded": [
     {
       "playground_id": "property-listings",
-      "reason": "enterprise"
-    },
-    {
-      "playground_id": "property-sale-events",
       "reason": "enterprise"
     },
     {
@@ -1550,10 +1638,6 @@
     },
     {
       "playground_id": "live-listings",
-      "reason": "enterprise"
-    },
-    {
-      "playground_id": "listing-address",
       "reason": "enterprise"
     },
     {

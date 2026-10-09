@@ -22,7 +22,7 @@ import { buildServer } from '../dist/server.js';
 
 const OUT = resolve(process.argv[2] ?? 'parity-out');
 const SAMPLE_VALUES = {
-    uprn: '100023336956', postcode: 'SW1A 2AA', outcode: 'SW1A', q: '10 Downing Street',
+    uprn: '100023336956', postcode: 'SW1A 2AA', outcode: 'SW1A', address: '10 Downing Street', q: '10 Downing Street',
 };
 
 const sampleArguments = (spec) => Object.fromEntries(spec.params.map((param, index) => {
@@ -42,6 +42,8 @@ const fetchImpl = async (input, init) => {
         // on the wire, which src/test/server.test.ts asserts separately.
         path: decodeURIComponent(url.pathname),
         query: Object.fromEntries(url.searchParams.entries()),
+        ...(init?.body ? { body: JSON.parse(init.body) } : {}),
+        ...(new Headers(init?.headers).get("Idempotency-Key") ? { idempotency_key: new Headers(init.headers).get("Idempotency-Key") } : {}),
     });
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 };

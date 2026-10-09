@@ -1,10 +1,10 @@
 {
   "repository": "wehomemove/homedata-mcp",
-  "ref": "6fd6e6cb238dadb5dc1e7bf5b70eab85b1cf5f79",
-  "fetched_from": "https://raw.githubusercontent.com/wehomemove/homedata-mcp/6fd6e6cb238dadb5dc1e7bf5b70eab85b1cf5f79/homedata_mcp/manifest/<file>",
+  "ref": "3d8e60961c0f320296ee5a6ef94af998aa0fe94f",
+  "fetched_from": "https://raw.githubusercontent.com/wehomemove/homedata-mcp/3d8e60961c0f320296ee5a6ef94af998aa0fe94f/homedata_mcp/manifest/<file>",
   "files": {
-    "tools.json": "dddc5bc455b8459c183a92d571b89e19be01c5d25b257d4a5f118e54fd474bf3",
-    "descriptions.json": "d014be3d0802b9afb5ed729f77341f79043952e1881462bfabf7d0b709d92f81",
-    "param_descriptions.json": "1178430d1cc4ea71b1c52e3cf09a9df39f659ea57bc3efa4c92265cf6ac1d0f4"
+    "tools.json": "a42b92d4663779a3704b9f6d291a0d6e56f2c3658dfe190102352c0b91cbd9b8",
+    "descriptions.json": "aa5b49d6c82dd651560cf71df43d84d74bc086295f7f699e9b839007a7ca4e03",
+    "param_descriptions.json": "b7004794bc486ece0c009df503dbe1f111710df2da0930d060646c0a9a45885c"
   }
 }
