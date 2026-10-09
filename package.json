@@ -14,6 +14,7 @@
     "dist",
     "!dist/home",
     "!dist/test/home*",
+    "!dist/test/widget-dom.test*",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
