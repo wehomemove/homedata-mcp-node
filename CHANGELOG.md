@@ -5,7 +5,7 @@ All notable changes to `homedata-mcp` (Node) will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - unreleased
+## [1.0.0] - 2026-10-09
 
 A rebuild. The tools are now exactly the self-serve endpoints of the Homedata
 Developer Playground: 58 data tools plus two signup helpers, built from a
