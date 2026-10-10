@@ -43,9 +43,15 @@ jobs:
       # the exact minimum from evidence we hold, so the release run records what
       # it actually used; if a publish ever fails on version grounds the log
       # answers it instead of the next person re-deriving it.
+      #
+      # Pinned to the npm 11 line, not @latest. The first v1.0.0 run (10 Oct
+      # 2026) installed npm 12.2.0, which requires node ^22.22.2 || ^24.15.0
+      # || >=26 and refused node 20 with EBADENGINE, so nothing published.
+      # npm 11 declares node ^20.17.0 || >=22.9.0; 11.5.1 is the floor for
+      # trusted publishing. Moving to npm 12 means moving Node first.
       - name: Upgrade npm for trusted publishing
         run: |
-          npm install -g npm@latest
+          npm install -g "npm@>=11.5.1 <12"
           echo "npm $(npm --version) on node $(node --version)"
 
       # NO NODE_AUTH_TOKEN. With trusted publishing the identity comes from the
