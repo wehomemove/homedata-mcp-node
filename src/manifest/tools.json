@@ -2,9 +2,9 @@
   "schema_version": 1,
   "source": {
     "repository": "wehomemove/thor",
-    "commit": "1e396e8309756f88ba36fce75be0d29d589aff91",
+    "commit": "c321119b67043f58ac25a22ecd771164a2e0a37f",
     "catalogue": "resources/js/Pages/Developer/Playground/Index.vue",
-    "catalogue_sha256": "0d14c743fec99010688a887a6685c4b1f8b829b61148b9146b9bc168b0661895",
+    "catalogue_sha256": "d62c4997295bf3ac5130ffa6f8abc75fafa4f9430d0cd5a2d68281c1819f2c39",
     "llms_full_api_surface_source_hash": "8e660fc7ae3a7ea28cb6adee5b5277ca7ed87f2170cf4e787ecc5f4f865501b9"
   },
   "rules": {
