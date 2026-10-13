@@ -11,7 +11,7 @@ import { HOME_WIDGET_SCRIPT } from "../home/widget.js";
  */
 type Camera = { center: { lng: number; lat: number }; zoom: number; pitch: number; bearing: number };
 
-function widget(callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>, meta?: Record<string, unknown>, imageOf?: Record<string, string>) {
+function widget(callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>, meta?: Record<string, unknown>, imageOf?: Record<string, string>, brokenImages = false) {
   const dom = new JSDOM(
     '<!doctype html><html><body><main id="root" class="shell"><div class="empty">Finding beautiful homes…</div></main>' +
     '<div id="home-widget-config" hidden data-check-in-origin="" data-view-id="" data-mapbox-token="pk.test"></div></body></html>',
@@ -43,6 +43,11 @@ function widget(callTool: (name: string, args: Record<string, unknown>) => Promi
   window["matchMedia"] = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   window["openai"] = { callTool: (name: string, args: Record<string, unknown>) => { calls.push([name, args]); return callTool(name, args); } };
   Object.defineProperty(dom.window.HTMLElement.prototype, "clientWidth", { get: () => 600 });
+  if (brokenImages) {
+    // Images that finished loading and failed before the widget bound them: complete, with no pixels.
+    Object.defineProperty(dom.window.HTMLImageElement.prototype, "complete", { get: () => true });
+    Object.defineProperty(dom.window.HTMLImageElement.prototype, "naturalWidth", { get: () => 0 });
+  }
   const scrolls: Array<{ cls: string; left: number }> = [];
   (dom.window.HTMLElement.prototype as any).scrollTo = function (this: HTMLElement, o: { left: number }) { scrolls.push({ cls: this.className, left: o.left }); this.scrollLeft = o.left; };
   dom.window.eval(HOME_WIDGET_SCRIPT);
@@ -199,4 +204,24 @@ test("without the server's photos the sheet still starts on the card's photo", a
   await w.settle();
   assert.equal(w.sheet()!.querySelector(".hero img")!.getAttribute("src"), at(lead), "the full-size version of the card's photo leads");
   assert.equal(w.sheet()!.querySelector(".counter")?.textContent, "1 / 3", "the thumbnail is not counted twice");
+});
+
+test("a photo that will not load shows 'Photo unavailable' instead of shimmering forever", async () => {
+  const w = widget(async () => ({ structuredContent: { id: "home-a" } }));
+  const media = w.card(0).querySelector(".media")!;
+  const first = media.querySelector("img.photo")!;
+  first.dispatchEvent(new w.dom.window.Event("error"));
+  assert.ok(media.classList.contains("no-photo"), "the card stops shimmering and says the photo is unavailable");
+  assert.ok(first.classList.contains("failed"));
+  (w.card(0).querySelector("[data-open]") as HTMLButtonElement).click();
+  await w.settle();
+  const slideImg = w.sheet()!.querySelector(".hero img")!;
+  slideImg.dispatchEvent(new w.dom.window.Event("error"));
+  assert.ok(slideImg.parentElement!.classList.contains("failed"), "a gallery photo that fails is labelled, not left blank");
+});
+
+test("a card photo that failed before the widget bound it is still labelled", () => {
+  const w = widget(async () => ({ structuredContent: {} }), undefined, undefined, true);
+  const media = w.card(1).querySelector(".media")!;
+  assert.ok(media.classList.contains("no-photo"), "no load or error event will come, so it must not wait for one");
 });

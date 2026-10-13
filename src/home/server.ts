@@ -249,7 +249,8 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
     const assetDomains = [assetOrigin];
     const csp = {
       connectDomains: mapboxDomains,
-      resourceDomains: ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", ...assetDomains, ...mapboxDomains],
+      // home.co.uk serves listing photos from cdn. and, since October 2026, image-cache-1. and image-cache-2.
+      resourceDomains: ["https://home.co.uk", "https://cdn.home.co.uk", "https://image-cache-1.home.co.uk", "https://image-cache-2.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", ...assetDomains, ...mapboxDomains],
     };
     const { scriptPath, cssPath, scriptIntegrity, cssIntegrity } = homeWidgetAssetValues();
     const attribute = (value: string) => value.replace(/[&"<>]/g, (character) => ({ "&": "&amp;", '"': "&quot;", "<": "&lt;", ">": "&gt;" })[character]!);

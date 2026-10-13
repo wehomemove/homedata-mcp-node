@@ -681,7 +681,7 @@ test("Home publishes a v13 MCP Apps resource with only external script and style
     assert.doesNotMatch(HOME_WIDGET_CSS, /\.card\{flex-basis:/);
     const ui = content._meta?.["ui"] as { csp?: { connectDomains?: string[]; resourceDomains?: string[] } };
     assert.deepEqual(ui.csp?.connectDomains, []);
-    assert.deepEqual(ui.csp?.resourceDomains, ["https://home.co.uk", "https://cdn.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://mcp.home.co.uk"]);
+    assert.deepEqual(ui.csp?.resourceDomains, ["https://home.co.uk", "https://cdn.home.co.uk", "https://image-cache-1.home.co.uk", "https://image-cache-2.home.co.uk", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://mcp.home.co.uk"]);
     const pageCheckIn = content.text?.match(/widget-check-in\?stage=page_parsed&amp;host=mcp\.home\.co\.uk&amp;view=([a-f0-9]{24})/);
     assert.ok(pageCheckIn, "plain HTML check-in has an anonymous random view id");
     assert.ok((content.text?.match(new RegExp(pageCheckIn[1], "g")) ?? []).length >= 2, "script and HTML share the view id");
