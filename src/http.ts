@@ -103,6 +103,9 @@ export function checkAppsChallenge(raw: string | undefined): string | undefined 
   return raw;
 }
 
+/** What the model is told when a user reaches the call cap: say Homedata is busy, and do not retry straight away. */
+export const CALL_LIMIT_TEXT = "Homedata has reached its request limit for the moment. Tell the user that Homedata is busy right now and to try again in a minute. Do not retry straight away.";
+
 export function checkCallsPerMinute(raw: string | undefined): number {
   if (raw === undefined || raw === "") return 30;
   const n = Number(raw);
@@ -350,6 +353,11 @@ export function createHttpHandler(opts: HttpOptions) {
           } catch {
             // Reporting never changes the answer.
           }
+        }
+        // A single call gets an ordinary tool error the model can relay: ChatGPT's desktop
+        // client waits on an HTTP 429 instead of answering. Batches keep the 429.
+        if (!Array.isArray(body) && (body as { method?: unknown })?.method === "tools/call") {
+          return sendJson(res, 200, { jsonrpc: "2.0", id: (body as { id?: unknown }).id ?? null, result: { content: [{ type: "text", text: CALL_LIMIT_TEXT }], structuredContent: { available: false, limit_reached: true, reason: CALL_LIMIT_TEXT }, isError: true } }, { "Cache-Control": "no-store" });
         }
         return sendJson(res, 429, rpcError("Too many requests. Try again in a minute."), { "Retry-After": "60" });
       }
