@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { HomedataClient } from "../client.js";
+import { HomedataClient, errorGuidance } from "../client.js";
 import { staticTools, tools } from "../manifest.js";
 import { buildServer } from "../server.js";
 
@@ -39,6 +39,12 @@ async function connect(opts: { response?: () => Response; withKey?: boolean } = 
   await Promise.all([buildServer(homedata).connect(a), client.connect(b)]);
   return { client, sent };
 }
+
+test("Homedata refusals and outages tell the model what to say; validation errors keep only their detail", () => {
+  assert.match(String(errorGuidance(429)), /Tell the user Homedata is busy.*Do not retry straight away/);
+  assert.match(String(errorGuidance(503)), /try again shortly.*Do not invent/);
+  for (const status of [400, 401, 404, 422]) assert.equal(errorGuidance(status), undefined, String(status));
+});
 
 test("the server offers exactly the manifest", async () => {
   const { client } = await connect();
@@ -98,7 +104,8 @@ test("the stdio server passes a low-balance refusal through as the API sent it",
   });
   const result = await client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
   assert.equal(result.isError, true);
-  assert.deepEqual(result.structuredContent, { error: "api_error", status_code: 402, detail: body });
+  assert.deepEqual(result.structuredContent, { error: "api_error", status_code: 402, message: errorGuidance(402), detail: body });
+  assert.match(String(errorGuidance(402)), /Tell the user their Homedata balance needs topping up/);
   await client.close();
 });
 
