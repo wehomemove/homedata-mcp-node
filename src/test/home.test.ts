@@ -1477,6 +1477,26 @@ test("area facts are cached per postcode, whichever tool asked first", async () 
   } finally { await stop(); }
 });
 
+test("caps count per ChatGPT user, not per OpenAI address", async () => {
+  const { base, stop } = await start({}, { callsPerMinute: 1, clientIpHeader: "x-test-client-ip" });
+  const rpc = (id: number, subject?: string) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "search_homes", arguments: { location: "Bath", listing_type: "sale" }, ...(subject ? { _meta: { "openai/subject": subject } } : {}) } });
+  const post = async (body: unknown, ip: string) => {
+    const response = await fetch(base + "/mcp", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "X-Test-Client-IP": ip }, body: JSON.stringify(body) });
+    const text = await response.text();
+    return /"limit_reached":true/.test(text) ? "limited" : "served";
+  };
+  try {
+    // Two users behind one OpenAI address each get their own allowance.
+    assert.equal(await post(rpc(1, "user-a"), "9.129.58.19"), "served");
+    assert.equal(await post(rpc(2, "user-b"), "9.129.58.19"), "served", "another user on the same OpenAI address is not limited");
+    // One user arriving from two addresses is still one user.
+    assert.equal(await post(rpc(3, "user-a"), "104.210.139.239"), "limited", "a user's allowance follows the user, not the address");
+    // Without a subject the address is the bucket.
+    assert.equal(await post(rpc(4), "192.0.2.50"), "served");
+    assert.equal(await post(rpc(5), "192.0.2.50"), "limited");
+  } finally { await stop(); }
+});
+
 test("cached homes do not count towards the per-caller enrichment cap", async () => {
   const { base, stop } = await start({}, { enrichmentsPerMinute: 1 });
   const rpc = (id: number, name: string, args: Record<string, unknown>) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
