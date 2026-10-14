@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { VERSION } from "../index.js";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -1379,7 +1380,7 @@ test("health is open, non-POST MCP is refused and upstream outages are distinct"
   const { base, mcp, stop } = await start({ status: { [`/api/property-details/${ID}`]: 503 } });
   try {
     const empty = { hits: 0, misses: 0, entries: 0 };
-    assert.deepEqual(await (await fetch(base + "/healthz")).json(), { ok: true, service: "home", version: "1.0.0", enrichment_cache: { homes: empty, areas: empty } });
+    assert.deepEqual(await (await fetch(base + "/healthz")).json(), { ok: true, service: "home", version: VERSION, enrichment_cache: { homes: empty, areas: empty } });
     assert.equal((await fetch(base + "/mcp")).status, 405);
     const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
     assert.deepEqual(answer.structuredContent, { available: false, reason: UPSTREAM_TEXT });

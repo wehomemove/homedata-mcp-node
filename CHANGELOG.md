@@ -5,6 +5,16 @@ All notable changes to `homedata-mcp` (Node) will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-10-14
+
+### Changed
+- When the Homedata API refuses or does not answer, the error body now carries a
+  `message` telling the assistant what to tell the user: a rate limit (429) says
+  Homedata is busy and to try again in a minute without retrying straight away;
+  a low balance (402) says the balance needs topping up; an outage, timeout or
+  network failure says to try again shortly and not to invent data. Validation
+  errors (400, 401, 404, 422) are unchanged. Same wording as the Python package 1.0.1.
+
 ## [1.0.0] - 2026-10-09
 
 A rebuild. The tools are now exactly the self-serve endpoints of the Homedata
