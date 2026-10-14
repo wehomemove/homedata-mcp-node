@@ -869,6 +869,9 @@ test("a wish matches only when the listing states it, and its evidence is the li
     ["home_office", "The property boasts three generous bedrooms, a separate study and two reception rooms.", "The property boasts three generous bedrooms, a separate study and two reception rooms"],
     ["no_chain", "This two-bed flat is chain free and ready for its next chapter.", "This two-bed flat is chain free and ready for its next chapter"],
     ["no_chain", "Sold with vacant possession", "Sold with vacant possession"],
+    ["pet_friendly", "Available now, unfurnished, pets considered.", "Available now, unfurnished, pets considered"],
+    ["pet_friendly", "A pet-friendly flat with a balcony.", "A pet-friendly flat with a balcony"],
+    ["pet_friendly", "One small dog will be considered by the landlord.", "One small dog will be considered by the landlord"],
   ];
   for (const [wish, text, evidence] of stated) {
     const found = matchWishes(text, [wish]);
@@ -896,6 +899,10 @@ test("a wish matches only when the listing states it, and its evidence is the li
     ["no_chain", "We can take your property in as part exchange, giving you a guaranteed buyer and a quicker, chain-free move."],
     // Opposite claims: the chain phrases are negated before or after, never evidence.
     ["no_chain", "This sale is not chain-free."],
+    ["pet_friendly", "Sorry, no pets allowed."],
+    ["pet_friendly", "Pets are not permitted at this property."],
+    ["pet_friendly", "Pets not considered. No smokers."],
+    ["pet_friendly", "The landlord does not accept pets."],
     ["no_chain", "Please note the property is not chain free as the vendors are buying."],
     ["no_chain", "Vacant possession is not available."],
     ["no_chain", "Vacant possession will not be given on completion."],
@@ -1386,8 +1393,14 @@ test("limits are per caller, count every batch call and cap enrichment units sep
     // A different caller has a separate bucket.
     assert.equal((await post(rpc(3, "search_homes", { location: "Bath", listing_type: "sale" }), "192.0.2.2")).status, 200);
     assert.equal((await post(rpc(4, "search_homes", { location: "Bath", listing_type: "sale" }), "192.0.2.2")).status, 429);
-    // Comparison consumes one enrichment unit per home, not one per tool call.
-    assert.equal((await post(rpc(5, "compare_homes", { listing_ids: [ID, ID2] }), "192.0.2.3")).status, 429);
+    // Comparison consumes one enrichment unit per home, not one per tool call. Over the
+    // enrichment cap a single call is answered as a tool error, never an HTTP 429.
+    const capped = await post(rpc(5, "compare_homes", { listing_ids: [ID, ID2] }), "192.0.2.3");
+    assert.equal(capped.status, 200);
+    const cappedBody = await capped.json() as { id: number; result: { isError: boolean; content: Array<{ text: string }> } };
+    assert.equal(cappedBody.id, 5);
+    assert.equal(cappedBody.result.isError, true);
+    assert.match(cappedBody.result.content[0]!.text, /Wait a minute.*search_homes with wishes/);
   } finally { await stop(); }
 });
 
@@ -1463,9 +1476,10 @@ test("cached homes do not count towards the per-caller enrichment cap", async ()
   try {
     assert.equal((await post(rpc(1, "get_home", { listing_id: ID }))).status, 200);
     assert.equal((await post(rpc(2, "get_home", { listing_id: ID }))).status, 200, "a cached home is free");
-    assert.equal((await post(rpc(3, "get_home", { listing_id: ID2 }))).status, 429, "an uncached home still needs a unit");
+    const isCapped = async (response: Response) => response.status === 200 && ((await response.json()) as { result?: { isError?: boolean } }).result?.isError === true;
+    assert.ok(await isCapped(await post(rpc(3, "get_home", { listing_id: ID2 }))), "an uncached home still needs a unit");
     // A comparison is charged only for its uncached homes.
-    assert.equal((await post(rpc(4, "compare_homes", { listing_ids: [ID, ID2] }))).status, 429);
+    assert.ok(await isCapped(await post(rpc(4, "compare_homes", { listing_ids: [ID, ID2] }))));
   } finally { await stop(); }
 });
 
@@ -1490,7 +1504,9 @@ for (const reason of ["no_match", "multiple_matches"]) {
       }
       assert.equal(requests.filter((url) => url.pathname === "/address/match/").length, 1);
       assert.deepEqual(logs, [], "a normal non-match is not logged as an outage");
-      assert.equal((await post(3, ID2)).status, 429, "a new listing still needs an enrichment unit");
+      const capped = await post(3, ID2);
+      assert.equal(capped.status, 200);
+      assert.equal(((await capped.json()) as { result?: { isError?: boolean } }).result?.isError, true, "a new listing still needs an enrichment unit");
     } finally { await stop(); }
   });
 }

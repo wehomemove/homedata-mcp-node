@@ -170,8 +170,19 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
     const calls = toolCalls(body);
     const caller = callerAddress(req, options.clientIpHeader);
     const enrichmentCount = calls.reduce((total, call) => total + enrichmentUnits(call, options.client), 0);
-    if ((calls.length && !callLimits.take(caller, calls.length)) ||
-        (enrichmentCount && !enrichmentLimits.take(caller, enrichmentCount))) {
+    if (calls.length && !callLimits.take(caller, calls.length)) {
+      return void send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" });
+    }
+    if (enrichmentCount && !enrichmentLimits.take(caller, enrichmentCount)) {
+      // The cap on new homes a minute is a spending limit, not an attack. ChatGPT's desktop
+      // client waits on an HTTP 429 instead of answering, so a single call gets an ordinary
+      // tool error it can act on: the model changes course and the widget offers Try again.
+      const single = !Array.isArray(body) && (body as { method?: unknown })?.method === "tools/call";
+      if (single) {
+        const text = "Home can open a few new homes a minute and that many were just opened. Wait a minute before opening more, "
+          + "or use search_homes with wishes to check what listings say in a single call.";
+        return void send(res, 200, { jsonrpc: "2.0", id: (body as { id?: unknown }).id ?? null, result: { content: [{ type: "text", text }], structuredContent: { available: false, reason: text }, isError: true } });
+      }
       return void send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" });
     }
     // When atlas refuses the caller's token, the tool result carries the challenge
