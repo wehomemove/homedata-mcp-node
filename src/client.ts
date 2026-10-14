@@ -88,7 +88,8 @@ export class HomedataClient {
         body = text;
       }
       if (!response.ok) {
-        body = { error: "api_error", status_code: response.status, detail: body };
+        const message = errorGuidance(response.status);
+        body = { error: "api_error", status_code: response.status, ...(message ? { message } : {}), detail: body };
       }
       return { statusCode: response.status, body, headers: response.headers };
     } catch (err) {
@@ -98,12 +99,24 @@ export class HomedataClient {
         // never reached the API must not read as success.
         statusCode: timedOut ? 504 : 502,
         body: timedOut
-          ? { error: "timeout", status_code: 504, detail: `Homedata API did not respond within ${this.timeoutMs}ms` }
-          : { error: "network_error", status_code: 502, detail: String(err) },
+          ? { error: "timeout", status_code: 504, message: errorGuidance(504), detail: `Homedata API did not respond within ${this.timeoutMs}ms` }
+          : { error: "network_error", status_code: 502, message: errorGuidance(502), detail: String(err) },
         headers: new Headers(),
       };
     } finally {
       clearTimeout(timer);
     }
   }
+}
+
+/**
+ * What the model should tell the user when Homedata refuses or does not answer, so a
+ * limit or an outage reads as a plain sentence instead of a raw error. Validation errors
+ * (400, 404, 422) carry their own detail and get no message.
+ */
+export function errorGuidance(status: number): string | undefined {
+  if (status === 429) return "Homedata's rate limit for this API key has been reached. Tell the user Homedata is busy right now and to try again in a minute. Do not retry straight away.";
+  if (status === 402) return "This Homedata account does not have enough balance for this call. Tell the user their Homedata balance needs topping up before it can run.";
+  if (status >= 500) return "Homedata could not answer just now. Tell the user to try again shortly. Do not invent the missing data.";
+  return undefined;
 }
