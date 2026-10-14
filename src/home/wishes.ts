@@ -7,7 +7,7 @@
  * false one is not.
  */
 
-export const WISHES = ["garden", "off_road_parking", "quiet_street", "period_features", "open_plan", "home_office", "no_chain"] as const;
+export const WISHES = ["garden", "off_road_parking", "quiet_street", "period_features", "open_plan", "home_office", "no_chain", "pet_friendly"] as const;
 export type Wish = typeof WISHES[number];
 
 export interface WishMatch { wish: Wish; evidence: string }
@@ -68,6 +68,12 @@ const PATTERNS: Record<Wish, RegExp[]> = {
     /\bno (?:onward |forward |upward |further )?chain\b/gi,
     /\bchain[- ]free\b/gi,
     /\bvacant possession\b/gi,
+  ],
+  // Only a listing that says pets may come: "no pets" and "pets not considered" never match.
+  pet_friendly: [
+    /\bpets? (?:are |will be )?(?:considered|welcome|welcomed|allowed|accepted|permitted|negotiable|on request)\b/gi,
+    /\bpet[- ]friendly\b/gi,
+    /\b(?:small |one |a |well[- ]behaved )?(?:dogs?|cats?) (?:are |will be )?(?:considered|welcome|allowed|accepted|permitted)\b/gi,
   ],
 };
 
