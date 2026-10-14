@@ -1,6 +1,6 @@
 {
   "name": "homedata-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server and CLI for the Homedata UK property data API: addresses and UPRNs, EPC, council tax, planning, environmental risk, schools, broadband and more.",
   "type": "module",
   "bin": {

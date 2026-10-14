@@ -12,4 +12,4 @@ export { MANIFEST, descriptionFor, paramTextFor, staticTools, tools } from "./ma
 export type { Manifest, ToolSpec } from "./manifest.js";
 export { buildServer } from "./server.js";
 
-export const VERSION = "1.0.0";
+export const VERSION = "1.0.1";
