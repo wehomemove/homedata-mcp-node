@@ -52,6 +52,22 @@ async function read(req: IncomingMessage): Promise<unknown> {
 
 type ToolCall = { name: unknown; arguments: unknown };
 
+/**
+ * Who the caps count against. ChatGPT on the web and phones calls from a small pool of
+ * OpenAI addresses, so an IP bucket would be shared by every user behind one of them.
+ * Each tool call carries _meta["openai/subject"], an anonymised user id OpenAI sends "for
+ * the purposes of rate limiting", so that is the bucket when present; the address is the
+ * fallback for clients that do not send it.
+ */
+export function callerKey(body: unknown, address: string): string {
+  for (const message of Array.isArray(body) ? body : [body]) {
+    const meta = (message as { params?: { _meta?: Record<string, unknown> } })?.params?._meta;
+    const subject = meta?.["openai/subject"];
+    if (typeof subject === "string" && subject.trim() && subject.length <= 256) return `subject:${subject.trim()}`;
+  }
+  return `address:${address}`;
+}
+
 function toolCalls(body: unknown): ToolCall[] {
   return (Array.isArray(body) ? body : [body])
     .filter((message) => (message as { method?: unknown })?.method === "tools/call")
@@ -172,7 +188,7 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
     let body: unknown;
     try { body = await read(req); } catch { return void send(res, 400, { jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null }); }
     const calls = toolCalls(body);
-    const caller = callerAddress(req, options.clientIpHeader);
+    const caller = callerKey(body, callerAddress(req, options.clientIpHeader));
     const enrichmentCount = calls.reduce((total, call) => total + enrichmentUnits(call, options.client), 0);
     // Over a cap, a single tools/call gets an ordinary tool error that tells the model what to
     // say: ChatGPT's desktop client waits on an HTTP 429 instead of answering, so the chat sits
