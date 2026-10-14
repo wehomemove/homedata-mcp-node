@@ -187,6 +187,9 @@ function accountTools() {
   });
 }
 
+/** What the model is told to say when home.co.uk, Homedata or Mapbox does not answer. */
+export const UPSTREAM_TEXT = "Home could not get this just now. Tell the user Home could not fetch it at the moment and to try again shortly. Do not invent the missing details.";
+
 function result(body: unknown, isError = false, meta?: Record<string, unknown>): CallToolResult {
   const structuredContent = body !== null && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : { data: body };
   return { content: [{ type: "text", text: JSON.stringify(body, null, 2) }], structuredContent, ...(isError ? { isError: true } : {}), ...(meta ? { _meta: meta } : {}) };
@@ -329,7 +332,7 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
       return result({ error: "unknown_tool", detail: request.params.name }, true);
     } catch (error) {
       if (error instanceof HomeError) return result({ error: "invalid_request", detail: error.message }, true);
-      if (error instanceof HomeUpstreamError) return result({ available: false, reason: "Not available right now." }, true);
+      if (error instanceof HomeUpstreamError) return result({ available: false, reason: UPSTREAM_TEXT }, true);
       throw error;
     }
   });

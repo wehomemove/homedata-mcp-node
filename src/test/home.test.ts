@@ -21,7 +21,7 @@ import { accountFromEnv, createHomeHttpHandler, mapboxTokenFromEnv } from "../ho
 import { HOME_RULES } from "../home/plugin.js";
 import { MAPBOX_GL_ASSET_PREFIX } from "../home/mapbox-assets.js";
 import { HOME_WIDGET_ASSET_PREFIX, HOME_WIDGET_ASSETS, HOME_WIDGET_CSS_PATH, HOME_WIDGET_SCRIPT_PATH } from "../home/widget-assets.js";
-import { buildHomeServer, HOME_ROUTE_TOOLS, HOME_TOOLS } from "../home/server.js";
+import { UPSTREAM_TEXT, buildHomeServer, HOME_ROUTE_TOOLS, HOME_TOOLS } from "../home/server.js";
 import { extraWords, insideArea, MapboxRoutes, metresToEdge, namesPlace } from "../home/routes.js";
 import { BATH_HOMES, BATH_ROUTE_SCENARIOS, routeFixtureKey } from "./home-routes-fixture.js";
 import { buildManifest, readSkills, secretsIn, validatePackage, validateSkills, type Manifest, type Skill } from "../plugin-package.js";
@@ -1325,12 +1325,12 @@ test("billing and upstream details never reach enrichment, search or calculator 
     ];
     assert.deepEqual((answers[0]!.structuredContent as Record<string, unknown>)["enrichment"], { available: false, reason: "Not available right now." });
     assert.deepEqual((answers[1]!.structuredContent as Record<string, unknown>)["crime"], { available: false, reason: "Not available right now." });
-    assert.deepEqual(answers[2]!.structuredContent, { available: false, reason: "Not available right now." });
+    assert.deepEqual(answers[2]!.structuredContent, { available: false, reason: UPSTREAM_TEXT });
     assert.deepEqual(answers[3]!.structuredContent, { available: false, reason: "Not available right now." });
     for (const answer of answers) {
       const wire = JSON.stringify(answer);
       assert.doesNotMatch(wire, /homedata\.co\.uk|subscription|insufficient_tokens|12\.34|0\.00|status_code|402|502/i);
-      assert.match(wire, /Not available right now/);
+      assert.match(wire, /Not available right now|Tell the user Home could not fetch it/);
     }
     assert.equal(logs.length, 4);
     assert.ok(logs.every(([, detail]) => JSON.stringify(detail).includes("insufficient_tokens")));
@@ -1344,7 +1344,7 @@ test("health is open, non-POST MCP is refused and upstream outages are distinct"
     assert.deepEqual(await (await fetch(base + "/healthz")).json(), { ok: true, service: "home", version: "1.0.0", enrichment_cache: { homes: empty, areas: empty } });
     assert.equal((await fetch(base + "/mcp")).status, 405);
     const answer = await mcp.callTool({ name: "get_home", arguments: { listing_id: ID } });
-    assert.deepEqual(answer.structuredContent, { available: false, reason: "Not available right now." });
+    assert.deepEqual(answer.structuredContent, { available: false, reason: UPSTREAM_TEXT });
   } finally { await stop(); }
 });
 
@@ -1374,7 +1374,9 @@ test("every Home error answer is no-store, so Cloudflare never caches it", async
       ["no Accept", await post(call, "text/plain"), 406],
     ];
     await post(call);
-    answers.push(["over the cap", await post(call), 429]);
+    answers.push(["over the cap, batched", await post(`[${call}]`), 429]);
+    // A single call over the cap is a 200 tool error telling the model what to say, also never cached.
+    answers.push(["over the cap, single call", await post(call), 200]);
     for (const [name, response, status] of answers) {
       assert.equal(response.status, status, name);
       assert.equal(response.headers.get("cache-control"), "no-store", name);
@@ -1392,7 +1394,13 @@ test("limits are per caller, count every batch call and cap enrichment units sep
     assert.equal((await post([rpc(1, "search_homes", { location: "Bath", listing_type: "sale" }), rpc(2, "search_homes", { location: "Bath", listing_type: "sale" })], "192.0.2.1")).status, 429);
     // A different caller has a separate bucket.
     assert.equal((await post(rpc(3, "search_homes", { location: "Bath", listing_type: "sale" }), "192.0.2.2")).status, 200);
-    assert.equal((await post(rpc(4, "search_homes", { location: "Bath", listing_type: "sale" }), "192.0.2.2")).status, 429);
+    const overCap = await post(rpc(4, "search_homes", { location: "Bath", listing_type: "sale" }), "192.0.2.2");
+    assert.equal(overCap.status, 200, "a single call over the cap is a tool error the model can relay, not an HTTP 429");
+    const overCapBody = await overCap.json() as { id: number; result: { isError: boolean; structuredContent: { limit_reached: boolean }; content: Array<{ text: string }> } };
+    assert.equal(overCapBody.id, 4);
+    assert.equal(overCapBody.result.isError, true);
+    assert.equal(overCapBody.result.structuredContent.limit_reached, true);
+    assert.match(overCapBody.result.content[0]!.text, /Tell the user that Home is busy.*Do not retry straight away/);
     // Comparison consumes one enrichment unit per home, not one per tool call. Over the
     // enrichment cap a single call is answered as a tool error, never an HTTP 429.
     const capped = await post(rpc(5, "compare_homes", { listing_ids: [ID, ID2] }), "192.0.2.3");
@@ -1400,7 +1408,7 @@ test("limits are per caller, count every batch call and cap enrichment units sep
     const cappedBody = await capped.json() as { id: number; result: { isError: boolean; content: Array<{ text: string }> } };
     assert.equal(cappedBody.id, 5);
     assert.equal(cappedBody.result.isError, true);
-    assert.match(cappedBody.result.content[0]!.text, /Wait a minute.*search_homes with wishes/);
+    assert.match(cappedBody.result.content[0]!.text, /Tell the user that Home is busy.*search_homes with wishes/);
   } finally { await stop(); }
 });
 
@@ -1567,7 +1575,7 @@ test("a failed connection or a non-JSON page from home.co.uk is an upstream outa
   try {
     const answer = await mcp.callTool({ name: "search_homes", arguments: { location: "Bath", listing_type: "sale" } });
     assert.equal(answer.isError, true);
-    assert.deepEqual(answer.structuredContent, { available: false, reason: "Not available right now." });
+    assert.deepEqual(answer.structuredContent, { available: false, reason: UPSTREAM_TEXT });
     assert.doesNotMatch(JSON.stringify(answer), /Just a moment|fetch failed/);
   } finally { await mcp.close(); await server.close(); }
 });
@@ -2223,7 +2231,7 @@ test("Mapbox's no-place, no-road and no-route answers are plain errors; refusals
     for (const [app, tool, id] of [[refused, "commute_filter", "walk-bath-spa"], [limited, "plan_viewings", "viewings-from-postcode"], [down, "commute_filter", "cycle-postcode-area-only"], [garbled, "plan_viewings", "viewings-no-start"]] as const) {
       answer = await app.call(tool, scenario(id));
       assert.equal(answer.isError, true, id);
-      assert.deepEqual(answer.body, { available: false, reason: "Not available right now." }, id);
+      assert.deepEqual(answer.body, { available: false, reason: UPSTREAM_TEXT }, id);
       assert.ok(app.logged.some((line) => /Home Mapbox/.test(line)), `${id} is logged`);
       for (const line of app.logged) assert.doesNotMatch(line, /pk\.|access_token|-?2\.3\d{3}/, "logs carry no token or coordinates");
     }
