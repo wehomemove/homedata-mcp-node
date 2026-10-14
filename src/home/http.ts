@@ -77,6 +77,10 @@ class CallerLimits {
   }
 }
 
+/** What the model is told to say when a cap is reached: plainly that Home is busy, and not to retry straight away. */
+export const CALL_LIMIT_TEXT = "Home has reached its request limit for the moment. Tell the user that Home is busy right now and to try again in a minute. Do not retry straight away.";
+export const ENRICHMENT_LIMIT_TEXT = "Home has reached its limit for opening new homes for the moment. Tell the user that Home is busy right now and that full details for more homes will be available again in a minute. Do not retry straight away; to check what listings say, use search_homes with wishes, which reads them in one call.";
+
 function callerAddress(req: IncomingMessage, trustedHeader?: string): string {
   if (trustedHeader) {
     const value = req.headers[trustedHeader.toLowerCase()];
@@ -170,21 +174,15 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
     const calls = toolCalls(body);
     const caller = callerAddress(req, options.clientIpHeader);
     const enrichmentCount = calls.reduce((total, call) => total + enrichmentUnits(call, options.client), 0);
-    if (calls.length && !callLimits.take(caller, calls.length)) {
-      return void send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" });
-    }
-    if (enrichmentCount && !enrichmentLimits.take(caller, enrichmentCount)) {
-      // The cap on new homes a minute is a spending limit, not an attack. ChatGPT's desktop
-      // client waits on an HTTP 429 instead of answering, so a single call gets an ordinary
-      // tool error it can act on: the model changes course and the widget offers Try again.
-      const single = !Array.isArray(body) && (body as { method?: unknown })?.method === "tools/call";
-      if (single) {
-        const text = "Home can open a few new homes a minute and that many were just opened. Wait a minute before opening more, "
-          + "or use search_homes with wishes to check what listings say in a single call.";
-        return void send(res, 200, { jsonrpc: "2.0", id: (body as { id?: unknown }).id ?? null, result: { content: [{ type: "text", text }], structuredContent: { available: false, reason: text }, isError: true } });
-      }
-      return void send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" });
-    }
+    // Over a cap, a single tools/call gets an ordinary tool error that tells the model what to
+    // say: ChatGPT's desktop client waits on an HTTP 429 instead of answering, so the chat sits
+    // "working" and the widget never leaves its loading state. Batches keep the 429.
+    const single = !Array.isArray(body) && (body as { method?: unknown })?.method === "tools/call";
+    const limited = (text: string) => single
+      ? send(res, 200, { jsonrpc: "2.0", id: (body as { id?: unknown }).id ?? null, result: { content: [{ type: "text", text }], structuredContent: { available: false, limit_reached: true, reason: text }, isError: true } }, { "Cache-Control": "no-store" })
+      : send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" });
+    if (calls.length && !callLimits.take(caller, calls.length)) return void limited(CALL_LIMIT_TEXT);
+    if (enrichmentCount && !enrichmentLimits.take(caller, enrichmentCount)) return void limited(ENRICHMENT_LIMIT_TEXT);
     // When atlas refuses the caller's token, the tool result carries the challenge
     // and the HTTP answer becomes a 401 with it, which is what makes ChatGPT ask
     // the user to reconnect. An unsigned call keeps a 200 with the challenge in
