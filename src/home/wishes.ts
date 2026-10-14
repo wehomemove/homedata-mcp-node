@@ -7,7 +7,8 @@
  * false one is not.
  */
 
-export const WISHES = ["garden", "off_road_parking", "quiet_street", "period_features", "open_plan", "home_office", "no_chain", "pet_friendly"] as const;
+export const WISHES = ["garden", "off_road_parking", "quiet_street", "period_features", "open_plan", "home_office", "no_chain", "pet_friendly",
+  "south_facing_garden", "garage", "large_plot", "balcony_or_terrace", "views", "waterside", "en_suite", "utility_room", "conservatory", "log_burner", "annexe", "cellar", "loft_conversion", "lift", "single_storey", "renovated", "needs_modernisation", "extension_potential", "solar_panels", "heat_pump", "ev_charging", "furnished", "unfurnished", "bills_included"] as const;
 export type Wish = typeof WISHES[number];
 
 export interface WishMatch { wish: Wish; evidence: string }
@@ -75,6 +76,93 @@ const PATTERNS: Record<Wish, RegExp[]> = {
     /\bpet[- ]friendly\b/gi,
     /\b(?:small |one |a |well[- ]behaved )?(?:dogs?|cats?) (?:are |will be )?(?:considered|welcome|allowed|accepted|permitted)\b/gi,
   ],
+  south_facing_garden: [
+    /\b(?:south|south[- ]?west|south[- ]?east|southerly)[- ]facing (?:\w+ ){0,2}gardens?\b/gi,
+    /\bgardens? (?:\w+ ){0,3}(?:is |are |which is |that is |enjoys? an? )?(?:south|south[- ]?west|south[- ]?east|southerly)[- ]facing\b/gi,
+    /\bgardens? (?:\w+ ){0,2}(?:enjoy(?:s|ing)? )?(?:a |an )?(?:south|south[- ]?west|south[- ]?east|southerly) aspect\b/gi,
+  ],
+  garage: [
+    /\b(?:single|double|triple|integral|integrated|detached|attached|tandem|own|private|large|separate|a|the) (?:\w+ )?garages?\b/gi,
+    /\bgarage (?:block|space|parking|en bloc)\b/gi,
+    /\bgaraging\b/gi,
+  ],
+  large_plot: [
+    /\b(?:approximately |about |around |circa |c\. ?|nearly |almost |over |just over |just under |some )?\d+(?:\.\d+)? (?:of an )?acres?\b/gi,
+    /\b(?:half|quarter|third) (?:of )?an acre\b/gi,
+    /\bpaddocks?\b/gi,
+    /\b(?:large|generous|substantial|good[- ]sized|sizeable|wide|extensive|mature) (?:plot|grounds)\b/gi,
+    /\bstanding in (?:\w+ ){0,2}grounds\b/gi,
+  ],
+  balcony_or_terrace: [
+    /\b(?:private |own |south[- ]facing |west[- ]facing |large |sunny |covered |wraparound |wrap[- ]around |generous )?balcon(?:y|ies)\b/gi,
+    /\broof terraces?\b/gi,
+    /\b(?:private|sun|decked|rooftop|outdoor) terraces?\b/gi,
+  ],
+  views: [
+    /\b(?:sea|coastal|river|countryside|rural|open|far[- ]reaching|panoramic|uninterrupted|field|valley|estuary|harbour|lake|woodland|cathedral|city[- ]?scape|hill|downland|moorland|marina|canal) views?\b/gi,
+    /\bviews? (?:over|across|of) (?:the )?(?:sea|river|countryside|fields|valley|estuary|harbour|lake|woodland|city|surrounding countryside|open countryside|downs|moors|park|parkland)\b/gi,
+  ],
+  // Only phrases that put the home itself on the water; "riverside walks" and "near the seafront" are the town.
+  waterside: [
+    /\b(?:on|right on|directly on|fronting) the (?:seafront|sea front|waterfront|water's edge|riverbank|river bank|quayside|harbour ?side)\b/gi,
+    /\b(?:directly )?overlook(?:s|ing)? (?:the )?(?:river|sea|lake|canal|harbour|marina|estuary|water|beach|broads?)\b/gi,
+    /\b(?:river|canal|lake|water|sea) frontage\b/gi,
+    /\b(?:private |own |residents'? )moorings?\b/gi,
+    /\b(?:backs|backing) (?:directly )?on ?to (?:the )?(?:river|canal|lake|sea|beach|water|broads?)\b/gi,
+    /\b(?:direct|private) (?:beach|river|water|lake) access\b/gi,
+    /\b(?:waterside|waterfront|riverside|lakeside|canalside|seafront|beachfront) (?:apartment|flat|home|house|property|cottage|bungalow|villa|penthouse|location|setting|position|plot)s?\b/gi,
+  ],
+  en_suite: [/\ben[- ]?suites?\b/gi],
+  utility_room: [/\butility (?:room|area|space)s?\b/gi, /\bboot rooms?\b/gi],
+  conservatory: [/\bconservator(?:y|ies)\b/gi, /\borangeries\b|\borangery\b/gi],
+  log_burner: [
+    /\b(?:log|wood)[- ]?burn(?:er|ing stove)s?\b/gi,
+    /\bmulti[- ]?fuel (?:burner|stove)s?\b/gi,
+    /\b(?:wood|log) (?:stove|fire)s?\b/gi,
+    /\binglenook\b/gi,
+    /\b(?:open|working) fire(?:place)?s?\b/gi,
+  ],
+  annexe: [
+    /\bannexe?s?\b/gi,
+    /\bgranny (?:flat|annexe?)\b/gi,
+    /\bself[- ]contained (?:annexe?|apartment|flat|studio|cottage|accommodation|guest (?:suite|accommodation))\b/gi,
+  ],
+  cellar: [/\bcellars?\b/gi, /\bbasements?\b/gi],
+  loft_conversion: [/\bloft conversion\b/gi, /\bconverted (?:loft|attic)\b/gi, /\b(?:loft|attic) (?:room|bedroom|conversion|suite)s?\b/gi],
+  lift: [
+    /\b(?:passenger|communal|residents'?) lifts?\b/gi,
+    /\blifts? (?:to all floors|to every floor|serv(?:es|ing)|access)\b/gi,
+    /\b(?:served by|with|benefits from) (?:a |the )?lift\b/gi,
+  ],
+  single_storey: [/\bbungalows?\b/gi, /\bsingle[- ]stor(?:e)?y\b/gi, /\ball on one (?:level|floor)\b/gi, /\bon one level\b/gi],
+  renovated: [
+    /\b(?:newly|recently|fully|completely|extensively|beautifully|sympathetically|tastefully|thoughtfully|lovingly|meticulously|stylishly) (?:renovated|refurbished|modernised|modernized|redecorated|restored|remodelled|remodeled|updated|upgraded)\b/gi,
+    /\bready to move (?:straight )?in(?:to)?\b/gi,
+    /\bwalk[- ]in condition\b/gi,
+    /\bturn[- ]?key\b/gi,
+  ],
+  needs_modernisation: [
+    /\b(?:in need of|requir(?:es|ing)|would benefit from|needs?|benefit(?:s|ing)? from) (?:\w+ ){0,2}(?:modernisation|modernization|updating|refurbishment|renovation|improvement|tlc)\b/gi,
+    /\b(?:renovation|refurbishment|modernisation|restoration) (?:project|opportunity)\b/gi,
+    /\bdoer[- ]upper\b/gi,
+  ],
+  extension_potential: [
+    /\b(?:potential|scope|room|opportunity|space) (?:to|for) (?:\w+ ){0,2}(?:extend|extension|extensions|convert the loft|loft conversion|develop|redevelop)\b/gi,
+    /\bextension potential\b/gi,
+    /\b(?:stpp|subject to (?:the )?(?:necessary )?planning(?: permission| consents?)?)\b/gi,
+    /\bplanning (?:permission|consent) (?:granted|approved|in place)\b/gi,
+  ],
+  solar_panels: [/\bsolar (?:panels?|pv|photovoltaic|array|power|tiles)\b/gi, /\bphotovoltaic\b/gi],
+  heat_pump: [/\b(?:air|ground)[- ]source heat pumps?\b/gi, /\bheat pumps?\b/gi],
+  ev_charging: [/\b(?:ev|electric (?:vehicle|car)|car) charg(?:er|ing)(?: points?| ports?| stations?)?s?\b/gi],
+  furnished: [/\b(?:fully |part(?:ly|ially)? |newly |tastefully |beautifully |well )?furnished\b/gi],
+  unfurnished: [/\bunfurnished\b/gi],
+  bills_included: [
+    /\b(?:all )?bills (?:are )?included\b/gi,
+    /\binclusive of (?:all )?bills\b/gi,
+    /\bbills inclusive\b/gi,
+    /\b(?:all )?(?:utilities|utility bills) (?:are )?included\b/gi,
+  ],
 };
 
 /** A matched word is ruled out when its own clause negates it just before. */
@@ -93,6 +181,9 @@ const CHAIN_DENIED_AFTER = /^\s*(?:\w+\s+){0,2}?(?:is|are|was|will|would|can|cou
  * A clause that only offers the feature as a possibility ("could be used as a home
  * office", "potential for off-road parking") does not state it.
  */
+/** Wishes whose own phrasing is a hedge ("potential to extend", "would benefit from"). */
+const HEDGED_WISHES: ReadonlySet<Wish> = new Set<Wish>(["extension_potential", "needs_modernisation"]);
+
 const HEDGE = /\b(?:could|would|might|may|can be|potential(?:ly)?|possib(?:le|ly|ility)|scope|subject to|options? (?:to|for)|ideal(?:ly)? (?:for|as)|suit(?:s|able|ed)?|lend themselves|if required|flexib\w*|versatil\w*|adapt\w*|serve as|use as|used as)\b/i;
 
 /** Proper names and other senses that only look like the feature. */
@@ -109,7 +200,30 @@ const FALSE_SENSES: Partial<Record<Wish, (before: string, match: string, after: 
     return false;
   },
   off_road_parking: (before, match, after) =>
-    /\bgarage/i.test(match) && (/\b(?:converted|former|old)\s+(?:\S+\s+)?$/i.test(before) || /^\s*(?:conversion|converted|has been converted|now)\b/i.test(after)),
+    /\bgarage/i.test(match) && (/\b(?:converted|former|old)\b/i.test(match) || /\b(?:converted|former|old)\s+(?:\S+\s+)?$/i.test(before) || /^\s*(?:conversion|converted|has been converted|now)\b/i.test(after)),
+  // About the area, not the home: "pet-friendly park", "pet friendly cafes nearby".
+  pet_friendly: (_before, _match, after) => /^\s*(?:park|parks|area|neighbourhood|walks?|trails?|cafes?|pubs?|beach|beaches|community|village|town)\b/i.test(after),
+  // Nearness or a name, not a home on the water: "moments from the seafront", "Trinity Riverside development".
+  waterside: (before, match, after) =>
+    /\b(?:drinks?|bars?|caf(?:e|é)s?|pubs?|restaurants?|promenade|stroll|dog walks?|evening|afternoon)\b/i.test(before) ||
+    /\b(?:from|to|of|near|nearby|close to|walk(?:ing)?|stroll|minutes?|moments?|short distance|reach|towards|along)\s+(?:\w+\s+){0,2}$/i.test(before) ||
+    (/^[A-Z]/.test(match) && /[A-Z][\w']*\s*$/.test(before)) || /^\s*(?:development|road|street|walk|way|drive|court|house|park|centre)\b/i.test(after),
+  // "Rather than simply an annexe to the main house" describes, it does not offer one.
+  annexe: (before) => /\bthan\s+(?:simply\s+|just\s+|merely\s+)?(?:an?\s+)?$/i.test(before),
+  // Ready for, or space for, panels is not panels.
+  solar_panels: (before) => /\b(?:ready|suitable|space|room|potential|provision|prepared|wired|scope)\s+for\s+(?:\S+\s+){0,2}$/i.test(before) || /\bextension\/$/i.test(before),
+  // A converted garage is a room now; "garage sale" and a garage door alone are not a garage.
+  garage: (before, match, after) =>
+    /\b(?:converted|former|old)\b/i.test(match) ||
+    /\b(?:converted|former|old)\s+(?:\S+\s+)?$/i.test(before) || /^\s*(?:conversion|converted|has been converted|now|sale|door)\b/i.test(after),
+  // A Juliet balcony is a railing at a window, not outdoor space.
+  balcony_or_terrace: (before, match) => /\bjuliet(?:te)?\s*$/i.test(before) || /^juliet/i.test(match),
+  // "Basement flat" in a building with others is fine; a basement car park is not a cellar.
+  cellar: (_before, _match, after) => /^\s*(?:car park|parking|garage|flat|apartment|maisonette|studio)\b/i.test(after),
+  // "No onward chain" style: never count a furnished word that is the "un" of unfurnished.
+  furnished: (before) => /\bun$/i.test(before),
+  // Planning words only count when they are about this home, not the area.
+  extension_potential: (before) => /\b(?:nearby|neighbouring|surrounding|area|village)\b/i.test(before),
   no_chain: (before, _match, after) => /^[-\s]*move\b/i.test(after) || /\bpart[- ]exchange|guaranteed buyer/i.test(before),
   period_features: (before, _match, after) =>
     /^\s*(?:-?style|style|inspired|replica|reproduction)\b/i.test(after) || /\b(?:grounds|park|church|surrounding|nearby|neighbouring|area)\b/i.test(before),
@@ -177,7 +291,7 @@ export function matchWishes(text: string | null, wishes: readonly Wish[]): WishM
         const rest = text.slice(end, nextBreak(text, end, CLAUSE_BREAK));
         if (DENIED_AFTER.test(rest) && /\b(?:not|no longer|unavailable|isn't|aren't|cannot|can't|won't)\b/i.test(rest)) continue;
         if (wish === "no_chain" && !/^no\b/i.test(m[0]) && CHAIN_DENIED_AFTER.test(rest)) continue;
-        if (HEDGE.test(before)) continue;
+        if (!HEDGED_WISHES.has(wish) && HEDGE.test(before)) continue;
         // A spare room offered as "bedroom, nursery or home office" is a choice, not an office.
         if (wish === "home_office" && (HEDGE.test(sentenceOf(text, start, end)) || /\bor\b/i.test(sentenceOf(text, start, end)))) continue;
         if (FALSE_SENSES[wish]?.(before, m[0], text.slice(end, end + 40))) continue;
