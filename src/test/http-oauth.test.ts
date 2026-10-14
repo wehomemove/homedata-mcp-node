@@ -199,10 +199,15 @@ test("an active answer is cached for a minute; an inactive one is not cached", a
   await stop();
 });
 
+/** Over the call cap a single call is a 200 tool error flagged limit_reached, not an HTTP 429. */
+async function limited(response: { status: number; body: unknown }): Promise<boolean> {
+  return response.status === 200 && /"limit_reached":true/.test(JSON.stringify(response.body));
+}
+
 test("the call cap is per user: one user at the cap does not block another", async () => {
   const { call, stop } = await start({ callsPerMinute: 1, answers: { a: active("ka", "1"), b: active("kb", "2") } });
   assert.equal((await call("a")).status, 200);
-  assert.equal((await call("a")).status, 429);
+  assert.ok(await limited(await call("a")));
   assert.equal((await call("b")).status, 200);
   await stop();
 });
@@ -292,8 +297,8 @@ test("a rate-limited call is still reported, with a safe tool name and no argume
     activity: (e) => events.push(e),
   });
   assert.equal((await call("a")).status, 200);
-  assert.equal((await call("a")).status, 429);
-  assert.equal((await call("a", "SW1A 2AA <!channel>")).status, 429);
+  assert.ok(await limited(await call("a")));
+  assert.ok(await limited(await call("a", "SW1A 2AA <!channel>")));
   assert.deepEqual(
     events.map(({ organisation, tool, outcome }) => ({ organisation, tool, outcome })),
     [

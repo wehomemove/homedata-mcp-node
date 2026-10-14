@@ -197,10 +197,12 @@ test("tools outside the ChatGPT set are refused without calling the API", async 
   await stop();
 });
 
-test("the call cap answers 429 and the refused call never reaches the API", async () => {
+test("over the call cap a call is a tool error telling the model what to say, and never reaches the API", async () => {
   const { client, sent, stop } = await start({ callsPerMinute: 1 });
   await client.callTool({ name: "crime", arguments: { postcode: "SW1A 2AA" } });
-  await assert.rejects(client.callTool({ name: "crime", arguments: { postcode: "SW1A 2AA" } }), /429|Too many/);
+  const refused = await client.callTool({ name: "crime", arguments: { postcode: "SW1A 2AA" } });
+  assert.equal(refused.isError, true);
+  assert.match((refused.content as Array<{ text: string }>)[0]!.text, /Tell the user that Homedata is busy.*Do not retry straight away/);
   assert.equal(sent.length, 1);
   await stop();
 });
@@ -378,7 +380,8 @@ test("every error answer from the Homedata endpoint is no-store, so Cloudflare n
       ["no Accept", await post(MCP_PATH, call, { Accept: "text/plain" }), 406],
     ];
     await post(MCP_PATH, call);
-    answers.push(["over the cap", await post(MCP_PATH, call), 429]);
+    answers.push(["over the cap, batched", await post(MCP_PATH, `[${call}]`), 429]);
+    answers.push(["over the cap, single call", await post(MCP_PATH, call), 200]);
     for (const [name, response, status] of answers) {
       assert.equal(response.status, status, name);
       assert.equal(response.headers.get("cache-control"), "no-store", name);
