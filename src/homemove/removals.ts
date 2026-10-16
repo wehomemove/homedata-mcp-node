@@ -90,7 +90,11 @@ export function homeSizeKey(said: unknown): string | undefined {
 
 export async function removals(request: QuoteRequest & { to_postcode?: string; items?: MovingItem[]; inventory?: Record<string, number>; home_size?: string }, motus: MotusClient): Promise<QuoteAnswer> {
   const product = { id: 1054, name: "Removals", type: "removals" as const };
-  const rooms = await motus.removalsPicker();
+  // Without motus's removals pricing (an outage, or before it is deployed) the honest answer is
+  // homemove.com's own removals form, never an error and never a guessed price.
+  let rooms: PickerRoom[];
+  try { rooms = await motus.removalsPicker(); }
+  catch { return { status: "quoted_by_hand", product, postcode: request.postcode, answers: [] }; }
   const inventory: Record<string, number> = {};
   const unmatched: string[] = [];
   for (const [id, qty] of Object.entries(request.inventory ?? {})) {
