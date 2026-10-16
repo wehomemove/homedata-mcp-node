@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "home",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Find homes for sale and to rent across the UK in ChatGPT with home.co.uk: search by what you want in a home, see every photo and the full details, check commute times, plan a viewing day, compare a shortlist, check the area, and estimate stamp duty, mortgage repayments and what you can afford.",
   "author": {
     "name": "Home",
@@ -69,9 +69,7 @@
     "budget",
     "sold prices",
     "local agents",
-    "typical rents",
-    "saved searches",
-    "property alerts"
+    "typical rents"
   ],
   "skills": "./skills/",
   "extensions": {
@@ -79,7 +77,7 @@
       "interface": {
         "displayName": "Home",
         "shortDescription": "UK homes for sale and to rent",
-        "longDescription": "Home finds homes for sale and to rent across the United Kingdom from home.co.uk, right in the conversation. Describe what you want in your own words: a town, city or postcode, buying or renting, your budget, how many bedrooms, new build or not, newest or lowest price first, and what you want in the home itself, such as a garden, off-road parking, a quiet street, period features, open-plan living, a home office or no onward chain. Home shows the matching houses and flats as photo cards and a map, with asking price or rent, bedrooms, tenure, the date each one was added, how long it has been on the market, whether it has been reduced or gone under offer, and the listing's own words for each feature you asked about.\n\nOpen any result for the full picture in chat: every photo, the complete description, the agent, key facts and, where the published address can be matched to a property, checks from Homedata such as the EPC energy rating, council tax band, flood and other environmental risks, broadband, nearby schools and recorded crime. Keep a shortlist and compare two to four homes side by side. See which homes are within a walk, cycle or drive of a station, office, school or postcode, and put up to six viewings in the quickest driving order for the day. Ask what an area is like for schools, broadband, recorded crime and local house price growth, see recent sold prices and typical rents nearby, find local estate and letting agents, and estimate stamp duty or monthly mortgage repayments from your own figures.\n\nHome also brings five workflows: what can I afford, turning a monthly budget and deposit into a price and the homes at it; prepare for a viewing, with a checklist and questions for the agent built from the home's own details; plan a viewing day, with the order, the driving between stops and what to ask at each; shortlist and compare, ranking homes against what matters to you, commute included; and buying costs, setting out stamp duty, deposit, loan and monthly repayments together.\n\nSign in with your home.co.uk account to save a search and get emails about new matching homes, or to watch a home and hear when its asking price or status changes; you can list, pause and delete both from the conversation.\n\nIt is for anyone house hunting: first-time buyers, movers, renters and families comparing places to live. Searching needs no account.\n\nLimitations: Home does not value homes or forecast prices, list a home, contact agents for you, or decide mortgage eligibility. Calculator results are estimates, not tax or financial advice, and stamp duty covers England and Northern Ireland. Commute and driving times are typical estimates, not timetables or live traffic. Availability and status are snapshots from the time of the search.",
+        "longDescription": "Home finds homes for sale and to rent across the United Kingdom from home.co.uk, right in the conversation. Describe what you want in your own words: a town, city or postcode, buying or renting, your budget, how many bedrooms, new build or not, newest or lowest price first, and what you want in the home itself, such as a garden, off-road parking, a quiet street, period features, open-plan living, a home office or no onward chain. Home shows the matching houses and flats as photo cards and a map, with asking price or rent, bedrooms, tenure, the date each one was added, how long it has been on the market, whether it has been reduced or gone under offer, and the listing's own words for each feature you asked about.\n\nOpen any result for the full picture in chat: every photo, the complete description, the agent, key facts and, where the published address can be matched to a property, checks from Homedata such as the EPC energy rating, council tax band, flood and other environmental risks, broadband, nearby schools and recorded crime. Keep a shortlist and compare two to four homes side by side. See which homes are within a walk, cycle or drive of a station, office, school or postcode, and put up to six viewings in the quickest driving order for the day. Ask what an area is like for schools, broadband, recorded crime and local house price growth, see recent sold prices and typical rents nearby, find local estate and letting agents, and estimate stamp duty or monthly mortgage repayments from your own figures.\n\nHome also brings five workflows: what can I afford, turning a monthly budget and deposit into a price and the homes at it; prepare for a viewing, with a checklist and questions for the agent built from the home's own details; plan a viewing day, with the order, the driving between stops and what to ask at each; shortlist and compare, ranking homes against what matters to you, commute included; and buying costs, setting out stamp duty, deposit, loan and monthly repayments together.\n\nIt is for anyone house hunting: first-time buyers, movers, renters and families comparing places to live. Home needs no account.\n\nLimitations: Home does not value homes or forecast prices, list a home, contact agents for you, or decide mortgage eligibility. Calculator results are estimates, not tax or financial advice, and stamp duty covers England and Northern Ireland. Commute and driving times are typical estimates, not timetables or live traffic. Availability and status are snapshots from the time of the search.",
         "developerName": "Home",
         "category": "Lifestyle",
         "capabilities": [
@@ -91,8 +89,7 @@
           "Homes within a walk, cycle or drive of a place",
           "Plan the quickest order for a day of viewings",
           "Area checks: schools, broadband, crime, price growth",
-          "Stamp duty, mortgage and affordability estimates",
-          "Saved searches and alerts on homes you are watching"
+          "Stamp duty, mortgage and affordability estimates"
         ],
         "websiteURL": "https://home.co.uk/chatgpt/",
         "supportURL": "https://home.co.uk/contact/",
@@ -110,7 +107,7 @@
       },
       "review": {
         "commerce": false,
-        "commerce_description": "Home takes no payments and sells nothing in ChatGPT. Searching needs no account; saved searches and alerts use the user's own home.co.uk account."
+        "commerce_description": "Home takes no payments and sells nothing in ChatGPT. Searching needs no account."
       },
       "publication": {
         "countries": [],
