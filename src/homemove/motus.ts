@@ -30,6 +30,17 @@ export interface MotusQuote {
   coverage_checked: boolean;
 }
 
+export interface MotusLegalQuote {
+  transaction: "purchase" | "sale";
+  tenure: "freehold" | "leasehold";
+  property_price: number;
+  funding_type: "mortgage" | "cash" | null;
+  total_gbp: number;
+  legal_fee_gbp: number;
+  disbursements: Array<{ label: string; amount_gbp: number }>;
+  search_pack_gbp: number | null;
+}
+
 /** A refusal motus gave for a reason the caller can act on (invalid_answer, quote_unavailable…). */
 export class MotusRefusal extends Error {
   constructor(readonly code: string, readonly status: number) { super(code); }
@@ -77,6 +88,15 @@ export class MotusClient {
     });
   }
 
+  async legalQuote(input: { transaction: "purchase" | "sale"; tenure: "freehold" | "leasehold"; propertyPrice: number; fundingType?: "mortgage" | "cash" }): Promise<MotusLegalQuote> {
+    return this.post<MotusLegalQuote>("/api/mcp/bookings/legal-quote", {
+      transaction: input.transaction,
+      tenure: input.tenure,
+      property_price: Math.round(input.propertyPrice),
+      ...(input.fundingType ? { funding_type: input.fundingType } : {}),
+    });
+  }
+
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 15_000);
@@ -89,7 +109,8 @@ export class MotusClient {
       });
       const json = (await response.json().catch(() => null)) as { success?: boolean; data?: T; error?: string } | null;
       if (response.ok && json?.success && json.data !== undefined) return json.data;
-      if (json?.error && response.status < 500) throw new MotusRefusal(json.error, response.status);
+      // A named refusal, including 503 quote_unavailable when Atlas does not answer, is an answer to relay.
+      if (typeof json?.error === "string") throw new MotusRefusal(json.error, response.status);
       throw new Error(`motus ${path} answered ${response.status}`);
     } finally {
       clearTimeout(timer);

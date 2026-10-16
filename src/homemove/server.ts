@@ -14,7 +14,7 @@ import { PROPERTY_PRICE_KEY, bandLabel, questionFor, quote, type QuoteAnswer } f
 import { homemoveWidgetHtml, HOMEMOVE_WIDGET_URI, HOMEMOVE_WIDGET_VERSION } from "./widget.js";
 
 export const HOMEMOVE_INSTRUCTIONS = [
-  "Homemove prices the services people need when they move home: surveys and valuations, EPCs and safety certificates, removals and man and van, end of tenancy and moving cleans, and packing.",
+  "Homemove prices the services people need when they move home: surveys and valuations, EPCs and safety certificates, removals and man and van, end of tenancy and moving cleans, packing, and conveyancing.",
   "Whenever someone asks what any of these cost, call homemove_quote: it shows the price in a Homemove card. Pass the address when you have it: the property record fills in bedrooms and the value band, so you ask fewer questions.",
   "If the result has questions, ask the user exactly those (offer the options), then call homemove_quote again with their answers. Never estimate, round or invent a price: quote only the price_gbp a result gives, and say the price is confirmed when they book.",
   "When a figure was assumed from the property record (bedrooms, value band), say so in a few words and invite a correction.",
@@ -25,7 +25,7 @@ const QUOTE_TOOL = {
   name: "homemove_quote",
   title: "Get a Homemove quote",
   description:
-    "Price a home-moving service with Homemove: surveys (Level 2, Level 3, building, snagging, damp and timber, drone roof, asbestos, structural), valuations (Help to Buy, shared ownership, probate, matrimonial), EPCs, gas safety and electrical certificates, removals, man and van, end of tenancy and deep cleans, carpet and sofa cleaning, packing and boxes. " +
+    "Price a home-moving service with Homemove: surveys (Level 2, Level 3, building, snagging, damp and timber, drone roof, asbestos, structural), valuations (Help to Buy, shared ownership, probate, matrimonial), EPCs, gas safety and electrical certificates, removals, man and van, end of tenancy and deep cleans, carpet and sofa cleaning, packing and boxes, and conveyancing for buying or selling. " +
     "Use this when someone asks how much any of these costs, wants a quote, or asks for a price for their move. Returns the price, or the questions still needed to price it, and shows it in a Homemove quote card.",
   inputSchema: {
     type: "object",
@@ -58,7 +58,7 @@ const SERVICES_TOOL = {
   inputSchema: {
     type: "object",
     additionalProperties: false,
-    properties: { type: { type: "string", enum: ["surveys", "cleaning", "removals"], description: "Only this kind of service." } },
+    properties: { type: { type: "string", enum: ["surveys", "cleaning", "removals", "legal"], description: "Only this kind of service." } },
   },
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
 } as const;
@@ -72,10 +72,13 @@ export const UNAVAILABLE_TEXT = "Homemove could not work out the price just now.
 export function quoteNarration(answer: QuoteAnswer): string {
   switch (answer.status) {
     case "priced": {
-      const assumed = answer.assumed.map((a) => `${a.name === "beds" ? "bedrooms" : "value band"} ${a.value} (from ${a.source})`).join("; ");
+      const what: Record<string, string> = { beds: "bedrooms", tenure: "tenure", property_price: "value" };
+      const assumed = answer.assumed.map((a) => `${what[a.name] ?? a.name} ${a.value} (from ${a.source})`).join("; ");
+      const extras = (answer.extras ?? []).map((x) => `${x.label} £${x.amount_gbp.toLocaleString("en-GB")} is a separate line`).join("; ");
       return `Homemove's price for a ${answer.product.name} at ${answer.property?.address ?? answer.postcode} is £${answer.price_gbp.toLocaleString("en-GB")}.` +
         (answer.band ? ` Priced on the ${bandLabel(answer.band)} value band.` : "") +
         (assumed ? ` Assumed: ${assumed}; say so and invite a correction.` : "") +
+        (extras ? ` ${extras}, not in that total.` : "") +
         ` The price is confirmed when they book, on homemove.com: ${answer.booking_url}. The card shows it and has a Book button; keep your reply short.`;
     }
     case "needs_answers":
@@ -148,7 +151,7 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
       }
       if (request.params.name === "homemove_services") {
         const type = typeof args["type"] === "string" ? args["type"] : undefined;
-        const products = (await deps.motus.products()).filter((p) => !p.is_addon && (!type || p.type === type) && ["surveys", "cleaning", "removals"].includes(p.type ?? ""));
+        const products = type === "legal" ? [] : (await deps.motus.products()).filter((p) => !p.is_addon && (!type || p.type === type) && ["surveys", "cleaning", "removals"].includes(p.type ?? ""));
         const services = products.map((p) => ({
           id: p.id,
           name: p.name.trim(),
@@ -156,6 +159,7 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
           ...(p.price_gbp ? { price_gbp: p.price_gbp } : {}),
           priced_on: p.inputs.map((i) => (i.key === PROPERTY_PRICE_KEY ? "the home's value" : questionFor(i))),
         }));
+        if (!type || type === "legal") services.push({ id: 1062, name: "Conveyancing (buying or selling)", type: "legal", priced_on: ["whether you're buying or selling", "the price", "freehold or leasehold", "mortgage or cash"] });
         return result({ services }, `Homemove can quote ${services.length} services. Name the ones that fit the user's question; quote prices only from homemove_quote or a listed price_gbp.`);
       }
       return result({ error: "unknown_tool", detail: request.params.name }, `Unknown tool ${request.params.name}.`, true);

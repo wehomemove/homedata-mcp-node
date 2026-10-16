@@ -29,6 +29,10 @@ const PRODUCTS: MotusProduct[] = [
 
 type Sent = { url: string; body: Record<string, unknown> };
 
+/** Atlas's live legal pricing as motus get_legal_quote totals it (£350k freehold purchase, mortgage: £1,152). */
+const LEGAL = { transaction: "purchase", tenure: "freehold", property_price: 350000, funding_type: "mortgage", total_gbp: 1152, legal_fee_gbp: 910,
+  disbursements: [{ label: "Pre-Completion Searches", amount_gbp: 14 }, { label: "Bank Transfer", amount_gbp: 48 }, { label: "Financial Settlement & Clearance", amount_gbp: 120 }, { label: "SDLT Return Submission", amount_gbp: 60 }], search_pack_gbp: 399 };
+
 /** A motus that prices like the live grids: band 5 L2 £499, beds-priced clean, flat EPC, 5+ clean by hand. */
 function fakeMotus(sent: Sent[] = []) {
   const json = (data: unknown, status = 200) => new Response(JSON.stringify(status < 400 ? { success: true, data } : { success: false, error: data }), { status, headers: { "Content-Type": "application/json" } });
@@ -36,6 +40,7 @@ function fakeMotus(sent: Sent[] = []) {
     const url = String(input), body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
     sent.push({ url, body });
     if (url.endsWith("/products")) return json({ products: PRODUCTS });
+    if (url.endsWith("/legal-quote")) return body["tenure"] === "leasehold" && body["transaction"] === "sale" ? json("quote_unavailable", 503) : json({ ...LEGAL, transaction: body["transaction"], tenure: body["tenure"] });
     const product = PRODUCTS.find((p) => p.id === body["product_id"])!;
     const answers = (body["answers"] ?? {}) as Record<string, string>;
     const price = body["property_price"] as number | undefined;
@@ -60,7 +65,7 @@ function fakeHomedata(charged: string[] = []) {
       return json({ uprn: 100023336956, full_address: "10 DOWNING STREET, LONDON, SW1A 2AA", postcode: "SW1A 2AA" });
     }
     if (url.pathname.endsWith("/core/")) return json({ valuation_estimate: { estimate_gbp: 350000 } });
-    return json({ uprn: 100023336956, rooms: { bedrooms: null, predicted_bedrooms: 3 } });
+    return json({ uprn: 100023336956, rooms: { bedrooms: null, predicted_bedrooms: 3 }, lr_title: { title_class: "Absolute freehold title" } });
   }) as typeof fetch;
   return new PropertyLookup(new HomedataClient({ apiKey: "test", fetchImpl }));
 }
@@ -174,4 +179,25 @@ test("the endpoint serves the widget's Homie art and code, and nothing else unde
   }
   assert.equal((await get(`${HOMEMOVE_ASSET_PREFIX}/../../package.json`)).status, 404);
   assert.equal((await get("/healthz")).status, 200);
+});
+
+test("conveyancing asks what Atlas needs, fills tenure from the title, and quotes motus's total", async () => {
+  const sent: Sent[] = [];
+  const deps = { motus: fakeMotus(sent), property: fakeHomedata() };
+  const first = await quote({ service: "how much are conveyancing fees", postcode: "SW1A 2AA" }, deps);
+  assert.equal(first.status, "needs_answers");
+  assert.deepEqual(first.status === "needs_answers" && first.questions.map((q) => q.name), ["transaction", "property_price", "tenure", "funding_type"]);
+
+  const priced = await quote({ service: "conveyancing for my purchase", postcode: "SW1A 2AA", address: "10 Downing Street", property_price: 350000, answers: { funding_type: "Mortgage" } }, deps);
+  assert.equal(priced.status, "priced");
+  assert.equal(priced.status === "priced" && priced.price_gbp, 1152);
+  assert.deepEqual(sent.at(-1)!.body, { transaction: "purchase", tenure: "freehold", property_price: 350000, funding_type: "mortgage" });
+  assert.deepEqual(priced.status === "priced" && priced.assumed, [{ name: "tenure", value: "Freehold", source: "the Land Registry title" }]);
+  assert.match(quoteNarration(priced), /Search pack £399 is a separate line, not in that total/);
+  assert.equal(priced.status === "priced" && priced.booking_url, "https://homemove.com/legal/quote/?pc=SW1A2AA");
+
+  // The widget re-asks with the product id: 1063 is selling, priced by Atlas, never the catalogue's placeholder row.
+  const resold = await quote({ service: "1063", postcode: "SW1A 2AA", property_price: 250000, answers: { tenure: "Leasehold", funding_type: "No mortgage" } }, deps);
+  assert.equal(resold.status, "quoted_by_hand", "Atlas not answering is never a guessed figure");
+  assert.deepEqual(sent.at(-1)!.body, { transaction: "sale", tenure: "leasehold", property_price: 250000, funding_type: "cash" });
 });

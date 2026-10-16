@@ -2,7 +2,7 @@ import type { HomedataClient } from "../client.js";
 
 /**
  * What an address tells a quote, from Homedata. Two lookups by default: the
- * address match (5 tokens) and the rooms add-on (1 token). The value estimate
+ * address match (5 tokens) and the rooms and Land Registry title add-ons (1 each). The value estimate
  * lives in the 25-token core record, so it is fetched only when a product is
  * priced on the value band and the person has not said what the home is worth.
  */
@@ -13,6 +13,8 @@ export interface PropertyFacts {
   /** Recorded bedrooms, or Homedata's prediction when none is recorded. */
   bedrooms: number | null;
   bedrooms_source: "recorded" | "predicted" | null;
+  /** From the registered title class ("Absolute freehold title", "Good leasehold title"…). */
+  tenure: "freehold" | "leasehold" | null;
   /** A value estimate, used only to choose a price band, never quoted as a valuation. */
   estimated_value: number | null;
 }
@@ -44,8 +46,10 @@ export class PropertyLookup {
     const uprn = String(record["uprn"] ?? "");
     if (!/^\d+$/.test(uprn)) throw new AddressNotMatched("no_match");
 
-    const extra = await this.homedata.send("GET", `/property/${uprn}/`, { with: "rooms" });
-    const rooms = (extra.statusCode < 400 ? (extra.body as { rooms?: Record<string, unknown> })?.rooms : undefined) ?? {};
+    const extra = await this.homedata.send("GET", `/property/${uprn}/`, { with: "rooms,lr_title" });
+    const extraBody = (extra.statusCode < 400 ? extra.body : undefined) as { rooms?: Record<string, unknown>; lr_title?: { title_class?: unknown } } | undefined;
+    const rooms = extraBody?.rooms ?? {};
+    const titleClass = String(extraBody?.lr_title?.title_class ?? "").toLowerCase();
     const recorded = num(rooms["bedrooms"]), predicted = num(rooms["predicted_bedrooms"]);
 
     const facts: PropertyFacts = {
@@ -54,6 +58,7 @@ export class PropertyLookup {
       postcode: String(record["postcode"] ?? postcode).toUpperCase(),
       bedrooms: recorded ?? predicted,
       bedrooms_source: recorded ? "recorded" : predicted ? "predicted" : null,
+      tenure: titleClass.includes("leasehold") ? "leasehold" : titleClass.includes("freehold") ? "freehold" : null,
       estimated_value: null,
     };
     if (this.cache.size > 5000) this.cache.clear();

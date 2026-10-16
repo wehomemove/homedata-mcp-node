@@ -185,7 +185,7 @@
     legal: { homie: "legal", cheer: "legal-lawyer-cheer", hello: "Let's sort the legal bit." },
   };
   const lookFor = (type) => LOOK[type] ?? { homie: "welcome", cheer: "hm-cheer", hello: "Hello! Let's price that." };
-  const ICON = { beds: "bed", property_price: "home", snagging_type: "new-build", roof_type: "home", roof_survey_type: "home", asb_type: "secure", matrimonial_witness: "legal", thermographic_type: "energy", structural_survey_type: "measure" };
+  const ICON = { transaction: "key", tenure: "document", funding_type: "money", beds: "bed", property_price: "home", snagging_type: "new-build", roof_type: "home", roof_survey_type: "home", asb_type: "secure", matrimonial_witness: "legal", thermographic_type: "energy", structural_survey_type: "measure" };
   const VALUE_STOPS = [100000, 150000, 200000, 250000, 300000, 400000, 500000, 600000, 750000, 1000000, 1500000, 2000000];
 
   const DEMO = {
@@ -464,18 +464,19 @@
     const price = h("div", { class: "price", "aria-label": gbp(q.price_gbp) });
     const rows = [
       ["Service", q.product.name],
+      ...(q.breakdown ?? []).map((r) => [r.label, gbp(r.amount_gbp)]),
       q.property?.address ? ["Property", q.property.address] : ["Postcode", q.postcode],
       ...(q.band ? [["Value band", bandText(q.band)]] : []),
       ...(q.answers ?? []).filter((a) => a.name !== "property_price").map((a) => [a.name === "beds" ? "Bedrooms" : a.name.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()), a.label]),
     ];
-    const assumed = (q.assumed ?? []).map((a) => `${a.name === "beds" ? "Bedrooms" : "Value band"} from ${a.source}`).join(" · ");
+    const assumed = (q.assumed ?? []).map((a) => `${({ beds: "Bedrooms", tenure: "Tenure", property_price: "Value" })[a.name] ?? a.name} from ${a.source}`).join(" · ");
     const sheet = h("div", { class: "sheet", role: "dialog", "aria-label": "Your quote" },
       h("div", { class: "quote" },
         h("div", { class: "lander" }, lander),
         q.sample ? h("span", { class: "sample", title: "Preview only: a sample figure. In ChatGPT this is your real Homemove price." }, "Sample price") : null,
         h("div", { class: "for" }, `Your ${q.product.name}`),
         price,
-        h("p", { class: "note" }, assumed ? `${assumed}. Tell us if that's not right. Confirmed when you book.` : "Confirmed when you book."),
+        h("p", { class: "note" }, [assumed ? `${assumed}. Tell us if that's not right.` : null, ...(q.extras ?? []).map((x) => `${x.label}: ${gbp(x.amount_gbp)}, shown separately.`), "Confirmed when you book."].filter(Boolean).join(" ")),
         h("dl", {}, rows.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])),
         h("div", { class: "bar" },
           h("button", { class: "ghost", onclick: () => { dismiss(); closeTakeover(); } }, "Close"),
