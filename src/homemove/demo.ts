@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,5 +47,12 @@ export function demoAsset(path: string, origin: string): { body: Buffer; content
     return { body: Buffer.from(html), contentType: "text/html; charset=utf-8" };
   }
   const file = FILES[path];
-  return file ? { body: readFileSync(join(ROOT, file[0])), contentType: file[1] } : undefined;
+  if (!file) return undefined;
+  let body = readFileSync(join(ROOT, file[0]));
+  // The page names its CSS and script by content, so a deploy is never hidden behind a cached copy.
+  if (path === "/demo/") {
+    const v = (name: string) => createHash("sha256").update(readFileSync(join(ROOT, name))).digest("hex").slice(0, 12);
+    body = Buffer.from(body.toString().replace("/demo/demo.css", `/demo/demo.css?v=${v("demo.css")}`).replace("/demo/demo.js", `/demo/demo.js?v=${v("demo.js")}`));
+  }
+  return { body, contentType: file[1] };
 }
