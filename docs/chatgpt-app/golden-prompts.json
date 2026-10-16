@@ -65,7 +65,7 @@
           { "tool": "schools", "args": { "postcode": "M1 1AE" } },
           { "tool": "broadband", "args": { "postcode": "M1 1AE" } }
         ],
-        "outcome": "Calls deprivation, crime, schools and broadband for M1 1AE, in any order. Says the neighbourhood (Manchester 055D) is in deprivation decile 4, Above Average Deprivation, with crime and living environment in decile 1 and income and employment in decile 10. Reports 3 recorded crimes for April 2026 near the postcode, 2 violence and sexual offences and 1 other crime, without calling the area safe or unsafe on its own authority. Says 67 schools are within 3 km (3 Outstanding, 15 Good, 5 Requires Improvement, 44 not yet inspected), the nearest being Co-op Academy New Islington, a primary at 0.37 km with no Ofsted rating. Gives broadband of 72.9 Mbps average and 376.3 Mbps maximum download with 53.4% full-fibre coverage."
+        "outcome": "Calls deprivation, crime, schools and broadband for M1 1AE, in any order. Says the neighbourhood (Manchester 055D) is in deprivation decile 4, Above Average Deprivation, with crime and living environment in decile 1 and income and employment in decile 10. Reports the recorded crimes near the postcode for the latest month the police have published, by category, without calling the area safe or unsafe on its own authority. Says 67 schools are within 3 km (3 Outstanding, 15 Good, 5 Requires Improvement, 44 not yet inspected), the nearest being Co-op Academy New Islington, a primary at 0.37 km with no Ofsted rating. Gives broadband of 72.9 Mbps average and 376.3 Mbps maximum download with 53.4% full-fibre coverage."
       }
     },
     {
