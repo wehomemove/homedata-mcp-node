@@ -14,6 +14,7 @@ import { PROPERTY_PRICE_KEY, bandLabel, questionFor, quote, type QuoteAnswer } f
 import { homemoveWidgetHtml, HOMEMOVE_WIDGET_URI, HOMEMOVE_WIDGET_VERSION } from "./widget.js";
 import type { HomedataClient } from "../client.js";
 import { planMove, type MovePlan, type Situation } from "./plan.js";
+import { continueUrlForPlan, continueUrlForQuote } from "./handoff.js";
 
 export const HOMEMOVE_INSTRUCTIONS = [
   "Homemove prices the services people need when they move home: surveys and valuations, EPCs and safety certificates, removals and man and van, end of tenancy and moving cleans, packing, and conveyancing.",
@@ -43,6 +44,7 @@ const QUOTE_TOOL = {
       answers: { type: "object", additionalProperties: { type: "string" }, description: "Answers to questions a previous homemove_quote result asked, keyed by the question's name, e.g. {\"snagging_type\": \"Post-Completion\"}." },
       inventory: { type: "object", additionalProperties: { type: "integer", minimum: 1, maximum: 100 }, description: "Removals, from the quote card only: picker item id → quantity." },
       to_postcode: { type: "string", description: "Removals: the full postcode they are moving to. postcode is where they are moving from." },
+      home_size: { type: "string", enum: ["Studio", "1 bedroom", "2 bedrooms", "3 bedrooms", "4 bedrooms", "5+ bedrooms"], description: "Removals: the size of the home they are moving out of, for an indicative price when they have not listed their things." },
       items: { type: "array", maxItems: 60, items: { type: "object", additionalProperties: false, required: ["item"], properties: { item: { type: "string", description: "A thing being moved in the user's words, e.g. \"double bed\", \"3 seater sofa\", \"medium boxes\"." }, quantity: { type: "integer", minimum: 1, maximum: 100 } } }, description: "Removals: what is moving. Only what the user said; never invent a typical household." },
     },
   },
@@ -127,28 +129,34 @@ export const HOMEMOVE_TOOL_LIST = [QUOTE_TOOL, PLAN_TOOL, STAMP_TOOL, SERVICES_T
 export const UNAVAILABLE_TEXT = "Homemove could not work out the price just now. Tell the user to try again in a moment. Do not estimate a price.";
 
 /** The model-facing summary that goes with a quote, so it says what the card shows and no more. */
-export function quoteNarration(answer: QuoteAnswer): string {
+export function quoteNarration(answer: QuoteAnswer & { continue_url?: string }): string {
+  const link = answer.continue_url ? ` They can carry on at homemove.com: ${answer.continue_url}` : "";
+  return quoteNarrationCore(answer) + link;
+}
+
+function quoteNarrationCore(answer: QuoteAnswer): string {
   switch (answer.status) {
     case "priced": {
       const what: Record<string, string> = { beds: "bedrooms", tenure: "tenure", property_price: "value" };
       const assumed = answer.assumed.map((a) => `${what[a.name] ?? a.name} ${a.value} (from ${a.source})`).join("; ");
       if (answer.move) {
         const m = answer.move;
-        return `Homemove's removals guide price from ${m.from} to ${m.to} is £${answer.price_gbp.toLocaleString("en-GB")}: about ${m.cubic_meters} m³, ${m.num_vans && m.num_vans > 1 ? `${m.num_vans} × ` : ""}${m.van_type}, a crew of ${m.crew_size}, around ${m.estimated_hours} hours, ${m.distance_km} km.` +
+        return `Homemove's ${answer.indicative ? `indicative removals price for ${answer.indicative}` : "removals guide price"} from ${m.from} to ${m.to} is £${answer.price_gbp.toLocaleString("en-GB")}: about ${m.cubic_meters} m³, ${m.num_vans && m.num_vans > 1 ? `${m.num_vans} × ` : ""}${m.van_type}, a crew of ${m.crew_size}, around ${m.estimated_hours} hours, ${m.distance_km} km.` +
           (answer.unmatched?.length ? ` Not in the price (not on the item list): ${answer.unmatched.join(", ")}; say so.` : "") +
-          ` It's a guide price from the inventory; the final price is confirmed when they book on homemove.com: ${answer.booking_url}. The card shows it; keep your reply short.`;
+          (answer.indicative ? ` Say it is indicative, based on ${answer.indicative}; listing their own things (in chat or on the card) or continuing on homemove.com refines it.` : " It's a guide price from what they listed.") +
+          " The final price is confirmed when they book on homemove.com. The card shows it with a button to carry on there; keep your reply short.";
       }
       const extras = (answer.extras ?? []).map((x) => `${x.label} £${x.amount_gbp.toLocaleString("en-GB")} is a separate line`).join("; ");
       return `Homemove's price for a ${answer.product.name} at ${answer.property?.address ?? answer.postcode} is £${answer.price_gbp.toLocaleString("en-GB")}.` +
         (answer.band ? ` Priced on the ${bandLabel(answer.band)} value band.` : "") +
         (assumed ? ` Assumed: ${assumed}; say so and invite a correction.` : "") +
         (extras ? ` ${extras}, not in that total.` : "") +
-        ` The price is confirmed when they book, on homemove.com: ${answer.booking_url}. The card shows it and has a Book button; keep your reply short.`;
+        " The price is confirmed when they book on homemove.com. The card shows it with a button to carry on there; keep your reply short.";
     }
     case "needs_answers":
       return `To price a ${answer.product.name}, ask: ` + answer.questions.map((q) => q.options.length ? `${q.question} (${q.options.join(" / ")})` : q.question).join(" ") +
-        (answer.questions.some((q) => q.name === "inventory" || q.name === "to_postcode")
-          ? " Then call homemove_quote again with to_postcode and items (each thing they named, with a quantity). Never fill in a typical household for them; the card also lets them pick room by room."
+        (answer.questions.some((q) => q.name === "home_size" || q.name === "to_postcode")
+          ? " Then call homemove_quote again with to_postcode and home_size for an indicative price, or items (each thing they named, with a quantity) for their own list. Never make up a list of their things; the card also lets them pick room by room."
           : " Then call homemove_quote again with the answers (property_price in pounds for the value).") +
         (answer.unmatched?.length ? ` These aren't on Homemove's item list, so ask what they're closest to: ${answer.unmatched.join(", ")}.` : "");
     case "quoted_by_hand":
@@ -176,7 +184,7 @@ export function planNarration(plan: MovePlan): string {
     " Prices are confirmed when they book. The card shows the plan; keep your reply short.";
 }
 
-export function buildHomemoveServer(deps: { motus: MotusClient; property: PropertyLookup; assetOrigin: string; homedata?: HomedataClient }): Server {
+export function buildHomemoveServer(deps: { motus: MotusClient; property: PropertyLookup; assetOrigin: string; homedata?: HomedataClient; handoffBase?: string }): Server {
   const server = new Server({ name: "homemove", version: VERSION }, { capabilities: { tools: {}, resources: {} }, instructions: HOMEMOVE_INSTRUCTIONS });
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
@@ -222,10 +230,13 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
           bedrooms: typeof args["bedrooms"] === "number" && args["bedrooms"] > 0 ? Math.round(args["bedrooms"]) : undefined,
           answers,
           to_postcode: typeof args["to_postcode"] === "string" && args["to_postcode"].trim() ? args["to_postcode"].trim() : undefined,
+          home_size: typeof args["home_size"] === "string" ? args["home_size"] : undefined,
           items: Array.isArray(args["items"]) ? (args["items"] as Array<{ item?: unknown; quantity?: unknown }>).filter((i) => typeof i?.item === "string").map((i) => ({ item: String(i.item), quantity: typeof i.quantity === "number" ? i.quantity : undefined })) : undefined,
           inventory: args["inventory"] && typeof args["inventory"] === "object" && !Array.isArray(args["inventory"]) ? Object.fromEntries(Object.entries(args["inventory"] as Record<string, unknown>).filter(([, v]) => typeof v === "number").map(([k, v]) => [k, v as number])) : undefined,
         }, deps);
-        return result(answer as unknown as Record<string, unknown>, quoteNarration(answer));
+        const continue_url = continueUrlForQuote(answer, deps.handoffBase);
+        const withLink = { ...answer, continue_url };
+        return result(withLink as unknown as Record<string, unknown>, quoteNarration(withLink));
       }
       if (request.params.name === "homemove_move_plan" && deps.homedata) {
         const situation = String(args["situation"] ?? "") as Situation;
@@ -241,7 +252,9 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
           items: Array.isArray(args["items"]) ? (args["items"] as Array<{ item?: unknown; quantity?: unknown }>).filter((i) => typeof i?.item === "string").map((i) => ({ item: String(i.item), quantity: typeof i.quantity === "number" ? i.quantity : undefined })) : undefined,
         }, { motus: deps.motus, property: deps.property, homedata: deps.homedata });
         if (!plan.lines.length) return result({ view: "plan", ...plan } as unknown as Record<string, unknown>, "Ask for the postcode of the home they are moving to (and from, if they are selling or renting), then try again.");
-        return result({ view: "plan", ...plan } as unknown as Record<string, unknown>, planNarration(plan));
+        const continue_url = continueUrlForPlan(plan, { to_postcode: pc("to_postcode"), from_postcode: pc("from_postcode") }, deps.handoffBase);
+        const lines = plan.lines.map((l) => ({ ...l, answer: { ...l.answer, continue_url: continueUrlForQuote(l.answer, deps.handoffBase) } }));
+        return result({ view: "plan", ...plan, lines, continue_url } as unknown as Record<string, unknown>, planNarration({ ...plan, lines }) + ` To carry on with everything on homemove.com: ${continue_url}`);
       }
       if (request.params.name === "homemove_stamp_duty" && deps.homedata) {
         const price = typeof args["price"] === "number" && args["price"] > 0 ? Math.round(args["price"]) : 0;

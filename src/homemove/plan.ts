@@ -73,7 +73,7 @@ export function linesFor(plan: PlanRequest): Need[] {
   }
   const from = sellAt || (plan.situation === "renting" ? sellAt : "");
   if (from && buyAt && plan.situation !== "landlord") {
-    needs.push({ step: "Book removals", why: "Priced from what you're moving and how far.", request: { service: "removals", postcode: from, to_postcode: buyAt, items: plan.items } as QuoteRequest });
+    needs.push({ step: "Book removals", why: "Priced from what you're moving and how far.", request: { service: "removals", postcode: from, to_postcode: buyAt, items: plan.items, bedrooms: plan.bedrooms } as QuoteRequest });
   }
   if (plan.situation === "renting" && sellAt) {
     needs.push({ step: "End of tenancy clean", why: "A professional clean of the place you're leaving, before you hand back the keys.", request: { service: "end of tenancy clean", postcode: sellAt, address: plan.from_address, bedrooms: plan.bedrooms } });

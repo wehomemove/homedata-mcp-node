@@ -105,6 +105,7 @@ export interface QuoteRequest {
   to_postcode?: string;
   items?: MovingItem[];
   inventory?: Record<string, number>;
+  home_size?: string;
 }
 
 export interface MoveView {
@@ -113,7 +114,7 @@ export interface MoveView {
 }
 
 export type QuoteAnswer =
-  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }>; move?: MoveView; unmatched?: string[] }
+  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }>; move?: MoveView; unmatched?: string[]; indicative?: string }
   | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[]; picker?: PickerRoom[]; unmatched?: string[] }
   | { status: "quoted_by_hand"; product: ProductView; postcode: string; property?: PropertyView; answers: AnswerView[] }
   | { status: "choose_service"; options: ProductView[] }
@@ -127,7 +128,7 @@ export interface ProductView { id: number; name: string; type: string | null }
  * product, opened on the product with the postcode filled in. Slugs are the website's
  * (motus resources/js/Website/Forms/configs/surveys.config.ts surveySlugToIdMap).
  */
-const SURVEY_SLUGS: Record<number, string> = {
+export const SURVEY_SLUGS: Record<number, string> = {
   2: "rics-level-2", 4: "rics-level-3", 1039: "snagging", 1045: "building", 1: "help-to-buy-valuation",
   6: "shared-ownership-valuation", 1043: "structural", 1044: "roof", 1040: "probate-valuation",
   1041: "matrimonial-valuation", 1042: "thermographic", 1038: "asbestos", 1081: "epc-assessment",

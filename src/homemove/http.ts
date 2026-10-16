@@ -21,6 +21,8 @@ export interface HomemoveHttpOptions {
   motus: MotusClient;
   property: PropertyLookup;
   homedata?: HomedataClient;
+  /** monty/frontend's handoff page; unset, links open the quote wizards. */
+  handoffBase?: string;
   mcpPath?: string;
   callsPerMinute?: number;
   clientIpHeader?: string;
@@ -93,7 +95,7 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
         ? send(res, 200, { jsonrpc: "2.0", id: (body as { id?: unknown }).id ?? null, result: { content: [{ type: "text", text: CALL_LIMIT_TEXT }], structuredContent: { available: false, limit_reached: true, reason: CALL_LIMIT_TEXT }, isError: true } })
         : send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" }));
     }
-    const server = buildHomemoveServer({ motus: options.motus, property: options.property, assetOrigin, homedata: options.homedata });
+    const server = buildHomemoveServer({ motus: options.motus, property: options.property, assetOrigin, homedata: options.homedata, handoffBase: options.handoffBase });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });
     await server.connect(transport);
@@ -114,6 +116,7 @@ async function main(): Promise<void> {
     motus,
     property,
     homedata,
+    handoffBase: (process.env["HOMEMOVE_HANDOFF_URL"] ?? "").trim() || undefined,
     mcpPath: process.env["HOMEMOVE_MCP_PATH"] || "/mcp",
     callsPerMinute: checkCallsPerMinute(process.env["MCP_CALLS_PER_MINUTE"]),
     clientIpHeader: (process.env["HOMEMOVE_CLIENT_IP_HEADER"] ?? "").trim() || undefined,

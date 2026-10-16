@@ -61,7 +61,34 @@ export function findItem(rooms: PickerRoom[], said: string): PickerItem | undefi
 
 export interface MovingItem { item: string; quantity?: number }
 
-export async function removals(request: QuoteRequest & { to_postcode?: string; items?: MovingItem[]; inventory?: Record<string, number> }, motus: MotusClient): Promise<QuoteAnswer> {
+/**
+ * A typical household by home size, from the website's own picker items, for an
+ * indicative guide price before anyone lists their things. Always labelled as
+ * "a typical N-bedroom home"; the room-by-room picker and homemove.com refine it.
+ */
+const ONE_BED: Array<[string, number]> = [["Double Bed & Mattress", 1], ["Double Wardrobe", 1], ["Chest Of Drawers", 1], ["Bedside Table", 2], ["Two Seater Sofa", 1], ["Coffee Table", 1],
+  ["Large Television/TV (Greater than 40\")", 1], ["TV Stand", 1], ["Fridge Freezer", 1], ["Washing Machine", 1], ["4 Seater Dining Table", 1], ["Dining Chair", 4], ["Medium Box", 15], ["Large Box", 5], ["Suitcase", 2]];
+const EXTRA_DOUBLE: Array<[string, number]> = [["Double Bed & Mattress", 1], ["Double Wardrobe", 1], ["Chest Of Drawers", 1], ["Bedside Table", 2], ["Medium Box", 10], ["Large Box", 3]];
+const EXTRA_SINGLE: Array<[string, number]> = [["Single Bed & Mattress", 1], ["Single Wardrobe", 1], ["Chest Of Drawers", 1], ["Medium Box", 8], ["Large Box", 2]];
+const FAMILY: Array<[string, number]> = [["Three Seater Sofa", 1], ["Armchair", 1], ["Bookcase", 1], ["Tumble Dryer", 1], ["Dishwasher", 1], ["Desk", 1], ["Office Chair", 1], ["Garden Table", 1], ["Garden Chair", 4], ["Lawn Mower", 1], ["Bicycle", 2]];
+export const HOME_SIZES: Record<string, { label: string; items: Array<[string, number]> }> = {
+  studio: { label: "a typical studio flat", items: ONE_BED.filter(([n]) => !/Dining|Two Seater/.test(n)).concat([["Two Seater Sofa", 1]]).map(([n, q]) => [n, n === "Medium Box" ? 10 : q] as [string, number]) },
+  "1_bed": { label: "a typical 1-bedroom home", items: ONE_BED },
+  "2_bed": { label: "a typical 2-bedroom home", items: [...ONE_BED, ...EXTRA_DOUBLE] },
+  "3_bed": { label: "a typical 3-bedroom home", items: [...ONE_BED, ...EXTRA_DOUBLE, ...EXTRA_SINGLE, ...FAMILY] },
+  "4_bed": { label: "a typical 4-bedroom home", items: [...ONE_BED, ...EXTRA_DOUBLE, ...EXTRA_DOUBLE, ...EXTRA_SINGLE, ...FAMILY, ["Sideboard", 1], ["Armchair", 1]] },
+  "5_bed": { label: "a typical 5-bedroom home", items: [...ONE_BED, ...EXTRA_DOUBLE, ...EXTRA_DOUBLE, ...EXTRA_SINGLE, ...EXTRA_SINGLE, ...FAMILY, ["Sideboard", 1], ["Armchair", 2], ["Display Cabinet", 1]] },
+};
+export const HOME_SIZE_OPTIONS = ["Studio", "1 bedroom", "2 bedrooms", "3 bedrooms", "4 bedrooms", "5+ bedrooms"];
+export function homeSizeKey(said: unknown): string | undefined {
+  if (said === undefined || said === null || said === "") return undefined;
+  const text = String(said).toLowerCase();
+  if (/studio/.test(text)) return "studio";
+  const n = Number.parseInt(text, 10);
+  return Number.isFinite(n) && n > 0 ? `${Math.min(5, n)}_bed` : undefined;
+}
+
+export async function removals(request: QuoteRequest & { to_postcode?: string; items?: MovingItem[]; inventory?: Record<string, number>; home_size?: string }, motus: MotusClient): Promise<QuoteAnswer> {
   const product = { id: 1054, name: "Removals", type: "removals" as const };
   const rooms = await motus.removalsPicker();
   const inventory: Record<string, number> = {};
@@ -75,9 +102,19 @@ export async function removals(request: QuoteRequest & { to_postcode?: string; i
     inventory[String(found.id)] = Math.min(100, (inventory[String(found.id)] ?? 0) + Math.max(1, Math.round(quantity ?? 1)));
   }
 
+  // No list of things yet: a home size gives an indicative price from a typical household.
+  const size = homeSizeKey(request.home_size ?? request.answers?.["home_size"] ?? (request.bedrooms ? String(request.bedrooms) : undefined));
+  let indicative: string | undefined;
+  if (!Object.keys(inventory).length && size) {
+    for (const [name, qty] of HOME_SIZES[size]!.items) {
+      const found = rooms.flatMap((r) => r.items).find((i) => i.name === name);
+      if (found) inventory[String(found.id)] = (inventory[String(found.id)] ?? 0) + qty;
+    }
+    indicative = HOME_SIZES[size]!.label;
+  }
   const questions = [];
   if (!request.to_postcode) questions.push({ name: "to_postcode", question: "What's the postcode you're moving to?", options: [] as string[] });
-  if (!Object.keys(inventory).length) questions.push({ name: "inventory", question: "What are you moving? List the main furniture and roughly how many boxes, or pick room by room.", options: [] as string[] });
+  if (!Object.keys(inventory).length) questions.push({ name: "home_size", question: "How big is the home you're moving out of?", options: HOME_SIZE_OPTIONS });
   if (questions.length) {
     return { status: "needs_answers", product, postcode: request.postcode, assumed: [], answers: [], questions, picker: rooms, ...(unmatched.length ? { unmatched } : {}) };
   }
@@ -97,6 +134,7 @@ export async function removals(request: QuoteRequest & { to_postcode?: string; i
         items: Object.entries(inventory).map(([id, qty]) => ({ name: names.get(id) ?? `Item ${id}`, quantity: qty })),
       },
       ...(unmatched.length ? { unmatched } : {}),
+      ...(indicative ? { indicative } : {}),
     };
   } catch (error) {
     if (error instanceof MotusRefusal && error.code === "quote_unavailable") return { status: "quoted_by_hand", product, postcode: request.postcode, answers: [] };
