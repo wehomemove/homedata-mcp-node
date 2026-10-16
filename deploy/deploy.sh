@@ -46,7 +46,11 @@ if [ ! -f "$REL/.verified" ]; then
   mv -T "$REL.building" "$REL"
 fi
 
-PREVIOUS=$(readlink -f current 2>/dev/null || true)
+# Only a release that exists counts as previous. On a first deploy there is no
+# `current`, and `readlink -f` of a missing path prints the path itself, which
+# made the rollback link `current` to itself (ELOOP; homemove-mcp, 16 Oct 2026).
+PREVIOUS=""
+if [ -L current ] && [ -d "$(readlink -f current)" ]; then PREVIOUS=$(readlink -f current); fi
 ln -sfn "$REL" current.next && mv -T current.next current
 $SUPERVISORCTL restart "$PROGRAM" >/dev/null
 
