@@ -91,8 +91,21 @@ export function matchOption(input: PricingInput, given: unknown): string | undef
     }
   }
   const partial = input.options.filter((o) => norm(o.label).includes(text) || text.includes(norm(o.label)));
-  return partial.length === 1 ? partial[0]!.value : undefined;
+  if (partial.length === 1) return partial[0]!.value;
+  // Everyday words for the options people are offered ("before completion" is Pre-inspection).
+  const said = SAID.find(([re]) => re.test(text));
+  const meant = said ? input.options.find((o) => said[1].test(o.label)) : undefined;
+  return meant?.value;
 }
+
+const SAID: Array<[RegExp, RegExp]> = [
+  [/\b(before|pre|not (yet )?completed|before (we|i) move)\b/i, /^pre/i],
+  [/\b(after|post|moved in|completed|already in)\b/i, /^post/i],
+  [/^(yes|y|yeah|yep|they will|needed)$/i, /^yes$/i],
+  [/^(no|n|nope|not needed)$/i, /^no$/i],
+  [/\bmanage/i, /^management/i],
+  [/\b(refurb|demoli|renovat)/i, /refurbishment/i],
+];
 
 export interface QuoteRequest {
   service: string | number;
@@ -300,5 +313,6 @@ export async function quote(request: QuoteRequest, deps: { motus: MotusClient; p
 
 export function bandLabel(band: { min: number; max: number }): string {
   const f = (n: number) => (n >= 1_000_000 ? `£${(n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0)}m` : `£${Math.round(n / 1000)}k`);
+  if (band.max >= 100_000_000) return `over ${f(band.min - 1)}`;
   return band.min <= 1 ? `up to ${f(band.max)}` : `${f(band.min - 1)}–${f(band.max)}`;
 }

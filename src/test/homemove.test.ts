@@ -109,6 +109,8 @@ test("answers in the user's words become the option values motus expects", () =>
   assert.equal(matchOption(snag.inputs[0]!, 3), "3");
   assert.equal(matchOption(snag.inputs[0]!, "7"), "5", "beyond the top band is the 5+ option");
   assert.equal(matchOption(snag.inputs[0]!, "lots"), undefined);
+  assert.equal(matchOption(snag.inputs[1]!, "before completion"), "1", "found live: the model passes everyday words");
+  assert.equal(matchOption(snag.inputs[1]!, "after we've moved in"), "2");
 });
 
 test("an address fills bedrooms from the property record and says it was assumed", async () => {

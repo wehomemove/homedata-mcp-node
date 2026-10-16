@@ -147,14 +147,14 @@ function quoteNarrationCore(answer: QuoteAnswer): string {
           " The final price is confirmed when they book on homemove.com. The card shows it with a button to carry on there; keep your reply short.";
       }
       const extras = (answer.extras ?? []).map((x) => `${x.label} £${x.amount_gbp.toLocaleString("en-GB")} is a separate line`).join("; ");
-      return `Homemove's price for a ${answer.product.name} at ${answer.property?.address ?? answer.postcode} is £${answer.price_gbp.toLocaleString("en-GB")}.` +
+      return `Homemove's price for ${/^[aeiou]/i.test(answer.product.name) ? "an" : "a"} ${answer.product.name} at ${answer.property?.address ?? answer.postcode} is £${answer.price_gbp.toLocaleString("en-GB")}.` +
         (answer.band ? ` Priced on the ${bandLabel(answer.band)} value band.` : "") +
         (assumed ? ` Assumed: ${assumed}; say so and invite a correction.` : "") +
         (extras ? ` ${extras}, not in that total.` : "") +
         " The price is confirmed when they book on homemove.com. The card shows it with a button to carry on there; keep your reply short.";
     }
     case "needs_answers":
-      return `To price a ${answer.product.name}, ask: ` + answer.questions.map((q) => q.options.length ? `${q.question} (${q.options.join(" / ")})` : q.question).join(" ") +
+      return `To price ${/^[aeiou]/i.test(answer.product.name) ? "an" : "a"} ${answer.product.name}, ask: ` + answer.questions.map((q) => q.options.length ? `${q.question} (${q.options.join(" / ")})` : q.question).join(" ") +
         (answer.questions.some((q) => q.name === "home_size" || q.name === "to_postcode")
           ? " Then call homemove_quote again with to_postcode and home_size for an indicative price, or items (each thing they named, with a quantity) for their own list. Never make up a list of their things; the card also lets them pick room by room."
           : " Then call homemove_quote again with the answers (property_price in pounds for the value).") +
