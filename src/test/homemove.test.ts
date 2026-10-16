@@ -13,7 +13,7 @@ import { PropertyLookup } from "../homemove/property.js";
 import { matchOption, quote, resolveProduct } from "../homemove/quote.js";
 import { buildHomemoveServer, planNarration, quoteNarration } from "../homemove/server.js";
 import { planMove } from "../homemove/plan.js";
-import { continueUrlForQuote } from "../homemove/handoff.js";
+import { continueUrlForPlan, continueUrlForQuote } from "../homemove/handoff.js";
 import { HOMEMOVE_ASSET_PREFIX, HOMEMOVE_WIDGET_URI } from "../homemove/widget.js";
 
 const BANDS = [["1", "Up to £100,000"], ["5", "£300,001 - £400,000"], ["6", "£400,001 - £500,000"]].map(([value, label]) => ({ value: value!, label: label! }));
@@ -331,4 +331,16 @@ test("a client that accepts only JSON gets the tool list, not 406 (seen from Cha
       assert.ok(((await res.json()) as { result: { tools: unknown[] } }).result.tools.length >= 2, accept);
     }
   } finally { server.close(); }
+});
+
+test("a whole-move handoff says which home each service is for", async () => {
+  const plan = await planMove({ situation: "buying_and_selling", from_postcode: "M1 1AE", to_postcode: "SW1A 2AA", to_address: "10 Downing Street", property_price: 350000, sale_price: 250000, mortgage: true, bedrooms: 2 },
+    { motus: fakeMotus(), property: fakeHomedata(), homedata: fakeHomedataClient() });
+  const url = new URL(continueUrlForPlan(plan, { from_postcode: "M1 1AE", to_postcode: "SW1A 2AA" }, "https://homemove.com/continue/"));
+  const data = JSON.parse(Buffer.from(url.searchParams.get("d")!, "base64url").toString());
+  assert.deepEqual(data.services.map((s: { name: string; for: string }) => [s.name, s.for]), [
+    ["EPC Assessment", "property"], ["Conveyancing (selling)", "property"], ["Conveyancing (buying)", "to_property"],
+    ["Level 2 Survey", "to_property"], ["Removals", "property"], ["End of Tenancy Clean", "property"]]);
+  assert.equal(data.property.postcode.replace(/\s/g, ""), "M11AE");
+  assert.equal(data.to_property.postcode, "SW1A 2AA");
 });
