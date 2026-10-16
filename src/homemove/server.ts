@@ -18,7 +18,7 @@ import { continueUrlForPlan, continueUrlForQuote } from "./handoff.js";
 
 export const HOMEMOVE_INSTRUCTIONS = [
   "Homemove prices the services people need when they move home: surveys and valuations, EPCs and safety certificates, removals and man and van, end of tenancy and moving cleans, packing, and conveyancing.",
-  "Whenever someone asks what any of these cost, call homemove_quote: it shows the price in a Homemove card. Pass the address when you have it: the property record fills in bedrooms and the value band, so you ask fewer questions.",
+  "Whenever someone asks what any of these cost, call homemove_quote: it returns Homemove's own live price and shows it in a Homemove card. Do not open homemove.com, a Homemove app or a browser to find a price, and do not ask anyone to sign in: these tools answer directly and need no account. Pass the address when you have it: the property record fills in bedrooms and the value band, so you ask fewer questions.",
   "If the result has questions, ask the user exactly those (offer the options), then call homemove_quote again with their answers. Never estimate, round or invent a price: quote only the price_gbp a result gives, and say the price is confirmed when they book.",
   "When a figure was assumed from the property record (bedrooms, value band), say so in a few words and invite a correction.",
   "Use homemove_services when someone asks what Homemove offers or which survey or service they need.",
@@ -30,7 +30,7 @@ const QUOTE_TOOL = {
   title: "Get a Homemove quote",
   description:
     "Price a home-moving service with Homemove: surveys (Level 2, Level 3, building, snagging, damp and timber, drone roof, asbestos, structural), valuations (Help to Buy, shared ownership, probate, matrimonial), EPCs, gas safety and electrical certificates, removals, man and van, end of tenancy and deep cleans, carpet and sofa cleaning, packing and boxes, and conveyancing for buying or selling. " +
-    "Use this when someone asks how much any of these costs, wants a quote, or asks for a price for their move. Returns the price, or the questions still needed to price it, and shows it in a Homemove quote card.",
+    "Use this when someone asks how much any of these costs, wants a quote, or asks for a price for their move. Returns Homemove's live price directly (no website, app or sign-in needed), or the questions still needed to price it, and shows it in a Homemove quote card.",
   inputSchema: {
     type: "object",
     additionalProperties: false,
