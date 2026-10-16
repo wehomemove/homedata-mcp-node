@@ -132,6 +132,7 @@ export async function removals(request: QuoteRequest & { to_postcode?: string; i
         from: q.from_postcode ?? request.postcode, to: q.to_postcode ?? request.to_postcode!, distance_km: q.distance_km ?? null,
         cubic_meters: q.cubic_meters ?? null, van_type: q.van_type ?? null, num_vans: q.num_vans ?? null, crew_size: q.crew_size ?? null, estimated_hours: q.estimated_hours ?? null,
         items: Object.entries(inventory).map(([id, qty]) => ({ name: names.get(id) ?? `Item ${id}`, quantity: qty })),
+        inventory,
       },
       ...(unmatched.length ? { unmatched } : {}),
       ...(indicative ? { indicative } : {}),

@@ -295,3 +295,15 @@ test("every outcome links to homemove.com, carrying property and service details
   const byHand = await quote({ service: "end of tenancy clean", postcode: "SW1A 2AA", bedrooms: 6 }, deps);
   assert.match(continueUrlForQuote(byHand, undefined), /^https:\/\/homemove\.com\/quote\/cleaning\/$/);
 });
+
+test("the handoff carries what conveyancing and removals need to be re-priced: stated price and funding, and the inventory", async () => {
+  const deps = { motus: fakeMotus(), property: fakeHomedata() };
+  const read = (a: Parameters<typeof continueUrlForQuote>[0]) => JSON.parse(Buffer.from(new URL(continueUrlForQuote(a, "https://homemove.com/continue/")).searchParams.get("d")!, "base64url").toString()).services[0];
+  const stated = await quote({ service: "conveyancing buying", postcode: "SW1A 2AA", address: "10 Downing Street", property_price: 350000, answers: { funding_type: "Mortgage" } }, deps);
+  assert.deepEqual(read(stated), { kind: "conveyancing", name: "Conveyancing (buying)", transaction: "purchase", tenure: "freehold", property_price: 350000, funding_type: "mortgage", quoted_gbp: 1152 });
+  const estimated = await quote({ service: "conveyancing buying", postcode: "SW1A 2AA", address: "10 Downing Street", answers: { funding_type: "Cash" } }, deps);
+  assert.equal(estimated.status, "priced");
+  assert.equal(read(estimated).property_price, undefined, "an estimated value is never handed on as theirs");
+  const moving = await quote({ service: "removals", postcode: "SW1A 2AA", to_postcode: "LS1 4AP", items: [{ item: "sofa", quantity: 2 }] }, deps);
+  assert.deepEqual(read(moving).inventory, { "1584": 2 });
+});

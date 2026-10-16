@@ -60,11 +60,15 @@ function serviceOf(answer: QuoteAnswer): HandoffService | undefined {
   const given = Object.fromEntries((answer.answers ?? []).map((a) => [a.name, a.label]));
   const priced = answer.status === "priced" ? answer.price_gbp : undefined;
   if (p.type === "legal") {
-    return { kind: "conveyancing", name: p.name, transaction: p.id === 1063 ? "sale" : "purchase", ...(given["tenure"] ? { tenure: String(given["tenure"]).toLowerCase() } : {}), ...(priced ? { quoted_gbp: priced } : {}) };
+    const legal = "legal" in answer ? answer.legal : undefined;
+    return { kind: "conveyancing", name: p.name, transaction: legal?.transaction ?? (p.id === 1063 ? "sale" : "purchase"),
+      ...(legal?.tenure ? { tenure: legal.tenure } : {}), ...(legal?.property_price ? { property_price: legal.property_price } : {}),
+      ...(legal?.funding_type ? { funding_type: legal.funding_type } : {}), ...(priced ? { quoted_gbp: priced } : {}) };
   }
   if (p.type === "removals") {
     const move = answer.status === "priced" ? answer.move : undefined;
     return { kind: "removals", name: p.name, from_postcode: move?.from ?? answer.postcode, ...(move?.to ? { to_postcode: move.to } : {}), ...(priced ? { quoted_gbp: priced } : {}),
+      ...(move?.inventory && Object.keys(move.inventory).length ? { inventory: move.inventory } : {}),
       ...(answer.status === "priced" && answer.indicative ? { home_size: answer.indicative } : {}) };
   }
   if (p.type === "cleaning" && (p.id === 1097 || p.id === 1049)) {

@@ -111,17 +111,21 @@ export interface QuoteRequest {
 export interface MoveView {
   from: string; to: string; distance_km: number | null; cubic_meters: number | null; van_type: string | null;
   num_vans: number | null; crew_size: number | null; estimated_hours: number | null; items: Array<{ name: string; quantity: number }>;
+  /** What was priced, as furniture_option_id → quantity (a typical household when indicative). */
+  inventory: Record<string, number>;
 }
 
 export type QuoteAnswer =
-  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }>; move?: MoveView; unmatched?: string[]; indicative?: string }
-  | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[]; picker?: PickerRoom[]; unmatched?: string[] }
-  | { status: "quoted_by_hand"; product: ProductView; postcode: string; property?: PropertyView; answers: AnswerView[] }
+  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }>; move?: MoveView; unmatched?: string[]; indicative?: string; legal?: LegalView }
+  | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[]; picker?: PickerRoom[]; unmatched?: string[]; legal?: LegalView }
+  | { status: "quoted_by_hand"; product: ProductView; postcode: string; property?: PropertyView; answers: AnswerView[]; legal?: LegalView }
   | { status: "choose_service"; options: ProductView[] }
   | { status: "unknown_service"; service: string }
   | { status: "address_not_found"; reason: string; postcode: string };
 
 export interface ProductView { id: number; name: string; type: string | null }
+/** What a conveyancing quote was priced on. property_price only when the user stated it, never an estimate. */
+export interface LegalView { transaction?: "purchase" | "sale"; tenure?: "freehold" | "leasehold"; property_price?: number; funding_type?: "mortgage" | "cash" }
 
 /**
  * Where a customer books what they were quoted: homemove.com's own quote wizard for that
@@ -203,19 +207,20 @@ async function conveyancing(request: QuoteRequest, deps: { motus: MotusClient; p
     const q = transaction === "sale" ? LEGAL_QUESTIONS.funding_sale : LEGAL_QUESTIONS.funding_purchase;
     questions.push({ name: "funding_type", question: q.question, options: [...q.options] });
   }
-  if (questions.length) return { status: "needs_answers", product, postcode: request.postcode, property, assumed: assumed.filter((a) => a.name !== "property_price"), answers: shown, questions };
+  const legal: LegalView = { ...(transaction ? { transaction } : {}), ...(tenure ? { tenure } : {}), ...(request.property_price ? { property_price: Math.round(request.property_price) } : {}), ...(funding ? { funding_type: funding } : {}) };
+  if (questions.length) return { status: "needs_answers", product, postcode: request.postcode, property, assumed: assumed.filter((a) => a.name !== "property_price"), answers: shown, questions, legal };
 
   try {
-    const legal = await deps.motus.legalQuote({ transaction: transaction!, tenure: tenure!, propertyPrice: price!, fundingType: funding });
+    const quoted = await deps.motus.legalQuote({ transaction: transaction!, tenure: tenure!, propertyPrice: price!, fundingType: funding });
     for (const a of assumed) if (a.name === "property_price") a.value = `about ${bandLabel({ min: Math.floor(price! / 50000) * 50000 + 1, max: Math.ceil(price! / 50000) * 50000 })}`;
     return {
-      status: "priced", product, price_gbp: legal.total_gbp, postcode: request.postcode, property, assumed, answers: shown,
+      status: "priced", product, price_gbp: quoted.total_gbp, postcode: request.postcode, property, assumed, answers: shown, legal,
       booking_url: bookingUrl(product, request.postcode),
-      breakdown: [{ label: "Legal fees", amount_gbp: legal.legal_fee_gbp }, ...legal.disbursements],
-      ...(legal.search_pack_gbp ? { extras: [{ label: "Search pack", amount_gbp: legal.search_pack_gbp }] } : {}),
+      breakdown: [{ label: "Legal fees", amount_gbp: quoted.legal_fee_gbp }, ...quoted.disbursements],
+      ...(quoted.search_pack_gbp ? { extras: [{ label: "Search pack", amount_gbp: quoted.search_pack_gbp }] } : {}),
     };
   } catch (error) {
-    if (error instanceof MotusRefusal) return { status: "quoted_by_hand", product, postcode: request.postcode, property, answers: shown };
+    if (error instanceof MotusRefusal) return { status: "quoted_by_hand", product, postcode: request.postcode, property, answers: shown, legal };
     throw error;
   }
 }
