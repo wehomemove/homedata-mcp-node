@@ -217,7 +217,7 @@
 
   async function callQuote(extra) {
     const d = state.data;
-    const args = { service: String(d.product.id), postcode: d.postcode, ...(d.property?.address ? { address: state.args.address ?? d.property.address.split(",")[0] } : {}), ...state.args, ...extra };
+    const args = { service: String(d.product.id), postcode: d.postcode, ...(d.to_postcode ? { to_postcode: d.to_postcode } : {}), ...(d.property?.address ? { address: state.args.address ?? d.property.address.split(",")[0] } : {}), ...state.args, ...extra };
     const oa = window.openai;
     if (oa && typeof oa.callTool === "function") {
       const res = await oa.callTool("homemove_quote", args);

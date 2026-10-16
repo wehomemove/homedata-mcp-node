@@ -120,7 +120,8 @@ export async function removals(request: QuoteRequest & { to_postcode?: string; i
   if (!request.to_postcode) questions.push({ name: "to_postcode", question: "What's the postcode you're moving to?", options: [] as string[] });
   if (!Object.keys(inventory).length) questions.push({ name: "home_size", question: "How big is the home you're moving out of?", options: HOME_SIZE_OPTIONS });
   if (questions.length) {
-    return { status: "needs_answers", product, postcode: request.postcode, assumed: [], answers: [], questions, picker: rooms, ...(unmatched.length ? { unmatched } : {}) };
+    // The destination already given travels with the questions, so the card's re-ask keeps it.
+    return { status: "needs_answers", product, postcode: request.postcode, ...(request.to_postcode ? { to_postcode: request.to_postcode } : {}), assumed: [], answers: [], questions, picker: rooms, ...(unmatched.length ? { unmatched } : {}) };
   }
 
   try {

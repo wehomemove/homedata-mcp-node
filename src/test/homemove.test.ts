@@ -344,3 +344,10 @@ test("a whole-move handoff says which home each service is for", async () => {
   assert.equal(data.property.postcode.replace(/\s/g, ""), "M11AE");
   assert.equal(data.to_property.postcode, "SW1A 2AA");
 });
+
+test("removals questions carry the destination already given, so the card does not ask for it again", async () => {
+  const ask = await quote({ service: "removals", postcode: "SW1A 2AA", to_postcode: "LS1 4AP" }, { motus: fakeMotus(), property: fakeHomedata() });
+  assert.equal(ask.status, "needs_answers");
+  assert.equal(ask.status === "needs_answers" && ask.to_postcode, "LS1 4AP");
+  assert.deepEqual(ask.status === "needs_answers" && ask.questions.map((q) => q.name), ["home_size"]);
+});
