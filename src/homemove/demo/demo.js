@@ -5,7 +5,7 @@
     { id: "survey", label: "Survey", prompt: "How much is a Level 3 building survey for a £450,000 house in Bath, BA1 1LN?",
       tool: "homemove_quote", args: { service: "Level 3 survey", postcode: "BA1 1LN", property_price: 450000 } },
     { id: "move", label: "My whole move", prompt: "I'm selling my 2-bed in Manchester (M1 1AE) and buying in London (SW1A 2AA) for £350,000 with a mortgage. What will my move cost?",
-      tool: "homemove_move_plan", args: { situation: "buying_and_selling", from_postcode: "M1 1AE", to_postcode: "SW1A 2AA", property_price: 350000, sale_price: 250000, mortgage: true, bedrooms: 2 } },
+      tool: "homemove_move_plan", args: { situation: "buying_and_selling", from_postcode: "M1 1AE", to_postcode: "SW1A 2AA", to_address: "10 Downing Street", property_price: 350000, sale_price: 250000, mortgage: true, bedrooms: 2 } },
     { id: "clean", label: "Moving-out clean", prompt: "What would an end of tenancy clean cost for my two-bed flat in Leeds, LS1 4AP?",
       tool: "homemove_quote", args: { service: "end of tenancy clean", postcode: "LS1 4AP", bedrooms: 2 } },
     { id: "legal", label: "Conveyancing", prompt: "What would conveyancing cost for buying a £275,000 leasehold flat in Manchester, M1 1AE, with a mortgage?",
