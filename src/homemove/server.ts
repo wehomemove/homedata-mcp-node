@@ -76,7 +76,7 @@ export function quoteNarration(answer: QuoteAnswer): string {
       return `Homemove's price for a ${answer.product.name} at ${answer.property?.address ?? answer.postcode} is £${answer.price_gbp.toLocaleString("en-GB")}.` +
         (answer.band ? ` Priced on the ${bandLabel(answer.band)} value band.` : "") +
         (assumed ? ` Assumed: ${assumed}; say so and invite a correction.` : "") +
-        " The price is confirmed when they book. The card shows it; keep your reply short.";
+        ` The price is confirmed when they book, on homemove.com: ${answer.booking_url}. The card shows it and has a Book button; keep your reply short.`;
     }
     case "needs_answers":
       return `To price a ${answer.product.name}, ask: ` + answer.questions.map((q) => q.options.length ? `${q.question} (${q.options.join(" / ")})` : q.question).join(" ") +

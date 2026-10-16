@@ -104,6 +104,7 @@ test("a value-band survey with an address uses the estimate only to pick the ban
   assert.ok(charged.some((path) => path.includes("/core/")));
   const narration = quoteNarration(answer);
   assert.match(narration, /£300k–£400k value band/);
+  assert.equal(answer.status === "priced" && answer.booking_url, "https://homemove.com/quote/surveys/rics-level-2?pc=SW1A2AA");
   assert.doesNotMatch(narration, /350,?000/, "the estimate itself is never told to the model");
   assert.doesNotMatch(JSON.stringify(answer), /350000/, "nor to the widget");
 });

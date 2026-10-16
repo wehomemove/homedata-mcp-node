@@ -500,8 +500,10 @@
 
   async function book(q) {
     const oa = window.openai;
-    if (oa?.sendFollowUpMessage) return oa.sendFollowUpMessage({ prompt: `I'd like to book the ${q.product.name} for ${q.property?.address ?? q.postcode} at £${q.price_gbp}.` });
-    say("In ChatGPT this starts your booking.");
+    // Booking happens on homemove.com's own quote wizard, opened on this product and postcode.
+    if (q.booking_url && oa?.openExternal) return oa.openExternal({ href: q.booking_url });
+    if (q.booking_url) return window.open(q.booking_url, "_blank", "noopener");
+    say("Ask in the chat and I'll help you book.");
   }
 
   boot();
