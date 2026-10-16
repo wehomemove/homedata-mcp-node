@@ -1,0 +1,144 @@
+{
+ "about": "Golden prompts for the Homemove ChatGPT app (mcp.homemove.com). Each review case was run live on 16 October 2026 against https://mcp.homemove.com/mcp before its outcome was written; prices are Homemove's own (motus) and are dated. Re-run before every resubmission: prices are settings and can change.",
+ "version": "2026-10-16-submission",
+ "cases": [
+  {
+   "id": "level-3-survey-bath",
+   "kind": "direct",
+   "review": true,
+   "prompt": "How much is a RICS Level 3 building survey for a \u00a3450,000 house in Bath, BA1 1LN?",
+   "expect": {
+    "calls": [
+     {
+      "tool": "homemove_quote",
+      "args": {
+       "service": "Level 3 survey",
+       "postcode": "BA1 1LN",
+       "property_price": 450000
+      }
+     }
+    ],
+    "outcome": "Calls homemove_quote and shows the Homemove quote card. Live on 16 October 2026 the Level 3 Survey was \u00a3775, priced on the \u00a3400k\u2013\u00a3500k value band, with a button to continue on homemove.com. The reply gives the price, says it is confirmed when they book, and invents no other figure."
+   }
+  },
+  {
+   "id": "end-of-tenancy-clean-leeds",
+   "kind": "indirect",
+   "review": true,
+   "prompt": "I'm moving out of my two-bedroom rented flat in Leeds, LS1 4AP. What would a professional end of tenancy clean cost?",
+   "expect": {
+    "calls": [
+     {
+      "tool": "homemove_quote",
+      "args": {
+       "service": "end of tenancy clean",
+       "postcode": "LS1 4AP",
+       "bedrooms": 2
+      }
+     }
+    ],
+    "outcome": "Calls homemove_quote with two bedrooms and shows the quote card. Live on 16 October 2026 the End of Tenancy Clean was \u00a3267 for two bedrooms. The reply gives that price and says it is confirmed when booked on homemove.com."
+   }
+  },
+  {
+   "id": "conveyancing-manchester-leasehold",
+   "kind": "direct",
+   "review": true,
+   "prompt": "What would conveyancing cost for buying a \u00a3275,000 leasehold flat in Manchester, M1 1AE, with a mortgage?",
+   "expect": {
+    "calls": [
+     {
+      "tool": "homemove_quote",
+      "args": {
+       "service": "conveyancing",
+       "postcode": "M1 1AE",
+       "property_price": 275000,
+       "answers": {
+        "transaction": "Buying",
+        "tenure": "Leasehold",
+        "funding_type": "Mortgage"
+       }
+      }
+     }
+    ],
+    "outcome": "Calls homemove_quote and shows the quote card. Live on 16 October 2026 conveyancing for this purchase was \u00a31,272 (legal fees plus disbursements, VAT included where it applies), with the search pack, \u00a3399, named as a separate line not in that total. If the model asks for any of the details first, it then quotes the same figure."
+   }
+  },
+  {
+   "id": "landlord-certificates-bristol",
+   "kind": "indirect",
+   "review": true,
+   "prompt": "I'm letting out a flat in Bristol, BS1 4DJ. How much would an EPC and a gas safety certificate cost?",
+   "expect": {
+    "calls": [
+     {
+      "tool": "homemove_quote",
+      "args": {
+       "service": "EPC",
+       "postcode": "BS1 4DJ"
+      }
+     },
+     {
+      "tool": "homemove_quote",
+      "args": {
+       "service": "gas safety certificate",
+       "postcode": "BS1 4DJ"
+      }
+     }
+    ],
+    "outcome": "Calls homemove_quote once for each (or homemove_move_plan with situation landlord, which includes both). Live on 16 October 2026 the EPC Assessment was \u00a399 and the Gas CP12 Safety Certificate was \u00a3119; the reply gives both prices and says they are confirmed when booked."
+   }
+  },
+  {
+   "id": "stamp-duty-first-time-buyer",
+   "kind": "direct",
+   "review": true,
+   "prompt": "I'm a first-time buyer purchasing a home in England for \u00a3425,000. How much stamp duty will I pay?",
+   "expect": {
+    "calls": [
+     {
+      "tool": "homemove_stamp_duty",
+      "args": {
+       "price": 425000,
+       "buyer_type": "first_time"
+      }
+     }
+    ],
+    "outcome": "Calls homemove_stamp_duty. At the rates from 1 April 2025 (England and Northern Ireland) it is \u00a36,250 with first-time buyer relief: nothing on the first \u00a3300,000 and 5% on the next \u00a3125,000. The reply says it is paid to HMRC, not Homemove."
+   }
+  },
+  {
+   "id": "negative-mortgage-advice",
+   "kind": "negative",
+   "review": true,
+   "prompt": "Which mortgage lender should I go with for the best rate?",
+   "expect": {
+    "calls": [],
+    "outcome": "Does not call a Homemove tool. Explains that Homemove does not give mortgage advice or recommend lenders in ChatGPT."
+   },
+   "why": "Homemove does not give mortgage advice or recommend lenders."
+  },
+  {
+   "id": "negative-insurance",
+   "kind": "negative",
+   "review": true,
+   "prompt": "Get me a home insurance quote for my new house.",
+   "expect": {
+    "calls": [],
+    "outcome": "Does not call a Homemove tool. Says Homemove does not quote insurance in ChatGPT."
+   },
+   "why": "Insurance is not quoted in this app."
+  },
+  {
+   "id": "negative-unrelated",
+   "kind": "negative",
+   "review": true,
+   "prompt": "What's a good recipe for a quick weeknight pasta?",
+   "expect": {
+    "calls": [],
+    "outcome": "Answers without Homemove; no Homemove tool is called."
+   },
+   "why": "Nothing to do with moving home."
+  }
+ ]
+}
