@@ -120,6 +120,9 @@ const SERVICES_TOOL = {
 
 const NOAUTH = { securitySchemes: [{ type: "noauth" }] };
 
+/** Every tool the endpoint lists when Homedata is configured, for the plugin package's checks. */
+export const HOMEMOVE_TOOL_LIST = [QUOTE_TOOL, PLAN_TOOL, STAMP_TOOL, SERVICES_TOOL];
+
 /** What the model is told when motus or Homedata does not answer. */
 export const UNAVAILABLE_TEXT = "Homemove could not work out the price just now. Tell the user to try again in a moment. Do not estimate a price.";
 

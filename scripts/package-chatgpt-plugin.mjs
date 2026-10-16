@@ -2,7 +2,7 @@
 /**
  * Build a ChatGPT plugin ZIP for OpenAI's plugin portal:
  *
- *   npm run build && node scripts/package-chatgpt-plugin.mjs [homedata|home]
+ *   npm run build && node scripts/package-chatgpt-plugin.mjs [homedata|home|homemove]
  *
  * homedata (the default) writes dist-plugin/homedata-chatgpt-plugin.zip from
  * chatgpt-plugin/; home writes dist-plugin/home-chatgpt-plugin.zip from
@@ -19,6 +19,8 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { HOME_RULES } from '../dist/home/plugin.js';
+import { HOMEMOVE_RULES } from '../dist/homemove/plugin.js';
+import { HOMEMOVE_TOOL_LIST } from '../dist/homemove/server.js';
 import { ACCOUNT_TOOLS } from '../dist/home/account.js';
 import { HOME_ROUTE_TOOLS, HOME_TOOLS } from '../dist/home/server.js';
 import { buildManifest, HOMEDATA_RULES, readSkills, secretsIn, validatePackage, validateSkills } from '../dist/plugin-package.js';
@@ -29,6 +31,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PLUGINS = {
   homedata: { src: 'chatgpt-plugin', golden: 'docs/chatgpt-app/golden-prompts.json', tools: () => profileTools(PROFILES.chatgpt), rules: HOMEDATA_RULES },
   home: { src: 'home-chatgpt-plugin', golden: 'docs/home-chatgpt-app/golden-prompts.json', tools: () => [...HOME_TOOLS, ...HOME_ROUTE_TOOLS, ...ACCOUNT_TOOLS], rules: HOME_RULES },
+  homemove: { src: 'homemove-chatgpt-plugin', golden: 'docs/homemove-chatgpt-app/golden-prompts.json', tools: () => HOMEMOVE_TOOL_LIST, rules: HOMEMOVE_RULES },
 };
 
 const which = process.argv[2] ?? 'homedata';
