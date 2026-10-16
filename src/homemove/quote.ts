@@ -130,7 +130,7 @@ export interface MoveView {
 
 export type QuoteAnswer =
   | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }>; move?: MoveView; unmatched?: string[]; indicative?: string; legal?: LegalView }
-  | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[]; picker?: PickerRoom[]; unmatched?: string[]; legal?: LegalView }
+  | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[]; picker?: PickerRoom[]; unmatched?: string[]; legal?: LegalView; to_postcode?: string }
   | { status: "quoted_by_hand"; product: ProductView; postcode: string; property?: PropertyView; answers: AnswerView[]; legal?: LegalView }
   | { status: "choose_service"; options: ProductView[] }
   | { status: "unknown_service"; service: string }
