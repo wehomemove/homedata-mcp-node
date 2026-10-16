@@ -103,7 +103,7 @@ export interface QuoteRequest {
 }
 
 export type QuoteAnswer =
-  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; booking_url: string }
+  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }> }
   | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[] }
   | { status: "quoted_by_hand"; product: ProductView; postcode: string; property?: PropertyView; answers: AnswerView[] }
   | { status: "choose_service"; options: ProductView[] }
@@ -142,7 +142,78 @@ export interface QuestionView { name: string; question: string; options: string[
 
 const view = (p: MotusProduct): ProductView => ({ id: p.id, name: p.name.trim(), type: p.type });
 
+/** Conveyancing is priced by Atlas (motus get_legal_quote), not from a product grid. */
+export const CONVEYANCING = /\b(convey\w*|solicitors?|legal (fees?|work|costs?)|legals|lawyers?)\b/i;
+
+const LEGAL_QUESTIONS = {
+  transaction: { question: "Are you buying or selling?", options: ["Buying", "Selling"] },
+  tenure: { question: "Is the home freehold or leasehold?", options: ["Freehold", "Leasehold"] },
+  funding_purchase: { question: "Are you buying with a mortgage or in cash?", options: ["Mortgage", "Cash"] },
+  funding_sale: { question: "Is there a mortgage to pay off on the home you're selling?", options: ["Yes, a mortgage", "No mortgage"] },
+} as const;
+
+function pick(given: unknown, options: Record<string, RegExp>): string | undefined {
+  if (given === undefined || given === null || given === "") return undefined;
+  const text = String(given);
+  return Object.entries(options).find(([, re]) => re.test(text))?.[0];
+}
+
+async function conveyancing(request: QuoteRequest, deps: { motus: MotusClient; property: PropertyLookup }): Promise<QuoteAnswer> {
+  const given = Object.fromEntries(Object.entries(request.answers ?? {}).map(([k, v]) => [k.toLowerCase(), v]));
+  const transaction = pick(given["transaction"] ?? (/\bsell/i.test(String(request.service)) ? "selling" : /\bbuy|purchas/i.test(String(request.service)) ? "buying" : undefined), { purchase: /buy|purchas/i, sale: /sell|sale/i }) as "purchase" | "sale" | undefined;
+  const product: ProductView = transaction === "sale" ? { id: 1063, name: "Conveyancing (selling)", type: "legal" } : { id: 1062, name: transaction ? "Conveyancing (buying)" : "Conveyancing", type: "legal" };
+  let facts: PropertyFacts | undefined;
+  if (request.address?.trim()) {
+    try { facts = await deps.property.find(request.address, request.postcode); } catch (error) {
+      if (error instanceof AddressNotMatched) return { status: "address_not_found", reason: error.reason, postcode: request.postcode };
+      throw error;
+    }
+  }
+  const property = facts ? { address: facts.address, postcode: facts.postcode, uprn: facts.uprn } : undefined;
+  const assumed: Assumption[] = [];
+  let tenure = pick(given["tenure"], { freehold: /free/i, leasehold: /lease|flat/i }) as "freehold" | "leasehold" | undefined;
+  if (!tenure && facts?.tenure) { tenure = facts.tenure; assumed.push({ name: "tenure", value: facts.tenure === "freehold" ? "Freehold" : "Leasehold", source: "the Land Registry title" }); }
+  const funding = pick(given["funding_type"], { cash: /cash|no mortgage|outright|^no\b/i, mortgage: /mortgage|^yes\b/i }) as "mortgage" | "cash" | undefined;
+  let price = request.property_price;
+  if (!price && facts) {
+    const estimate = await deps.property.estimatedValue(facts);
+    if (estimate) { price = estimate; assumed.push({ name: "property_price", value: "", source: "Homedata's estimate for this home" }); }
+  }
+  const shown: AnswerView[] = [
+    ...(transaction ? [{ name: "transaction", label: transaction === "sale" ? "Selling" : "Buying" }] : []),
+    ...(tenure && given["tenure"] ? [{ name: "tenure", label: tenure === "freehold" ? "Freehold" : "Leasehold" }] : []),
+    ...(funding ? [{ name: "funding_type", label: funding === "cash" ? (transaction === "sale" ? "No mortgage" : "Cash") : (transaction === "sale" ? "Yes, a mortgage" : "Mortgage") }] : []),
+  ];
+  const questions: QuestionView[] = [];
+  if (!transaction) questions.push({ name: "transaction", ...LEGAL_QUESTIONS.transaction, options: [...LEGAL_QUESTIONS.transaction.options] });
+  if (!price) questions.push({ name: "property_price", question: "What's the price of the home?", options: [] });
+  if (!tenure) questions.push({ name: "tenure", ...LEGAL_QUESTIONS.tenure, options: [...LEGAL_QUESTIONS.tenure.options] });
+  if (!funding) {
+    const q = transaction === "sale" ? LEGAL_QUESTIONS.funding_sale : LEGAL_QUESTIONS.funding_purchase;
+    questions.push({ name: "funding_type", question: q.question, options: [...q.options] });
+  }
+  if (questions.length) return { status: "needs_answers", product, postcode: request.postcode, property, assumed: assumed.filter((a) => a.name !== "property_price"), answers: shown, questions };
+
+  try {
+    const legal = await deps.motus.legalQuote({ transaction: transaction!, tenure: tenure!, propertyPrice: price!, fundingType: funding });
+    for (const a of assumed) if (a.name === "property_price") a.value = `about ${bandLabel({ min: Math.floor(price! / 50000) * 50000 + 1, max: Math.ceil(price! / 50000) * 50000 })}`;
+    return {
+      status: "priced", product, price_gbp: legal.total_gbp, postcode: request.postcode, property, assumed, answers: shown,
+      booking_url: bookingUrl(product, request.postcode),
+      breakdown: [{ label: "Legal fees", amount_gbp: legal.legal_fee_gbp }, ...legal.disbursements],
+      ...(legal.search_pack_gbp ? { extras: [{ label: "Search pack", amount_gbp: legal.search_pack_gbp }] } : {}),
+    };
+  } catch (error) {
+    if (error instanceof MotusRefusal) return { status: "quoted_by_hand", product, postcode: request.postcode, property, answers: shown };
+    throw error;
+  }
+}
+
 export async function quote(request: QuoteRequest, deps: { motus: MotusClient; property: PropertyLookup }): Promise<QuoteAnswer> {
+  // The widget re-asks with the product id; 1062/1063 are the conveyancing legs, priced by Atlas.
+  const legalId = /^(1062|1063)$/.test(String(request.service)) ? String(request.service) : undefined;
+  if (legalId) return conveyancing({ ...request, service: legalId === "1063" ? "conveyancing selling" : "conveyancing buying" }, deps);
+  if (typeof request.service === "string" && CONVEYANCING.test(request.service)) return conveyancing(request, deps);
   const products = await deps.motus.products();
   const { product, candidates } = resolveProduct(products, request.service);
   if (!product) {
