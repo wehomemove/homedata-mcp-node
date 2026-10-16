@@ -489,6 +489,7 @@
   // ---------------------------------------------------------------- the reveal (Joy/Celebration.swift)
   function bandText(b) {
     const f = (n) => (n >= 1000000 ? `£${(n / 1000000).toFixed(n % 1000000 ? 1 : 0)}m` : `£${Math.round(n / 1000)}k`);
+    if (b.max >= 100000000) return `over ${f(b.min - 1)}`;
     return b.min <= 1 ? `up to ${f(b.max)}` : `${f(b.min - 1)}–${f(b.max)}`;
   }
 
