@@ -1,0 +1,508 @@
+// Homemove quote takeover for ChatGPT.
+// Homies and their rig come from the iOS app (Resources/Homies, Data/homie-loops.json); springs,
+// celebration choreography and confetti physics are ported from Theme.swift and Joy/*.swift so the
+// web and the app move the same way. Everything degrades to still frames under reduced motion.
+(() => {
+  "use strict";
+  const A = (document.getElementById("app")?.dataset.base ?? "") + "assets/";
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const h = (tag, attrs = {}, ...kids) => {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "class") el.className = v;
+      else if (k === "style") el.style.cssText = v;
+      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+      else if (v !== false && v != null) el.setAttribute(k, v === true ? "" : v);
+    }
+    for (const kid of kids.flat()) if (kid != null) el.append(kid.nodeType ? kid : document.createTextNode(kid));
+    return el;
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, reduced ? 0 : ms));
+  const gbp = (n) => "£" + Math.round(n).toLocaleString("en-GB");
+
+  // ---------------------------------------------------------------- springs
+  // SwiftUI .spring(response:dampingFraction:) as WAAPI keyframes. Theme.swift: snappy, smooth, bouncy.
+  const SPRINGS = { snappy: [0.28, 0.86], smooth: [0.42, 0.9], bouncy: [0.5, 0.68] };
+  function springCurve(name) {
+    const [response, zeta] = SPRINGS[name];
+    const w0 = (2 * Math.PI) / response, wd = w0 * Math.sqrt(1 - zeta * zeta);
+    const x = (t) => 1 - Math.exp(-zeta * w0 * t) * (Math.cos(wd * t) + ((zeta * w0) / wd) * Math.sin(wd * t));
+    const dur = Math.log(1000) / (zeta * w0);
+    const n = 48, pts = [];
+    for (let i = 0; i <= n; i++) pts.push(x((dur * i) / n));
+    pts[n] = 1;
+    return { dur: dur * 1000, pts };
+  }
+  /** Animate el from `from` to `to` (objects of numbers) along a spring; style(v) builds the frame. */
+  function spring(el, name, from, to, style, delay = 0) {
+    if (reduced) { Object.assign(el.style, style(to)); return Promise.resolve(); }
+    const { dur, pts } = springCurve(name);
+    const frames = pts.map((p, i) => {
+      const v = {}; for (const k in to) v[k] = from[k] + (to[k] - from[k]) * p;
+      return { ...style(v), offset: i / (pts.length - 1) };
+    });
+    const anim = el.animate(frames, { duration: dur, delay, fill: "both", easing: "linear" });
+    return anim.finished;
+  }
+
+  // ---------------------------------------------------------------- rig
+  let RIG = null;
+  const QUAD = "cubic-bezier(.455,.03,.515,.955)"; // ease-in-out quad, as HomieLoop.swift interpolates
+  function rigFrames(steps, part) {
+    const last = { scale: 1, scaleY: 1, rotate: 0, ty: 0 };
+    const period = steps[steps.length - 1].t || 1;
+    return (loopPeriod) => steps.map((s) => {
+      Object.assign(last, Object.fromEntries(Object.entries(s).filter(([k]) => k !== "t")));
+      const ty = (last.ty / part.frame.h) * 100;
+      return {
+        offset: Math.min(1, s.t / loopPeriod),
+        transform: `translateY(${ty}%) rotate(${last.rotate}deg) scale(${last.scale}, ${last.scale * last.scaleY})`,
+        easing: QUAD,
+      };
+    }).concat(period < loopPeriod ? [{ offset: 1, transform: `translateY(${(last.ty / part.frame.h) * 100}%) rotate(${last.rotate}deg) scale(${last.scale}, ${last.scale * last.scaleY})` }] : []);
+  }
+  /** A living Homie: base body, parts on their own loops (blinks, sparkles, seals), breathing from the feet. */
+  function livingHomie(name) {
+    const hero = RIG.heroes[name];
+    const root = h("div", { class: "homie", style: `aspect-ratio:${hero.width}/${hero.height}` });
+    const breath = h("div", { class: "breath" });
+    breath.append(h("img", { class: "base", src: `${A}loops/${hero.base}.webp`, alt: "" }));
+    const nodes = {};
+    const place = (part) => {
+      const parent = part.parent ? hero.parts.find((p) => p.id === part.parent) : null;
+      const ox = parent ? parent.frame.x : 0, oy = parent ? parent.frame.y : 0;
+      const pw = parent ? parent.frame.w : hero.width, ph = parent ? parent.frame.h : hero.height;
+      const f = part.frame;
+      const el = h("div", { class: "part", style: `left:${((f.x - ox) / pw) * 100}%;top:${((f.y - oy) / ph) * 100}%;width:${(f.w / pw) * 100}%;height:${(f.h / ph) * 100}%;transform-origin:${((part.anchor.x - f.x) / f.w) * 100}% ${((part.anchor.y - f.y) / f.h) * 100}%` });
+      el.append(h("img", { src: `${A}loops/${part.image}.webp`, alt: "" }));
+      nodes[part.id] = el;
+      (parent ? nodes[parent.id] : breath).append(el);
+      if (!reduced && part.loop) {
+        const p = part.loop.period;
+        el.animate(rigFrames(part.loop.steps, part)(p), { duration: p * 1000, iterations: Infinity, delay: -Math.random() * p * 1000 });
+      }
+    };
+    // Parents before children.
+    const pending = [...hero.parts];
+    while (pending.length) {
+      const i = pending.findIndex((p) => !p.parent || nodes[p.parent]);
+      place(pending.splice(i < 0 ? 0 : i, 1)[0]);
+    }
+    if (!reduced) breath.animate([{ transform: "scaleY(1)" }, { transform: "scaleY(1.02)" }, { transform: "scaleY(1)" }], { duration: 3600, iterations: Infinity, easing: "ease-in-out" });
+    root.append(breath);
+    return root;
+  }
+  /** The two-frame walk: hard swap a/b every 0.2s, -8px bob on b. */
+  function walker() {
+    const el = h("div", { class: "walker" }, h("img", { src: `${A}loops/loop-walk-a.webp`, alt: "" }), h("img", { src: `${A}loops/loop-walk-b.webp`, alt: "" }));
+    if (!reduced) {
+      el.children[1].animate([{ opacity: 0 }, { opacity: 1 }, { opacity: 0 }, { opacity: 1 }, { opacity: 0 }], { duration: 800, iterations: Infinity, easing: "steps(1, end)" });
+      el.animate([{ translate: "0 0" }, { translate: "0 -8px" }, { translate: "0 0" }, { translate: "0 -8px" }, { translate: "0 0" }], { duration: 800, iterations: Infinity, easing: "ease-in-out" });
+    }
+    return el;
+  }
+
+  // ---------------------------------------------------------------- confetti (Joy/Confetti.swift)
+  function confetti(canvas, seed = Date.now()) {
+    if (reduced) return;
+    const N = 80, LIFE = 2.4, DRAG = 2.4, G = 720;
+    const TONES = ["#FF4353", "#E71963", "#1D2733", "#FBF8F4", "#F3EEE4"];
+    let s = BigInt(seed) | 1n;
+    const next = () => { s = (s * 6364136223846793005n + 1442695040888963407n) & 0xffffffffffffffffn; return Number(s >> 11n) / 2 ** 53; };
+    const pieces = Array.from({ length: N }, () => {
+      const roll = next(), shape = roll < 0.6 ? "strip" : roll < 0.85 ? "square" : "dot";
+      return {
+        ox: 0.5 + (next() - 0.5) * 0.34, vx: (next() - 0.5) * 820, vy: -(420 + next() * 560), delay: next() * 0.14,
+        w: shape === "strip" ? 5 + next() * 2 : 7 + next() * 2, h: shape === "strip" ? 10 + next() * 5 : 7 + next() * 2,
+        spin: next() * Math.PI * 2, spinSpeed: (next() - 0.5) * 9, flutter: 3 + next() * 7, sway: 8 + next() * 18,
+        swayPhase: next() * Math.PI * 2, tone: TONES[Math.floor(next() * 5)], shape,
+      };
+    });
+    const dpr = devicePixelRatio || 1;
+    const ctx = canvas.getContext("2d");
+    const start = performance.now();
+    const frame = (now) => {
+      const W = canvas.clientWidth, H = canvas.clientHeight;
+      if (canvas.width !== W * dpr) { canvas.width = W * dpr; canvas.height = H * dpr; }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      const e = (now - start) / 1000;
+      if (e > LIFE) return;
+      ctx.globalAlpha = e <= LIFE - 0.6 ? 1 : Math.max(0, 1 - (e - (LIFE - 0.6)) / 0.6);
+      for (const p of pieces) {
+        const t = Math.max(0, e - p.delay), decay = 1 - Math.exp(-DRAG * t);
+        const x = p.ox * W + (p.vx * decay) / DRAG + p.sway * Math.sin(t * 2.6 + p.swayPhase) * Math.min(1, t * 1.5);
+        const y = H * 0.55 + (p.vy * decay) / DRAG + (G / DRAG) * t - (G * decay) / (DRAG * DRAG);
+        ctx.save(); ctx.translate(x, y); ctx.rotate(p.spin + p.spinSpeed * t); ctx.scale(Math.max(0.15, Math.abs(Math.cos(t * p.flutter))), 1);
+        ctx.fillStyle = p.tone;
+        if (p.shape === "dot") { ctx.beginPath(); ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2); ctx.fill(); }
+        else ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }
+
+  // ---------------------------------------------------------------- sky
+  function sky() {
+    const el = h("div", { class: "sky" });
+    const c = h("canvas");
+    el.append(c);
+    [["cloud-1", 14, 120, 0.42], ["cloud-2", 48, 160, 0.3], ["cloud-3", 70, 140, 0.36]].forEach(([n, top, dur, w], i) =>
+      el.append(h("img", { class: "cloud", src: `${A}sky/${n}-v1.webp`, alt: "", style: `top:${top}%;width:${w * 100}vw;max-width:520px;animation-duration:${dur}s;animation-delay:-${i * 47}s` })));
+    // Stars: fixed field, a few twinkle. Night mode is the brand's dark mode (#091A2C, stars, white Homie).
+    requestAnimationFrame(() => {
+      const ctx = c.getContext("2d"), dpr = devicePixelRatio || 1;
+      let stars = [];
+      const draw = (now) => {
+        const W = c.clientWidth, H = c.clientHeight;
+        if (c.width !== W * dpr) {
+          c.width = W * dpr; c.height = H * dpr;
+          stars = Array.from({ length: Math.round((W * H) / 5200) }, () => ({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.3 + 0.3, tw: Math.random() < 0.2, ph: Math.random() * 6 }));
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+        for (const s of stars) {
+          ctx.globalAlpha = s.tw && !reduced ? 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(now / 900 + s.ph)) : 0.7;
+          ctx.fillStyle = "#fbf8f4"; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill();
+        }
+        if (!reduced) requestAnimationFrame(draw);
+      };
+      requestAnimationFrame(draw);
+    });
+    return el;
+  }
+
+
+  // ---------------------------------------------------------------- data
+  // Everything shown comes from the homemove_quote tool result (window.openai.toolOutput).
+  // Outside ChatGPT, ?demo=<status> shows a marked sample so the motion can be reviewed.
+  const LOOK = {
+    surveys: { homie: "survey", cheer: "survey-surveyor-cheer", hello: "Hello! I'm your surveyor." },
+    cleaning: { homie: "cleaning", cheer: "joy-cheer", hello: "Sparkly! Let's price your clean." },
+    removals: { homie: "removals", cheer: "removals-mover-cheer", hello: "Let's get you moving." },
+    legal: { homie: "legal", cheer: "legal-lawyer-cheer", hello: "Let's sort the legal bit." },
+  };
+  const lookFor = (type) => LOOK[type] ?? { homie: "welcome", cheer: "hm-cheer", hello: "Hello! Let's price that." };
+  const ICON = { beds: "bed", property_price: "home", snagging_type: "new-build", roof_type: "home", roof_survey_type: "home", asb_type: "secure", matrimonial_witness: "legal", thermographic_type: "energy", structural_survey_type: "measure" };
+  const VALUE_STOPS = [100000, 150000, 200000, 250000, 300000, 400000, 500000, 600000, 750000, 1000000, 1500000, 2000000];
+
+  const DEMO = {
+    priced: { status: "priced", product: { id: 2, name: "Level 2 Survey", type: "surveys" }, price_gbp: 499, postcode: "SW1A 2AA", property: { address: "10 Downing Street, London", postcode: "SW1A 2AA" }, assumed: [{ name: "property_price", value: "£300k–£400k", source: "Homedata's estimate for this home" }], answers: [], band: { min: 300001, max: 400000 }, sample: true },
+    needs_answers: { status: "needs_answers", product: { id: 1039, name: "Snagging Survey", type: "surveys" }, postcode: "M1 1AE", assumed: [], answers: [], questions: [
+      { name: "beds", question: "How many bedrooms does the home have?", options: ["1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4 Bedrooms", "5+ Bedrooms"] },
+      { name: "snagging_type", question: "Is the snagging inspection before completion or after you've moved in?", options: ["Pre-inspection", "Post-Completion"] }], sample: true },
+    clean: { status: "needs_answers", product: { id: 1097, name: "End of Tenancy Clean", type: "cleaning" }, postcode: "LS1 4AP", assumed: [], answers: [], questions: [
+      { name: "beds", question: "How many bedrooms does the home have?", options: ["1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4 Bedrooms", "5+ Bedrooms"] }], sample: true },
+    value: { status: "needs_answers", product: { id: 2, name: "Level 2 Survey", type: "surveys" }, postcode: "SW1A 2AA", assumed: [], answers: [], questions: [
+      { name: "property_price", question: "Roughly what is the home worth, or what are you paying for it?", options: [] }], sample: true },
+  };
+  const DEMO_PRICES = { "1039": { "1 Bedroom|Pre-inspection": 499, "2 Bedrooms|Post-Completion": 449 }, "1097": { "1 Bedroom": 209, "2 Bedrooms": 267, "3 Bedrooms": 376, "4 Bedrooms": 484 } };
+
+  const app = $("#app");
+  const state = { data: null, args: {}, answers: {}, step: 0 };
+
+  async function callQuote(extra) {
+    const d = state.data;
+    const args = { service: String(d.product.id), postcode: d.postcode, ...(d.property?.address ? { address: state.args.address ?? d.property.address.split(",")[0] } : {}), ...state.args, ...extra };
+    const oa = window.openai;
+    if (oa && typeof oa.callTool === "function") {
+      const res = await oa.callTool("homemove_quote", args);
+      return res?.structuredContent ?? res;
+    }
+    await wait(800); // preview only
+    const a = args.answers ?? {};
+    const key = Object.values(a).join("|");
+    const price = DEMO_PRICES[d.product.id]?.[key] ?? (args.property_price ? (args.property_price > 400000 ? 599 : 499) : 449);
+    if (a.beds === "5+ Bedrooms") return { ...d, status: "quoted_by_hand" };
+    return { status: "priced", product: d.product, price_gbp: price, postcode: d.postcode, assumed: [], answers: Object.entries(a).map(([name, label]) => ({ name, label })), sample: true, ...(args.property_price ? { band: { min: 0, max: args.property_price } } : {}) };
+  }
+
+  function boot() {
+    if (!RIG) return fetch(`${A}rig.json`).then((r) => r.json()).then((rig) => { RIG = rig; boot(); });
+    const qp = new URLSearchParams(location.search);
+    const data = window.openai?.toolOutput ?? (qp.get("demo") ? DEMO[qp.get("demo")] : null);
+    if (!data || !data.status) {
+      // The tool result arrives after the widget loads in ChatGPT.
+      app.replaceChildren(h("div", { class: "inline" }, sky(), h("div", { class: "copy" }, h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, "Working out your price…")), h("div", { class: "stage-mini" }, livingHomie("welcome"))));
+      return;
+    }
+    state.data = data;
+    renderInline();
+    if (qp.get("open") === "1") openTakeover();
+  }
+  let RIG_BOOTED = false;
+  window.addEventListener("openai:set_globals", () => { if (window.openai?.toolOutput?.status && state.data !== window.openai.toolOutput) { state.data = null; boot(); } });
+
+  // ---------------------------------------------------------------- inline card
+  function renderInline() {
+    const d = state.data, look = lookFor(d.product?.type);
+    const card = h("div", { class: "inline" });
+    card.append(sky());
+    const copy = h("div", { class: "copy" });
+    if (d.status === "priced") {
+      const price = h("div", { class: "price inline-price", "aria-label": gbp(d.price_gbp) });
+      copy.append(
+        h("div", { class: "eyebrow" }, d.sample ? "Sample price · preview" : "Your Homemove quote"),
+        h("h1", {}, d.product.name),
+        price,
+        h("p", {}, [d.property?.address ?? d.postcode, d.band ? `value band ${bandText(d.band)}` : null].filter(Boolean).join(" · ")),
+        h("button", { class: "cta", onclick: () => openTakeover() }, "See your quote"));
+      rollingPrice(price, d.price_gbp);
+    } else if (d.status === "needs_answers") {
+      copy.append(
+        h("div", { class: "eyebrow" }, d.sample ? "Preview" : "Homemove"),
+        h("h1", {}, `Let's price your ${d.product.name.toLowerCase()}`),
+        h("p", {}, d.questions.length === 1 ? "One quick question and you'll have your price." : `${d.questions.length} quick questions and you'll have your price.`),
+        h("button", { class: "cta", onclick: () => openTakeover() }, "Get my price"));
+    } else if (d.status === "quoted_by_hand") {
+      copy.append(h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, "This one's priced by hand"), h("p", {}, `A ${d.product.name.toLowerCase()} for this home needs a specialist's quote. Ask in the chat and Homemove will get one for you.`));
+    } else {
+      copy.append(h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, "Let's get the details right"), h("p", {}, "Answer in the chat and I'll price it straight away."));
+    }
+    card.append(copy, h("div", { class: "stage-mini" }, livingHomie(look.homie)));
+    app.replaceChildren(card);
+  }
+
+  // ---------------------------------------------------------------- takeover
+  async function openTakeover() {
+    try { await window.openai?.requestDisplayMode?.({ mode: "fullscreen" }); } catch { /* inline is fine */ }
+    const d = state.data, look = lookFor(d.product?.type);
+    app.replaceChildren();
+    const root = h("div", { class: "takeover" });
+    root.append(sky());
+    root.append(h("div", { class: "topbar" }, h("img", { src: `${A}logo-white.png`, alt: "homemove" }), h("button", { class: "close", "aria-label": "Close", onclick: closeTakeover }, "✕")));
+    const stage = h("div", { class: "stage" });
+    const bubble = h("div", { class: "bubble", role: "status" });
+    const slot = h("div", { class: "homie-slot" });
+    stage.append(bubble, slot);
+    const card = h("div", { class: "card" });
+    root.append(h("div", { class: "main" }, card, stage));
+    app.append(root);
+    state.ui = { stage, bubble, slot, card };
+    state.step = 0;
+    state.answers = {};
+
+    if (d.status === "needs_answers") renderStep(); else card.append(h("div", { class: "step" }, h("div", { class: "eyebrow" }, d.product.name), h("h2", {}, "Here it comes…")));
+
+    if (reduced) { slot.append(livingHomie(look.homie)); say(look.hello); }
+    else {
+      const w = walker();
+      w.style.right = "-30%";
+      stage.append(w);
+      await w.animate([{ right: "-30%" }, { right: "36%" }], { duration: 1400, easing: "cubic-bezier(.3,.6,.4,1)", fill: "forwards" }).finished;
+      const living = livingHomie(look.homie);
+      living.style.opacity = "0";
+      slot.append(living);
+      w.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 250, fill: "forwards" });
+      await spring(living, "bouncy", { y: 16, s: 0.92, o: 0 }, { y: 0, s: 1, o: 1 }, (v) => ({ transform: `translateY(${v.y}px) scale(${v.s})`, opacity: String(Math.min(1, v.o)) }));
+      w.remove();
+      say(d.status === "priced" ? "I've got your price!" : look.hello);
+    }
+    if (d.status === "priced") { await wait(300); reveal(d); }
+  }
+
+  function closeTakeover() {
+    try { window.openai?.requestDisplayMode?.({ mode: "inline" }); } catch { /* ignore */ }
+    document.querySelectorAll(".dim,.sheet,.confetti").forEach((el) => el.remove());
+    renderInline();
+  }
+
+  let sayTimer;
+  function say(text) {
+    const b = state.ui?.bubble;
+    if (!b) return;
+    b.classList.remove("on");
+    clearTimeout(sayTimer);
+    sayTimer = setTimeout(() => { b.textContent = text; b.classList.add("on"); }, reduced ? 0 : 120);
+  }
+
+  /** The Homie hops: lift 0 → -22px (snappy) → 0 (bouncy), squash and stretch at the feet. */
+  async function hop(el, lift = 22) {
+    if (reduced || !el) return;
+    el.style.transformOrigin = "50% 100%";
+    el.animate([{ transform: "scale(1,1)" }, { transform: "scale(1.05,.94)", offset: 0.25 }, { transform: "scale(.97,1.04)", offset: 0.6 }, { transform: "scale(1.03,.97)", offset: 0.85 }, { transform: "scale(1,1)" }], { duration: 500, easing: "ease-out" });
+    await spring(el, "snappy", { y: 0 }, { y: -lift }, (v) => ({ translate: `0 ${v.y}px` }));
+    await spring(el, "bouncy", { y: -lift }, { y: 0 }, (v) => ({ translate: `0 ${v.y}px` }));
+  }
+
+  const SAYS = ["Ooh, good choice.", "Got it.", "Nearly there…", "Lovely."];
+
+  function renderStep() {
+    const d = state.data, qs = d.questions, q = qs[state.step];
+    const { card } = state.ui;
+    const progress = h("div", { class: "progress" }, qs.map((_, i) => h("i", { class: i < state.step ? "done" : "" })));
+    const body = h("div", { class: "step" });
+    body.append(h("div", { class: "eyebrow" }, `${d.product.name} · ${state.step + 1} of ${qs.length}`), h("h2", {}, q.question),
+      h("p", { class: "sub" }, [d.property?.address, d.postcode].filter(Boolean)[0] ?? ""));
+    const last = state.step === qs.length - 1;
+    const next = h("button", { class: "cta", disabled: true, onclick: advance }, last ? "Show my price" : "Next");
+    const back = h("button", { class: "back", hidden: state.step === 0, onclick: () => go(state.step - 1) }, "← Back");
+    const ready = (ok) => { next.disabled = !ok; };
+
+    if (q.options.length) {
+      const tiles = h("div", { class: "tiles", role: "radiogroup" });
+      q.options.forEach((label, i) => {
+        const icon = h("img", { src: `${A}icons/${ICON[q.name] ?? "checklist"}.webp`, alt: "", onerror: (e) => { e.target.src = `${A}icons/home.webp`; } });
+        const chosen = state.answers[q.name] === label;
+        const tile = h("button", { class: "tile" + (chosen ? " sel" : ""), role: "radio", "aria-checked": String(chosen) },
+          icon, h("span", {}, h("b", {}, label)), h("span", { class: "tick" }, svgTick()));
+        tile.addEventListener("click", () => {
+          tiles.querySelectorAll(".tile").forEach((t) => { t.classList.remove("sel"); t.setAttribute("aria-checked", "false"); });
+          tile.classList.add("sel"); tile.setAttribute("aria-checked", "true");
+          state.answers[q.name] = label;
+          ready(true);
+          spring(icon, "snappy", { y: 0 }, { y: -6 }, (v) => ({ translate: `0 ${v.y}px` })).then(() => spring(icon, "bouncy", { y: -6 }, { y: 0 }, (v) => ({ translate: `0 ${v.y}px` })));
+          hop(state.ui.slot.firstElementChild, 10);
+        });
+        if (!reduced) tile.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 450, delay: 120 + Math.min(i, 6) * 40, easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" });
+        tiles.append(tile);
+      });
+      body.append(tiles);
+      ready(state.answers[q.name] != null);
+    } else {
+      // The value band: a slider over the band edges people think in.
+      const idx = Math.max(0, VALUE_STOPS.indexOf(state.args.property_price ?? 300000));
+      const num = h("div", { class: "num", "aria-live": "polite" });
+      const house = h("img", { class: "house", src: `${A}icons/home.webp`, alt: "" });
+      const range = h("input", { type: "range", min: 0, max: VALUE_STOPS.length - 1, step: 1, value: idx, "aria-label": "Property value" });
+      const chips = h("div", { class: "chips" });
+      const set = (i, kick) => {
+        const v = VALUE_STOPS[i];
+        state.args.property_price = v;
+        num.textContent = v >= 2000000 ? "£2m+" : gbp(v);
+        range.value = i;
+        range.style.setProperty("--p", `${(i / (VALUE_STOPS.length - 1)) * 100}%`);
+        const s = 0.72 + (i / (VALUE_STOPS.length - 1)) * 0.6;
+        if (kick && !reduced) spring(house, "bouncy", { s: s * 0.9 }, { s }, (z) => ({ transform: `scale(${z.s})` })); else house.style.transform = `scale(${s})`;
+        chips.querySelectorAll(".chip").forEach((c) => c.classList.toggle("sel", Number(c.dataset.i) === i));
+        ready(true);
+      };
+      [[2, "£200k"], [5, "£400k"], [7, "£600k"], [9, "£1m"]].forEach(([i, label]) => chips.append(h("button", { class: "chip", "data-i": i, onclick: () => set(i, true) }, label)));
+      range.addEventListener("input", () => set(Number(range.value), true));
+      body.append(h("div", { class: "value" }, num, house), range, chips);
+      set(idx, false);
+    }
+    body.append(h("div", { class: "actions" }, back, next));
+    card.replaceChildren(progress, body);
+    requestAnimationFrame(() => setTimeout(() => progress.children[state.step]?.classList.add("done"), 60));
+  }
+
+  function svgTick() {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 16 16");
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("d", "M3 8.5l3 3 7-7"); p.setAttribute("stroke-linecap", "round"); p.setAttribute("stroke-linejoin", "round");
+    svg.append(p);
+    return svg;
+  }
+
+  async function go(i) {
+    const body = $(".step", state.ui.card);
+    if (body && !reduced) { body.classList.add("out"); await wait(160); }
+    state.step = i;
+    renderStep();
+  }
+
+  async function advance() {
+    const qs = state.data.questions;
+    say(SAYS[state.step % SAYS.length]);
+    if (state.step < qs.length - 1) return go(state.step + 1);
+    const btn = $(".cta", state.ui.card);
+    btn.disabled = true; btn.textContent = "Working it out…";
+    hop(state.ui.slot.firstElementChild, 14);
+    try {
+      const priorAnswers = Object.fromEntries((state.data.answers ?? []).map((a) => [a.name, a.label]));
+      const next = await callQuote({ answers: { ...priorAnswers, ...state.answers } });
+      if (next?.status === "priced") { state.data = next; return reveal(next); }
+      if (next?.status === "needs_answers") { state.data = next; state.step = 0; say("Just one more thing…"); return renderStep(); }
+      if (next?.status === "quoted_by_hand") { state.data = next; say("That one needs a specialist."); btn.textContent = "Ask in the chat"; return; }
+      throw new Error("no price");
+    } catch {
+      btn.disabled = false; btn.textContent = "Show my price";
+      say("Hmm, I couldn't price that just now. Try again in a moment?");
+    }
+  }
+
+  // ---------------------------------------------------------------- the reveal (Joy/Celebration.swift)
+  function bandText(b) {
+    const f = (n) => (n >= 1000000 ? `£${(n / 1000000).toFixed(n % 1000000 ? 1 : 0)}m` : `£${Math.round(n / 1000)}k`);
+    return b.min <= 1 ? `up to ${f(b.max)}` : `${f(b.min - 1)}–${f(b.max)}`;
+  }
+
+  function rollingPrice(el, target) {
+    const digits = String(Math.round(target)).length;
+    const cols = [];
+    el.replaceChildren(h("span", { class: "cur" }, "£"));
+    for (let i = 0; i < digits; i++) {
+      if (i > 0 && (digits - i) % 3 === 0) el.append(h("span", { class: "sep" }, ","));
+      const strip = h("span", {}, Array.from({ length: 10 }, (_, n) => h("b", {}, String(n))));
+      el.append(h("span", { class: "col" }, strip)); cols.push(strip);
+    }
+    const setTo = (v) => {
+      const s = String(Math.round(v)).padStart(digits, "0");
+      cols.forEach((strip, i) => { strip.style.transform = `translateY(-${Number(s[i]) * 10}%)`; });
+    };
+    if (reduced) { setTo(target); return Promise.resolve(); }
+    return new Promise((done) => {
+      const t0 = performance.now(), dur = 800;
+      const tick = (now) => {
+        const p = Math.min(1, (now - t0) / dur);
+        setTo(target * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) requestAnimationFrame(tick); else done();
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  async function reveal(q) {
+    const look = lookFor(q.product?.type);
+    const dim = h("div", { class: "dim" });
+    const conf = h("canvas", { class: "confetti" });
+    const lander = h("img", { src: `${A}poses/${look.cheer}.webp`, alt: "" });
+    const price = h("div", { class: "price", "aria-label": gbp(q.price_gbp) });
+    const rows = [
+      ["Service", q.product.name],
+      q.property?.address ? ["Property", q.property.address] : ["Postcode", q.postcode],
+      ...(q.band ? [["Value band", bandText(q.band)]] : []),
+      ...(q.answers ?? []).filter((a) => a.name !== "property_price").map((a) => [a.name === "beds" ? "Bedrooms" : a.name.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()), a.label]),
+    ];
+    const assumed = (q.assumed ?? []).map((a) => `${a.name === "beds" ? "Bedrooms" : "Value band"} from ${a.source}`).join(" · ");
+    const sheet = h("div", { class: "sheet", role: "dialog", "aria-label": "Your quote" },
+      h("div", { class: "quote" },
+        h("div", { class: "lander" }, lander),
+        q.sample ? h("span", { class: "sample", title: "Preview only: a sample figure. In ChatGPT this is your real Homemove price." }, "Sample price") : null,
+        h("div", { class: "for" }, `Your ${q.product.name}`),
+        price,
+        h("p", { class: "note" }, assumed ? `${assumed}. Tell us if that's not right. Confirmed when you book.` : "Confirmed when you book."),
+        h("dl", {}, rows.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])),
+        h("div", { class: "bar" },
+          h("button", { class: "ghost", onclick: () => { dismiss(); closeTakeover(); } }, "Close"),
+          h("button", { class: "cta", onclick: () => book(q) }, "Book this"))));
+    document.body.append(dim, sheet, conf);
+    const dismiss = () => { dim.remove(); sheet.remove(); conf.remove(); };
+    dim.addEventListener("click", dismiss);
+    lander.style.opacity = "0";
+    requestAnimationFrame(() => dim.classList.add("on"));
+    spring(sheet, "smooth", { y: 110 }, { y: 0 }, (v) => ({ transform: `translate(-50%, ${v.y}%)` }));
+    await wait(120);
+    spring(lander, "bouncy", { y: 44, s: 0.6, o: 0 }, { y: 0, s: 1, o: 1 }, (v) => ({ transform: `translateY(${v.y}px) scale(${v.s})`, opacity: String(Math.min(1, Math.max(0, v.o))) }));
+    await wait(200);
+    confetti(conf);
+    const counting = rollingPrice(price, q.price_gbp);
+    await wait(300);
+    hop(lander);
+    await counting;
+    if (!reduced) price.animate([{ transform: "scale(1)" }, { transform: "scale(1.08)" }, { transform: "scale(1)" }], { duration: 420, easing: "cubic-bezier(.2,1.3,.4,1)" });
+    say("There you go!");
+  }
+
+  async function book(q) {
+    const oa = window.openai;
+    if (oa?.sendFollowUpMessage) return oa.sendFollowUpMessage({ prompt: `I'd like to book the ${q.product.name} for ${q.property?.address ?? q.postcode} at £${q.price_gbp}.` });
+    say("In ChatGPT this starts your booking.");
+  }
+
+  boot();
+})();
