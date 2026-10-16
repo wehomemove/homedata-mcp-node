@@ -390,6 +390,7 @@ export function createHttpHandler(opts: HttpOptions) {
       void server.close();
     });
     await server.connect(transport);
+    acceptJsonClients(req);
     await transport.handleRequest(req, res, body);
   };
 }
@@ -439,3 +440,23 @@ if (isMain(import.meta.url)) {
     process.exit(1);
   });
 }
+
+/**
+ * Some ChatGPT clients (seen on mcp.homemove.com, 16 Oct 2026: openai-mcp/1.0.0 from the desktop
+ * app) send Accept: application/json alone. The SDK's transport then answers 406, so the tool list
+ * never arrives and the chat "times out". These endpoints answer in plain JSON
+ * (enableJsonResponse), so a client that accepts JSON is served.
+ */
+export function acceptJsonClients(req: IncomingMessage): void {
+  const accept = String(req.headers["accept"] ?? "");
+  if (accept.includes("application/json") && accept.includes("text/event-stream")) return;
+  if (accept && !/application\/json|\*\/\*|application\/\*/.test(accept)) return;
+  const both = "application/json, text/event-stream";
+  req.headers["accept"] = both;
+  // The SDK builds its Request from rawHeaders, so the raw list has to say it too.
+  const raw = req.rawHeaders;
+  let found = false;
+  for (let i = 0; i < raw.length; i += 2) if (raw[i]!.toLowerCase() === "accept") { raw[i + 1] = both; found = true; }
+  if (!found) raw.push("Accept", both);
+}
+
