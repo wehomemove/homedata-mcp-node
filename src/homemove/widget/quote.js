@@ -201,6 +201,15 @@
   DEMO.removals = { status: "needs_answers", product: { id: 1054, name: "Removals", type: "removals" }, postcode: "SW1A 2AA", assumed: [], answers: [], sample: true,
     questions: [{ name: "to_postcode", question: "What's the postcode you're moving to?", options: [] }, { name: "inventory", question: "What are you moving?", options: [] }],
     picker: [{"room": "Bedrooms", "items": [{"id": 1531, "name": "Single Bed & Mattress", "cubic_meters": 0.81}, {"id": 1238, "name": "Double Bed & Mattress", "cubic_meters": 1.4213}, {"id": 1365, "name": "Kingsize Bed & Mattress", "cubic_meters": 1.995}, {"id": 2010, "name": "Single Wardrobe", "cubic_meters": 0.5814}, {"id": 1844, "name": "Double Wardrobe", "cubic_meters": 1.242}, {"id": 1174, "name": "Chest Of Drawers", "cubic_meters": 0.5184}, {"id": 1109, "name": "Bedside Table", "cubic_meters": 0.0875}, {"id": 1848, "name": "Dressing Table", "cubic_meters": 0.7}, {"id": 2034, "name": "Television", "cubic_meters": 0.1376}, {"id": 1527, "name": "Side Table", "cubic_meters": 0.2871}]}, {"room": "Living", "items": [{"id": 1611, "name": "Two Seater Sofa", "cubic_meters": 1.1154}, {"id": 1584, "name": "Three Seater Sofa", "cubic_meters": 1.4653}, {"id": 1298, "name": "Four Seater Sofa", "cubic_meters": 1.7527}, {"id": 1090, "name": "Armchair", "cubic_meters": 1.1664}, {"id": 1191, "name": "Coffee Table", "cubic_meters": 0.269}, {"id": 2017, "name": "Small Television/TV (Less than 30\")", "cubic_meters": 0.0666}, {"id": 1386, "name": "Large Television/TV (Greater than 40\")", "cubic_meters": 0.1442}, {"id": 1609, "name": "TV Stand", "cubic_meters": 0.1014}, {"id": 1122, "name": "Bookcase", "cubic_meters": 0.378}, {"id": 1510, "name": "Rug", "cubic_meters": 0.0244}, {"id": 1291, "name": "Floor Lamp", "cubic_meters": 0.1152}]}, {"room": "Kitchen", "items": [{"id": 1891, "name": "Fridge Freezer", "cubic_meters": 0.5575}, {"id": 1627, "name": "Washing Machine", "cubic_meters": 0.4055}, {"id": 1606, "name": "Tumble Dryer", "cubic_meters": 0.306}, {"id": 1412, "name": "Microwave Oven", "cubic_meters": 0.0904}, {"id": 1201, "name": "Cooker", "cubic_meters": 0.888}, {"id": 1224, "name": "Dishwasher", "cubic_meters": 0.4055}, {"id": 1373, "name": "Kitchen Table", "cubic_meters": 0.9576}, {"id": 1112, "name": "Bin", "cubic_meters": 0.1875}, {"id": 2168, "name": "Ironing Board", "cubic_meters": 0.0552}]}, {"room": "Dining", "items": [{"id": 1077, "name": "6 Seater Dining Table", "cubic_meters": 0.9576}, {"id": 1079, "name": "8 Seater Dining Table", "cubic_meters": 1.2804}, {"id": 1832, "name": "Dining Chair", "cubic_meters": 0.2248}, {"id": 1529, "name": "Sideboard", "cubic_meters": 0.4741}, {"id": 1226, "name": "Display Cabinet", "cubic_meters": 0.5268}, {"id": 1075, "name": "4 Seater Dining Table", "cubic_meters": 0.4672}]}, {"room": "Boxes & Bags", "items": [{"id": 1384, "name": "Large Box", "cubic_meters": 0.1664}, {"id": 1411, "name": "Medium Box", "cubic_meters": 0.125}, {"id": 1539, "name": "Small Box", "cubic_meters": 0.0911}, {"id": 2171, "name": "Wardrobe Box", "cubic_meters": 0.2862}, {"id": 2029, "name": "Suitcase", "cubic_meters": 0.1579}, {"id": 1097, "name": "Bag", "cubic_meters": 0.0506}]}, {"room": "Office", "items": [{"id": 1430, "name": "Office Chair", "cubic_meters": 0.342}, {"id": 1220, "name": "Desk", "cubic_meters": 0.6013}, {"id": 1379, "name": "Lamp", "cubic_meters": 0.0073}, {"id": 1483, "name": "Printer", "cubic_meters": 0.0161}, {"id": 1873, "name": "Filing Cabinet", "cubic_meters": 0.1557}, {"id": 1196, "name": "Computer", "cubic_meters": 0.2}]}, {"room": "Bathroom", "items": [{"id": 1385, "name": "Large Mirror", "cubic_meters": 0.0413}, {"id": 2014, "name": "Small Mirror", "cubic_meters": 0.0281}, {"id": 1106, "name": "Bathroom Cabinet", "cubic_meters": 0.084}, {"id": 1769, "name": "Bath Tub", "cubic_meters": 0.6545}]}, {"room": "Garden", "items": [{"id": 1900, "name": "Garden Table", "cubic_meters": 1.2}, {"id": 2090, "name": "Garden Chair", "cubic_meters": 0.27}, {"id": 1388, "name": "Lawn Mower", "cubic_meters": 0.0817}, {"id": 1589, "name": "Tool Box", "cubic_meters": 0.016}, {"id": 1110, "name": "Bench", "cubic_meters": 0.3806}, {"id": 1444, "name": "Parasol", "cubic_meters": 0.0848}, {"id": 1773, "name": "Bicycle", "cubic_meters": 0.399}]}] };
+  DEMO.plan = { view: "plan", situation: "buying_and_selling", total_gbp: 3278, priced: 5, unpriced: ["Book removals"], stamp_duty: { total_tax: 2500, note: "First-time buyer relief applied.", jurisdiction: "England and Northern Ireland", thresholds_from: "1 April 2025" },
+    lines: [
+      { step: "Get an EPC", why: "You need a valid Energy Performance Certificate to market a home.", answer: { status: "priced", product: { id: 1081, name: "EPC Assessment", type: "surveys" }, price_gbp: 99, postcode: "M1 1AE", sample: true } },
+      { step: "Instruct a conveyancer for the sale", why: "Handles the contract, title and redemption of any mortgage.", answer: { status: "priced", product: { id: 1063, name: "Conveyancing (selling)", type: "legal" }, price_gbp: 1092, postcode: "M1 1AE", sample: true } },
+      { step: "Instruct a conveyancer for the purchase", why: "Searches, contracts, the transfer and the SDLT return.", answer: { status: "priced", product: { id: 1062, name: "Conveyancing (buying)", type: "legal" }, price_gbp: 1152, postcode: "SW1A 2AA", sample: true } },
+      { step: "Book a survey", why: "A Level 2 survey suits most homes in normal condition.", answer: { status: "priced", product: { id: 2, name: "Level 2 Survey", type: "surveys" }, price_gbp: 499, postcode: "SW1A 2AA", sample: true } },
+      { step: "Book removals", why: "Priced from what you're moving and how far.", answer: DEMO.removals },
+      { step: "Moving-out clean", why: "Leaves the home ready for the buyers.", answer: { status: "priced", product: { id: 1097, name: "End of Tenancy Clean", type: "cleaning" }, price_gbp: 436, postcode: "M1 1AE", sample: true } },
+    ] };
   const DEMO_PRICES = { "1039": { "1 Bedroom|Pre-inspection": 499, "2 Bedrooms|Post-Completion": 449 }, "1097": { "1 Bedroom": 209, "2 Bedrooms": 267, "3 Bedrooms": 376, "4 Bedrooms": 484 } };
 
   const app = $("#app");
@@ -231,11 +240,12 @@
     if (!RIG) return fetch(`${A}rig.json`).then((r) => r.json()).then((rig) => { RIG = rig; boot(); });
     const qp = new URLSearchParams(location.search);
     const data = window.openai?.toolOutput ?? (qp.get("demo") ? DEMO[qp.get("demo")] : null);
-    if (!data || !data.status) {
+    if (!data || (!data.status && data.view !== "plan")) {
       // The tool result arrives after the widget loads in ChatGPT.
       app.replaceChildren(h("div", { class: "inline" }, sky(), h("div", { class: "copy" }, h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, "Working out your price…")), h("div", { class: "stage-mini" }, livingHomie("welcome"))));
       return;
     }
+    if (data.view === "plan") { state.plan = data; renderPlanInline(); if (qp.get("open") === "1") openPlan(); return; }
     state.data = data;
     renderInline();
     if (qp.get("open") === "1") openTakeover();
@@ -439,7 +449,11 @@
     try {
       const priorAnswers = Object.fromEntries((state.data.answers ?? []).map((a) => [a.name, a.label]));
       const next = await callQuote({ answers: { ...priorAnswers, ...state.answers }, ...(state.inventory && Object.keys(state.inventory).length ? { inventory: state.inventory } : {}) });
-      if (next?.status === "priced") { state.data = next; return reveal(next); }
+      if (next?.status === "priced") {
+        state.data = next;
+        if (state.planLine != null && state.plan) { state.plan.lines[state.planLine].answer = next; recountPlan(); }
+        return reveal(next);
+      }
       if (next?.status === "needs_answers") { state.data = next; state.step = 0; say("Just one more thing…"); return renderStep(); }
       if (next?.status === "quoted_by_hand") { state.data = next; say("That one needs a specialist."); btn.textContent = "Ask in the chat"; return; }
       throw new Error("no price");
@@ -517,7 +531,7 @@
         h("p", { class: "note" }, [assumed ? `${assumed}. Tell us if that's not right.` : null, ...(q.extras ?? []).map((x) => `${x.label}: ${gbp(x.amount_gbp)}, shown separately.`), "Confirmed when you book."].filter(Boolean).join(" ")),
         h("dl", {}, rows.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])),
         h("div", { class: "bar" },
-          h("button", { class: "ghost", onclick: () => { dismiss(); closeTakeover(); } }, "Close"),
+          h("button", { class: "ghost", onclick: () => { dismiss(); if (state.plan && state.planLine != null) { state.planLine = null; openPlan(); } else closeTakeover(); } }, state.plan && state.planLine != null ? "Back to my move" : "Close"),
           h("button", { class: "cta", onclick: () => book(q) }, "Book this"))));
     document.body.append(dim, sheet, conf);
     const dismiss = () => { dim.remove(); sheet.remove(); conf.remove(); };
@@ -543,6 +557,68 @@
     if (q.booking_url && oa?.openExternal) return oa.openExternal({ href: q.booking_url });
     if (q.booking_url) return window.open(q.booking_url, "_blank", "noopener");
     say("Ask in the chat and I'll help you book.");
+  }
+
+  // ---------------------------------------------------------------- the whole move
+  const STEP_ICON = (line) => ({ legal: "legal", surveys: "survey", removals: "removals", cleaning: "cleaning" })[line.answer.product?.type] ?? (/epc|gas|eicr|electrical/i.test(line.step) ? "energy" : "home");
+  function recountPlan() {
+    const p = state.plan;
+    const priced = p.lines.filter((l) => l.answer.status === "priced");
+    p.total_gbp = Math.round(priced.reduce((n, l) => n + l.answer.price_gbp, 0) * 100) / 100;
+    p.priced = priced.length;
+    p.unpriced = p.lines.filter((l) => l.answer.status !== "priced").map((l) => l.step);
+  }
+  const SITUATION = { buying: "Your purchase", selling: "Your sale", buying_and_selling: "Your sale and purchase", renting: "Your move", landlord: "Your let" };
+
+  function renderPlanInline() {
+    const p = state.plan;
+    const total = h("div", { class: "price inline-price", "aria-label": gbp(p.total_gbp) });
+    app.replaceChildren(h("div", { class: "inline" }, sky(),
+      h("div", { class: "copy" },
+        h("div", { class: "eyebrow" }, SITUATION[p.situation] ?? "Your move"),
+        h("h1", {}, `${p.lines.length} steps, ${p.priced} priced`),
+        total,
+        h("p", {}, p.unpriced.length ? `Plus ${p.unpriced.length} to price${p.stamp_duty ? ` · stamp duty ${gbp(p.stamp_duty.total_tax)} to HMRC` : ""}` : (p.stamp_duty ? `Stamp duty ${gbp(p.stamp_duty.total_tax)} to HMRC, not included` : "Everything priced")),
+        h("button", { class: "cta", onclick: () => openPlan() }, "See my move")),
+      h("div", { class: "stage-mini" }, livingHomie("welcome"))));
+    rollingPrice(total, p.total_gbp);
+  }
+
+  async function openPlan() {
+    try { await window.openai?.requestDisplayMode?.({ mode: "fullscreen" }); } catch { /* inline is fine */ }
+    const p = state.plan;
+    app.replaceChildren();
+    document.querySelectorAll(".dim,.sheet,.confetti").forEach((el) => el.remove());
+    const root = h("div", { class: "takeover" }, sky(),
+      h("div", { class: "topbar" }, h("img", { src: `${A}logo-white.png`, alt: "homemove" }), h("button", { class: "close", "aria-label": "Close", onclick: () => { try { window.openai?.requestDisplayMode?.({ mode: "inline" }); } catch {} renderPlanInline(); } }, "✕")));
+    const total = h("div", { class: "plan-total", "aria-label": gbp(p.total_gbp) });
+    const list = h("ol", { class: "timeline" });
+    p.lines.forEach((line, i) => {
+      const a = line.answer;
+      const priced = a.status === "priced";
+      const li = h("li", { class: "tl" + (priced ? " priced" : "") },
+        h("span", { class: "dot" }, h("img", { src: `${A}icons/${STEP_ICON(line)}.webp`, alt: "" })),
+        h("div", { class: "tl-body" }, h("b", {}, line.step), h("small", {}, line.why)),
+        priced ? h("span", { class: "tl-price" }, gbp(a.price_gbp))
+          : a.status === "needs_answers" ? h("button", { class: "chip", onclick: () => { state.planLine = i; state.data = a; state.args = {}; openTakeover(); } }, "Price it →")
+          : h("span", { class: "tl-note" }, "Quoted by the team"));
+      if (!reduced) li.animate([{ opacity: 0, transform: "translateX(-12px)" }, { opacity: 1, transform: "none" }], { duration: 450, delay: 150 + Math.min(i, 8) * 70, easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" });
+      list.append(li);
+    });
+    const card = h("div", { class: "card plan" },
+      h("div", { class: "eyebrow" }, SITUATION[p.situation] ?? "Your move"),
+      h("h2", {}, "Your move, priced"),
+      h("div", { class: "plan-head" }, total, h("span", {}, `${p.priced} of ${p.lines.length} steps priced`)),
+      list,
+      p.stamp_duty ? h("div", { class: "tl hmrc" }, h("span", { class: "dot" }, h("img", { src: `${A}icons/money.webp`, alt: "" })),
+        h("div", { class: "tl-body" }, h("b", {}, "Stamp duty"), h("small", {}, `Paid to HMRC, not Homemove. ${p.stamp_duty.note}`)), h("span", { class: "tl-price" }, gbp(p.stamp_duty.total_tax))) : null,
+      h("p", { class: "note" }, "Homemove prices are confirmed when you book."));
+    const stage = h("div", { class: "stage" }, h("div", { class: "bubble on" }, p.unpriced.length ? `${p.unpriced.length} more to price. Tap “Price it”.` : "That's your whole move!"), h("div", { class: "homie-slot" }, livingHomie("welcome")));
+    root.append(h("div", { class: "main" }, card, stage));
+    app.append(root);
+    state.ui = { stage, bubble: stage.querySelector(".bubble"), slot: stage.querySelector(".homie-slot"), card };
+    await rollingPrice(total, p.total_gbp);
+    if (!p.unpriced.length && !reduced) { const conf = h("canvas", { class: "confetti" }); document.body.append(conf); confetti(conf); setTimeout(() => conf.remove(), 2600); }
   }
 
   // ---------------------------------------------------------------- removals inventory

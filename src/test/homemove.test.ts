@@ -11,7 +11,8 @@ import { createHomemoveHttpHandler } from "../homemove/http.js";
 import { MotusClient, type MotusProduct } from "../homemove/motus.js";
 import { PropertyLookup } from "../homemove/property.js";
 import { matchOption, quote, resolveProduct } from "../homemove/quote.js";
-import { buildHomemoveServer, quoteNarration } from "../homemove/server.js";
+import { buildHomemoveServer, planNarration, quoteNarration } from "../homemove/server.js";
+import { planMove } from "../homemove/plan.js";
 import { HOMEMOVE_ASSET_PREFIX, HOMEMOVE_WIDGET_URI } from "../homemove/widget.js";
 
 const BANDS = [["1", "Up to £100,000"], ["5", "£300,001 - £400,000"], ["6", "£400,001 - £500,000"]].map(([value, label]) => ({ value: value!, label: label! }));
@@ -69,6 +70,8 @@ function fakeMotus(sent: Sent[] = []) {
   return new MotusClient({ bearer: "test", baseUrl: "https://motus.test", fetchImpl });
 }
 
+function fakeHomedataClient(charged: string[] = []) { return (fakeHomedata(charged) as unknown as { homedata: HomedataClient }).homedata; }
+
 function fakeHomedata(charged: string[] = []) {
   const fetchImpl = (async (input: string | URL) => {
     const url = new URL(String(input));
@@ -79,6 +82,7 @@ function fakeHomedata(charged: string[] = []) {
       return json({ uprn: 100023336956, full_address: "10 DOWNING STREET, LONDON, SW1A 2AA", postcode: "SW1A 2AA" });
     }
     if (url.pathname.endsWith("/core/")) return json({ valuation_estimate: { estimate_gbp: 350000 } });
+    if (url.pathname === "/calculators/stamp-duty/") return json({ price: 350000, buyer_type: url.searchParams.get("buyer_type"), total_tax: 2500, note: "First-time buyer relief applied.", jurisdiction: "England and Northern Ireland", thresholds_from: "1 April 2025" });
     return json({ uprn: 100023336956, rooms: { bedrooms: null, predicted_bedrooms: 3 }, lr_title: { title_class: "Absolute freehold title" } });
   }) as typeof fetch;
   return new PropertyLookup(new HomedataClient({ apiKey: "test", fetchImpl }));
@@ -237,4 +241,26 @@ test("removals ask where to and what's moving, never price a guessed household, 
 
   const down = await quote({ service: "removals", postcode: "SW1A 2AA", to_postcode: "ZZ9 9ZZ", items: [{ item: "sofa" }] }, deps);
   assert.equal(down.status, "quoted_by_hand");
+});
+
+test("a whole move is priced line by line; only priced lines count, and stamp duty stays HMRC's", async () => {
+  const charged: string[] = [];
+  const property = fakeHomedata(charged);
+  const plan = await planMove({ situation: "buying_and_selling", from_postcode: "M1 1AE", from_address: "10 Downing Street", to_postcode: "SW1A 2AA", to_address: "10 Downing Street", property_price: 350000, sale_price: 250000, first_time_buyer: true, mortgage: true },
+    { motus: fakeMotus(), property, homedata: fakeHomedataClient(charged) });
+  assert.deepEqual(plan.lines.map((l) => [l.step, l.answer.status]), [
+    ["Get an EPC", "priced"],
+    ["Instruct a conveyancer for the sale", "priced"],
+    ["Instruct a conveyancer for the purchase", "priced"],
+    ["Book a survey", "priced"],
+    ["Book removals", "needs_answers"],
+    ["Moving-out clean", "priced"],
+  ]);
+  // EPC 99 + sale conveyancing 1152 + purchase 1152 + L2 499 + clean (3 beds from the record) 376.
+  assert.equal(plan.total_gbp, 99 + 1152 + 1152 + 499 + 376);
+  assert.deepEqual(plan.unpriced, ["Book removals"]);
+  assert.equal(plan.stamp_duty?.total_tax, 2500);
+  const said = planNarration(plan);
+  assert.match(said, /Not in that total: Book removals/);
+  assert.match(said, /paid to HMRC, not Homemove, and is not in the total/);
 });

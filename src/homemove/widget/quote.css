@@ -166,3 +166,25 @@ input[type=range]::-moz-range-thumb { width: 26px; height: 26px; border-radius: 
 .step-qty button { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--ink); background: var(--paper); font-weight: 800; cursor: pointer; }
 .step-qty .qty { font-weight: 800; font-variant-numeric: tabular-nums; }
 .drive-van { position: fixed; left: 0; bottom: 46%; width: 220px; z-index: 14; pointer-events: none; }
+
+/* the whole move */
+.card.plan { max-height: calc(100vh - 120px); overflow-y: auto; }
+.plan-head { display: flex; align-items: baseline; gap: 14px; margin: 4px 0 14px; flex-wrap: wrap; }
+.plan-head > span { color: #5a6573; font-weight: 700; font-size: 14px; }
+.plan-total { display: inline-flex; font-size: clamp(40px, 6vw, 56px); font-weight: 800; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.plan-total .cur { font-size: .5em; margin: .12em .04em 0 0; }
+.plan-total .col { display: inline-block; height: 1em; overflow: hidden; }
+.plan-total .col span { display: block; transition: transform .09s var(--ease); }
+.plan-total .col span b { display: block; height: 1em; }
+.timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; position: relative; }
+.timeline::before { content: ""; position: absolute; left: 21px; top: 10px; bottom: 10px; width: 2px; background: #e3ddd2; }
+.tl { position: relative; display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 12px; padding: 8px 10px 8px 0; }
+.tl .dot { width: 44px; height: 44px; border-radius: 50%; background: #fff; border: 1.5px solid #d9d2c6; display: grid; place-items: center; z-index: 1; }
+.tl.priced .dot { border-color: var(--ink); box-shadow: 2px 2px 0 var(--ink); }
+.tl .dot img { width: 30px; height: 30px; object-fit: contain; }
+.tl-body b { display: block; font-size: 15px; font-weight: 800; }
+.tl-body small { display: block; color: #5a6573; font-size: 12.5px; margin-top: 2px; line-height: 1.35; }
+.tl-price { font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; }
+.tl-note { font-size: 12px; font-weight: 700; color: #5a6573; }
+.tl.hmrc { margin-top: 12px; padding-top: 14px; border-top: 1.5px dashed #d9d2c6; }
+.tl.hmrc .tl-price { color: #5a6573; }
