@@ -141,3 +141,6 @@ input[type=range]::-moz-range-thumb { width: 26px; height: 26px; border-radius: 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+.inline .inline-price { color: var(--paper); font-size: clamp(44px, 9vw, 64px); margin: 2px 0 8px; }
+.inline .inline-price .col span b { color: var(--paper); }
+.inline .cta { margin-top: 4px; }

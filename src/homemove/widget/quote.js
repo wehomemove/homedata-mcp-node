@@ -4,7 +4,7 @@
 // web and the app move the same way. Everything degrades to still frames under reduced motion.
 (() => {
   "use strict";
-  const A = "assets/";
+  const A = (document.getElementById("app")?.dataset.base ?? "") + "assets/";
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const $ = (sel, root = document) => root.querySelector(sel);
   const h = (tag, attrs = {}, ...kids) => {
@@ -174,89 +174,105 @@
     return el;
   }
 
-  // ---------------------------------------------------------------- services
-  const VALUE_STOPS = [100000, 150000, 200000, 250000, 300000, 400000, 500000, 600000, 750000, 1000000, 1500000, 2000000];
-  const SERVICES = {
-    survey: {
-      homie: "survey", cheer: "survey-surveyor-cheer", noun: "survey",
-      hello: "Hello! I'm your surveyor. Three quick taps and you'll have a price.",
-      inline: { eyebrow: "Survey quote", title: "What does a survey cost?", body: "Tell me about the home and I'll price it on the spot." },
-      steps: [
-        { key: "product", type: "tiles", title: "Which survey do you need?", sub: "Not sure? Level 2 suits most standard homes.", say: "Ooh, good choice.",
-          options: [
-            { value: "level_2_survey", label: "Level 2 Survey", hint: "Most homes in normal condition", icon: "survey" },
-            { value: "level_3_survey", label: "Level 3 Building Survey", hint: "Older, larger or altered homes", icon: "home" },
-            { value: "snagging_survey", label: "Snagging Survey", hint: "Brand-new builds, before you move in", icon: "new-build" },
-          ] },
-        { key: "property_price", type: "value", title: "Roughly what's it worth?", sub: "The price you're paying is perfect. It sets your price band.", say: "Lovely home." },
-        { key: "postcode", type: "postcode", title: "Where is it?", sub: "Just the postcode.", say: "Let me work that out…" },
-      ],
-    },
-    cleaning: {
-      homie: "cleaning", cheer: "joy-cheer", noun: "clean",
-      hello: "Sparkly! Let's price your clean.",
-      inline: { eyebrow: "Cleaning quote", title: "How much is a moving clean?", body: "A couple of taps and I'll price it for you." },
-      steps: [
-        { key: "bedrooms", type: "tiles", title: "How many bedrooms?", sub: "We price cleans on bedrooms.", say: "Got it.",
-          options: [1, 2, 3, 4].map((n) => ({ value: n, label: `${n} bedroom${n > 1 ? "s" : ""}`, hint: n === 4 ? "Five or more? We'll quote by hand." : "", icon: "bed" })) },
-        { key: "postcode", type: "postcode", title: "Where is it?", sub: "Just the postcode.", say: "Let me work that out…" },
-      ],
-    },
-  };
 
-  // ---------------------------------------------------------------- quote source
-  // In ChatGPT the price comes from the get_quote tool (motus pricing, same as homemove.com) via
-  // window.openai.callTool. Outside ChatGPT (this preview) it is a clearly marked sample.
-  async function getQuote(service, answers) {
+  // ---------------------------------------------------------------- data
+  // Everything shown comes from the homemove_quote tool result (window.openai.toolOutput).
+  // Outside ChatGPT, ?demo=<status> shows a marked sample so the motion can be reviewed.
+  const LOOK = {
+    surveys: { homie: "survey", cheer: "survey-surveyor-cheer", hello: "Hello! I'm your surveyor." },
+    cleaning: { homie: "cleaning", cheer: "joy-cheer", hello: "Sparkly! Let's price your clean." },
+    removals: { homie: "removals", cheer: "removals-mover-cheer", hello: "Let's get you moving." },
+    legal: { homie: "legal", cheer: "legal-lawyer-cheer", hello: "Let's sort the legal bit." },
+  };
+  const lookFor = (type) => LOOK[type] ?? { homie: "welcome", cheer: "hm-cheer", hello: "Hello! Let's price that." };
+  const ICON = { beds: "bed", property_price: "home", snagging_type: "new-build", roof_type: "home", roof_survey_type: "home", asb_type: "secure", matrimonial_witness: "legal", thermographic_type: "energy", structural_survey_type: "measure" };
+  const VALUE_STOPS = [100000, 150000, 200000, 250000, 300000, 400000, 500000, 600000, 750000, 1000000, 1500000, 2000000];
+
+  const DEMO = {
+    priced: { status: "priced", product: { id: 2, name: "Level 2 Survey", type: "surveys" }, price_gbp: 499, postcode: "SW1A 2AA", property: { address: "10 Downing Street, London", postcode: "SW1A 2AA" }, assumed: [{ name: "property_price", value: "£300k–£400k", source: "Homedata's estimate for this home" }], answers: [], band: { min: 300001, max: 400000 }, sample: true },
+    needs_answers: { status: "needs_answers", product: { id: 1039, name: "Snagging Survey", type: "surveys" }, postcode: "M1 1AE", assumed: [], answers: [], questions: [
+      { name: "beds", question: "How many bedrooms does the home have?", options: ["1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4 Bedrooms", "5+ Bedrooms"] },
+      { name: "snagging_type", question: "Is the snagging inspection before completion or after you've moved in?", options: ["Pre-inspection", "Post-Completion"] }], sample: true },
+    clean: { status: "needs_answers", product: { id: 1097, name: "End of Tenancy Clean", type: "cleaning" }, postcode: "LS1 4AP", assumed: [], answers: [], questions: [
+      { name: "beds", question: "How many bedrooms does the home have?", options: ["1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4 Bedrooms", "5+ Bedrooms"] }], sample: true },
+    value: { status: "needs_answers", product: { id: 2, name: "Level 2 Survey", type: "surveys" }, postcode: "SW1A 2AA", assumed: [], answers: [], questions: [
+      { name: "property_price", question: "Roughly what is the home worth, or what are you paying for it?", options: [] }], sample: true },
+  };
+  const DEMO_PRICES = { "1039": { "1 Bedroom|Pre-inspection": 499, "2 Bedrooms|Post-Completion": 449 }, "1097": { "1 Bedroom": 209, "2 Bedrooms": 267, "3 Bedrooms": 376, "4 Bedrooms": 484 } };
+
+  const app = $("#app");
+  const state = { data: null, args: {}, answers: {}, step: 0 };
+
+  async function callQuote(extra) {
+    const d = state.data;
+    const args = { service: String(d.product.id), postcode: d.postcode, ...(d.property?.address ? { address: state.args.address ?? d.property.address.split(",")[0] } : {}), ...state.args, ...extra };
     const oa = window.openai;
     if (oa && typeof oa.callTool === "function") {
-      const res = await oa.callTool("homemove_quote", { service, ...answers });
-      return { ...(res?.structuredContent ?? {}), sample: false };
+      const res = await oa.callTool("homemove_quote", args);
+      return res?.structuredContent ?? res;
     }
-    await wait(900);
-    const SAMPLE = { level_2_survey: 450, level_3_survey: 750, snagging_survey: 350, 1: 160, 2: 210, 3: 260, 4: 320 };
-    const base = SAMPLE[answers.product ?? answers.bedrooms] ?? 400;
-    const lift = answers.property_price ? Math.max(0, Math.log2(answers.property_price / 250000)) * 120 : 0;
-    return { price_gbp: Math.round((base + lift) / 5) * 5, sample: true };
+    await wait(800); // preview only
+    const a = args.answers ?? {};
+    const key = Object.values(a).join("|");
+    const price = DEMO_PRICES[d.product.id]?.[key] ?? (args.property_price ? (args.property_price > 400000 ? 599 : 499) : 449);
+    if (a.beds === "5+ Bedrooms") return { ...d, status: "quoted_by_hand" };
+    return { status: "priced", product: d.product, price_gbp: price, postcode: d.postcode, assumed: [], answers: Object.entries(a).map(([name, label]) => ({ name, label })), sample: true, ...(args.property_price ? { band: { min: 0, max: args.property_price } } : {}) };
   }
 
-  // ---------------------------------------------------------------- app
-  const app = $("#app");
-  const state = { service: null, step: 0, answers: {} };
-
-  async function boot() {
-    RIG = await fetch(`${A}rig.json`).then((r) => r.json());
-    const fromTool = window.openai?.toolOutput ?? {};
+  function boot() {
+    if (!RIG) return fetch(`${A}rig.json`).then((r) => r.json()).then((rig) => { RIG = rig; boot(); });
     const qp = new URLSearchParams(location.search);
-    state.service = SERVICES[fromTool.service] ? fromTool.service : SERVICES[qp.get("service")] ? qp.get("service") : "survey";
-    if (qp.get("open") === "1" || window.openai?.displayMode === "fullscreen") openTakeover();
-    else renderInline();
+    const data = window.openai?.toolOutput ?? (qp.get("demo") ? DEMO[qp.get("demo")] : null);
+    if (!data || !data.status) {
+      // The tool result arrives after the widget loads in ChatGPT.
+      app.replaceChildren(h("div", { class: "inline" }, sky(), h("div", { class: "copy" }, h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, "Working out your price…")), h("div", { class: "stage-mini" }, livingHomie("welcome"))));
+      return;
+    }
+    state.data = data;
+    renderInline();
+    if (qp.get("open") === "1") openTakeover();
   }
+  let RIG_BOOTED = false;
+  window.addEventListener("openai:set_globals", () => { if (window.openai?.toolOutput?.status && state.data !== window.openai.toolOutput) { state.data = null; boot(); } });
 
+  // ---------------------------------------------------------------- inline card
   function renderInline() {
-    const svc = SERVICES[state.service];
-    app.replaceChildren();
+    const d = state.data, look = lookFor(d.product?.type);
     const card = h("div", { class: "inline" });
     card.append(sky());
-    const mini = h("div", { class: "stage-mini" }, livingHomie(svc.homie));
-    card.append(
-      h("div", { class: "copy" },
-        h("div", { class: "eyebrow" }, svc.inline.eyebrow),
-        h("h1", {}, svc.inline.title),
-        h("p", {}, svc.inline.body),
-        h("button", { class: "cta", onclick: openTakeover }, "Get my price")),
-      mini);
-    app.append(card);
+    const copy = h("div", { class: "copy" });
+    if (d.status === "priced") {
+      const price = h("div", { class: "price inline-price", "aria-label": gbp(d.price_gbp) });
+      copy.append(
+        h("div", { class: "eyebrow" }, d.sample ? "Sample price · preview" : "Your Homemove quote"),
+        h("h1", {}, d.product.name),
+        price,
+        h("p", {}, [d.property?.address ?? d.postcode, d.band ? `value band ${bandText(d.band)}` : null].filter(Boolean).join(" · ")),
+        h("button", { class: "cta", onclick: () => openTakeover() }, "See your quote"));
+      rollingPrice(price, d.price_gbp);
+    } else if (d.status === "needs_answers") {
+      copy.append(
+        h("div", { class: "eyebrow" }, d.sample ? "Preview" : "Homemove"),
+        h("h1", {}, `Let's price your ${d.product.name.toLowerCase()}`),
+        h("p", {}, d.questions.length === 1 ? "One quick question and you'll have your price." : `${d.questions.length} quick questions and you'll have your price.`),
+        h("button", { class: "cta", onclick: () => openTakeover() }, "Get my price"));
+    } else if (d.status === "quoted_by_hand") {
+      copy.append(h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, "This one's priced by hand"), h("p", {}, `A ${d.product.name.toLowerCase()} for this home needs a specialist's quote. Ask in the chat and Homemove will get one for you.`));
+    } else {
+      copy.append(h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, "Let's get the details right"), h("p", {}, "Answer in the chat and I'll price it straight away."));
+    }
+    card.append(copy, h("div", { class: "stage-mini" }, livingHomie(look.homie)));
+    app.replaceChildren(card);
   }
 
+  // ---------------------------------------------------------------- takeover
   async function openTakeover() {
     try { await window.openai?.requestDisplayMode?.({ mode: "fullscreen" }); } catch { /* inline is fine */ }
-    const svc = SERVICES[state.service];
+    const d = state.data, look = lookFor(d.product?.type);
     app.replaceChildren();
     const root = h("div", { class: "takeover" });
     root.append(sky());
-    const close = h("button", { class: "close", "aria-label": "Close", onclick: closeTakeover }, "✕");
-    root.append(h("div", { class: "topbar" }, h("img", { src: `${A}logo-white.png`, alt: "homemove" }), close));
+    root.append(h("div", { class: "topbar" }, h("img", { src: `${A}logo-white.png`, alt: "homemove" }), h("button", { class: "close", "aria-label": "Close", onclick: closeTakeover }, "✕")));
     const stage = h("div", { class: "stage" });
     const bubble = h("div", { class: "bubble", role: "status" });
     const slot = h("div", { class: "homie-slot" });
@@ -266,32 +282,37 @@
     app.append(root);
     state.ui = { stage, bubble, slot, card };
     state.step = 0;
-    renderStep(true);
+    state.answers = {};
 
-    // Entrance: a Homie walks on from the right, then becomes the service's living Homie.
-    if (reduced) { slot.append(livingHomie(svc.homie)); say(svc.hello); return; }
-    const w = walker();
-    w.style.right = "-30%";
-    stage.append(w);
-    const walkIn = w.animate([{ right: "-30%" }, { right: "36%" }], { duration: 1500, easing: "cubic-bezier(.3,.6,.4,1)", fill: "forwards" });
-    await walkIn.finished;
-    const living = livingHomie(svc.homie);
-    living.style.opacity = "0";
-    slot.append(living);
-    w.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 250, fill: "forwards" });
-    await spring(living, "bouncy", { y: 16, s: 0.92, o: 0 }, { y: 0, s: 1, o: 1 }, (v) => ({ transform: `translateY(${v.y}px) scale(${v.s})`, opacity: String(Math.min(1, v.o)) }));
-    w.remove();
-    say(svc.hello);
+    if (d.status === "needs_answers") renderStep(); else card.append(h("div", { class: "step" }, h("div", { class: "eyebrow" }, d.product.name), h("h2", {}, "Here it comes…")));
+
+    if (reduced) { slot.append(livingHomie(look.homie)); say(look.hello); }
+    else {
+      const w = walker();
+      w.style.right = "-30%";
+      stage.append(w);
+      await w.animate([{ right: "-30%" }, { right: "36%" }], { duration: 1400, easing: "cubic-bezier(.3,.6,.4,1)", fill: "forwards" }).finished;
+      const living = livingHomie(look.homie);
+      living.style.opacity = "0";
+      slot.append(living);
+      w.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 250, fill: "forwards" });
+      await spring(living, "bouncy", { y: 16, s: 0.92, o: 0 }, { y: 0, s: 1, o: 1 }, (v) => ({ transform: `translateY(${v.y}px) scale(${v.s})`, opacity: String(Math.min(1, v.o)) }));
+      w.remove();
+      say(d.status === "priced" ? "I've got your price!" : look.hello);
+    }
+    if (d.status === "priced") { await wait(300); reveal(d); }
   }
 
   function closeTakeover() {
     try { window.openai?.requestDisplayMode?.({ mode: "inline" }); } catch { /* ignore */ }
+    document.querySelectorAll(".dim,.sheet,.confetti").forEach((el) => el.remove());
     renderInline();
   }
 
   let sayTimer;
   function say(text) {
-    const b = state.ui.bubble;
+    const b = state.ui?.bubble;
+    if (!b) return;
     b.classList.remove("on");
     clearTimeout(sayTimer);
     sayTimer = setTimeout(() => { b.textContent = text; b.classList.add("on"); }, reduced ? 0 : 120);
@@ -306,55 +327,55 @@
     await spring(el, "bouncy", { y: -lift }, { y: 0 }, (v) => ({ translate: `0 ${v.y}px` }));
   }
 
-  function renderStep(first = false) {
-    const svc = SERVICES[state.service];
-    const step = svc.steps[state.step];
+  const SAYS = ["Ooh, good choice.", "Got it.", "Nearly there…", "Lovely."];
+
+  function renderStep() {
+    const d = state.data, qs = d.questions, q = qs[state.step];
     const { card } = state.ui;
-    const progress = h("div", { class: "progress" }, svc.steps.map((_, i) => h("i", { class: i < state.step ? "done" : "" })));
+    const progress = h("div", { class: "progress" }, qs.map((_, i) => h("i", { class: i < state.step ? "done" : "" })));
     const body = h("div", { class: "step" });
-    body.append(h("div", { class: "eyebrow" }, `Step ${state.step + 1} of ${svc.steps.length}`), h("h2", {}, step.title), h("p", { class: "sub" }, step.sub));
-    const next = h("button", { class: "cta", disabled: true, onclick: advance }, state.step === svc.steps.length - 1 ? "Show my price" : "Next");
+    body.append(h("div", { class: "eyebrow" }, `${d.product.name} · ${state.step + 1} of ${qs.length}`), h("h2", {}, q.question),
+      h("p", { class: "sub" }, [d.property?.address, d.postcode].filter(Boolean)[0] ?? ""));
+    const last = state.step === qs.length - 1;
+    const next = h("button", { class: "cta", disabled: true, onclick: advance }, last ? "Show my price" : "Next");
     const back = h("button", { class: "back", hidden: state.step === 0, onclick: () => go(state.step - 1) }, "← Back");
     const ready = (ok) => { next.disabled = !ok; };
 
-    if (step.type === "tiles") {
+    if (q.options.length) {
       const tiles = h("div", { class: "tiles", role: "radiogroup" });
-      step.options.forEach((opt, i) => {
-        const icon = h("img", { src: `${A}icons/${opt.icon}.webp`, alt: "" });
-        const tile = h("button", { class: "tile" + (state.answers[step.key] === opt.value ? " sel" : ""), role: "radio", "aria-checked": String(state.answers[step.key] === opt.value) },
-          icon, h("span", {}, h("b", {}, opt.label), opt.hint ? h("small", {}, opt.hint) : null),
-          h("span", { class: "tick" }, svgTick()));
+      q.options.forEach((label, i) => {
+        const icon = h("img", { src: `${A}icons/${ICON[q.name] ?? "checklist"}.webp`, alt: "", onerror: (e) => { e.target.src = `${A}icons/home.webp`; } });
+        const chosen = state.answers[q.name] === label;
+        const tile = h("button", { class: "tile" + (chosen ? " sel" : ""), role: "radio", "aria-checked": String(chosen) },
+          icon, h("span", {}, h("b", {}, label)), h("span", { class: "tick" }, svgTick()));
         tile.addEventListener("click", () => {
           tiles.querySelectorAll(".tile").forEach((t) => { t.classList.remove("sel"); t.setAttribute("aria-checked", "false"); });
           tile.classList.add("sel"); tile.setAttribute("aria-checked", "true");
-          state.answers[step.key] = opt.value;
+          state.answers[q.name] = label;
           ready(true);
-          // Choice tiles: the Homie icon hops 3px on the bouncy spring (ServiceKit.swift).
           spring(icon, "snappy", { y: 0 }, { y: -6 }, (v) => ({ translate: `0 ${v.y}px` })).then(() => spring(icon, "bouncy", { y: -6 }, { y: 0 }, (v) => ({ translate: `0 ${v.y}px` })));
           hop(state.ui.slot.firstElementChild, 10);
         });
-        if (!reduced && first !== "skip") tile.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 450, delay: 120 + Math.min(i, 6) * 40, easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" });
+        if (!reduced) tile.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 450, delay: 120 + Math.min(i, 6) * 40, easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" });
         tiles.append(tile);
       });
       body.append(tiles);
-      ready(state.answers[step.key] != null);
-    }
-
-    if (step.type === "value") {
-      const idx = Math.max(0, VALUE_STOPS.indexOf(state.answers.property_price ?? 300000));
+      ready(state.answers[q.name] != null);
+    } else {
+      // The value band: a slider over the band edges people think in.
+      const idx = Math.max(0, VALUE_STOPS.indexOf(state.args.property_price ?? 300000));
       const num = h("div", { class: "num", "aria-live": "polite" });
       const house = h("img", { class: "house", src: `${A}icons/home.webp`, alt: "" });
       const range = h("input", { type: "range", min: 0, max: VALUE_STOPS.length - 1, step: 1, value: idx, "aria-label": "Property value" });
       const chips = h("div", { class: "chips" });
       const set = (i, kick) => {
         const v = VALUE_STOPS[i];
-        state.answers.property_price = v;
+        state.args.property_price = v;
         num.textContent = v >= 2000000 ? "£2m+" : gbp(v);
         range.value = i;
         range.style.setProperty("--p", `${(i / (VALUE_STOPS.length - 1)) * 100}%`);
         const s = 0.72 + (i / (VALUE_STOPS.length - 1)) * 0.6;
-        if (kick && !reduced) spring(house, "bouncy", { s: s * 0.9 }, { s }, (q) => ({ transform: `scale(${q.s})` }));
-        else house.style.transform = `scale(${s})`;
+        if (kick && !reduced) spring(house, "bouncy", { s: s * 0.9 }, { s }, (z) => ({ transform: `scale(${z.s})` })); else house.style.transform = `scale(${s})`;
         chips.querySelectorAll(".chip").forEach((c) => c.classList.toggle("sel", Number(c.dataset.i) === i));
         ready(true);
       };
@@ -363,29 +384,9 @@
       body.append(h("div", { class: "value" }, num, house), range, chips);
       set(idx, false);
     }
-
-    if (step.type === "postcode") {
-      const input = h("input", { inputmode: "text", autocomplete: "postal-code", placeholder: "SW1A 2AA", maxlength: 8, value: state.answers.postcode ?? "", "aria-label": "Postcode" });
-      const field = h("label", { class: "field" }, h("span", { class: "pin" }, h("img", { src: `${A}icons/location.webp`, alt: "" })), input);
-      const err = h("div", { class: "err", role: "alert" });
-      const valid = (v) => /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(v.trim());
-      input.addEventListener("input", () => {
-        const ok = valid(input.value);
-        field.classList.toggle("live", ok);
-        err.classList.remove("on");
-        if (ok) state.answers.postcode = input.value.trim().toUpperCase().replace(/\s*(\d[A-Z]{2})$/, " $1");
-        ready(ok);
-      });
-      input.addEventListener("keydown", (e) => { if (e.key === "Enter") { if (valid(input.value)) advance(); else { err.textContent = "That doesn't look like a UK postcode."; err.classList.add("on"); } } });
-      body.append(field, err);
-      ready(valid(input.value));
-      if (valid(input.value)) field.classList.add("live");
-      setTimeout(() => input.focus({ preventScroll: true }), 300);
-    }
-
     body.append(h("div", { class: "actions" }, back, next));
     card.replaceChildren(progress, body);
-    requestAnimationFrame(() => progress.querySelectorAll("i").forEach((el, i) => { if (i < state.step + 1 && i === state.step) setTimeout(() => el.classList.add("done"), 60); }));
+    requestAnimationFrame(() => setTimeout(() => progress.children[state.step]?.classList.add("done"), 60));
   }
 
   function svgTick() {
@@ -405,18 +406,19 @@
   }
 
   async function advance() {
-    const svc = SERVICES[state.service];
-    const step = svc.steps[state.step];
-    say(step.say);
-    if (state.step < svc.steps.length - 1) return go(state.step + 1);
-    // Last step: work out the price, then the big reveal.
+    const qs = state.data.questions;
+    say(SAYS[state.step % SAYS.length]);
+    if (state.step < qs.length - 1) return go(state.step + 1);
     const btn = $(".cta", state.ui.card);
     btn.disabled = true; btn.textContent = "Working it out…";
     hop(state.ui.slot.firstElementChild, 14);
     try {
-      const quote = await getQuote(state.service, state.answers);
-      if (!(quote.price_gbp > 0)) throw new Error("no price");
-      reveal(quote);
+      const priorAnswers = Object.fromEntries((state.data.answers ?? []).map((a) => [a.name, a.label]));
+      const next = await callQuote({ answers: { ...priorAnswers, ...state.answers } });
+      if (next?.status === "priced") { state.data = next; return reveal(next); }
+      if (next?.status === "needs_answers") { state.data = next; state.step = 0; say("Just one more thing…"); return renderStep(); }
+      if (next?.status === "quoted_by_hand") { state.data = next; say("That one needs a specialist."); btn.textContent = "Ask in the chat"; return; }
+      throw new Error("no price");
     } catch {
       btn.disabled = false; btn.textContent = "Show my price";
       say("Hmm, I couldn't price that just now. Try again in a moment?");
@@ -424,15 +426,19 @@
   }
 
   // ---------------------------------------------------------------- the reveal (Joy/Celebration.swift)
+  function bandText(b) {
+    const f = (n) => (n >= 1000000 ? `£${(n / 1000000).toFixed(n % 1000000 ? 1 : 0)}m` : `£${Math.round(n / 1000)}k`);
+    return b.min <= 1 ? `up to ${f(b.max)}` : `${f(b.min - 1)}–${f(b.max)}`;
+  }
+
   function rollingPrice(el, target) {
     const digits = String(Math.round(target)).length;
     const cols = [];
     el.replaceChildren(h("span", { class: "cur" }, "£"));
     for (let i = 0; i < digits; i++) {
       if (i > 0 && (digits - i) % 3 === 0) el.append(h("span", { class: "sep" }, ","));
-      const strip = h("span", {}, Array.from({ length: 10 }, (_, d) => h("b", {}, String(d))));
-      const col = h("span", { class: "col" }, strip);
-      el.append(col); cols.push(strip);
+      const strip = h("span", {}, Array.from({ length: 10 }, (_, n) => h("b", {}, String(n))));
+      el.append(h("span", { class: "col" }, strip)); cols.push(strip);
     }
     const setTo = (v) => {
       const s = String(Math.round(v)).padStart(digits, "0");
@@ -442,47 +448,49 @@
     return new Promise((done) => {
       const t0 = performance.now(), dur = 800;
       const tick = (now) => {
-        const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
-        setTo(target * e);
+        const p = Math.min(1, (now - t0) / dur);
+        setTo(target * (1 - Math.pow(1 - p, 3)));
         if (p < 1) requestAnimationFrame(tick); else done();
       };
       requestAnimationFrame(tick);
     });
   }
 
-  async function reveal(quote) {
-    const svc = SERVICES[state.service];
-    const a = state.answers;
-    const product = svc.steps[0].options.find((o) => o.value === (a.product ?? a.bedrooms));
+  async function reveal(q) {
+    const look = lookFor(q.product?.type);
     const dim = h("div", { class: "dim" });
     const conf = h("canvas", { class: "confetti" });
-    const lander = h("img", { src: `${A}poses/${svc.cheer}.webp`, alt: "" });
-    const price = h("div", { class: "price", "aria-label": gbp(quote.price_gbp) });
-    const rows = [["Service", product?.label ?? svc.noun], a.property_price ? ["Property value", a.property_price >= 2000000 ? "£2m+" : gbp(a.property_price)] : null, ["Postcode", a.postcode]].filter(Boolean);
+    const lander = h("img", { src: `${A}poses/${look.cheer}.webp`, alt: "" });
+    const price = h("div", { class: "price", "aria-label": gbp(q.price_gbp) });
+    const rows = [
+      ["Service", q.product.name],
+      q.property?.address ? ["Property", q.property.address] : ["Postcode", q.postcode],
+      ...(q.band ? [["Value band", bandText(q.band)]] : []),
+      ...(q.answers ?? []).filter((a) => a.name !== "property_price").map((a) => [a.name === "beds" ? "Bedrooms" : a.name.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()), a.label]),
+    ];
+    const assumed = (q.assumed ?? []).map((a) => `${a.name === "beds" ? "Bedrooms" : "Value band"} from ${a.source}`).join(" · ");
     const sheet = h("div", { class: "sheet", role: "dialog", "aria-label": "Your quote" },
       h("div", { class: "quote" },
         h("div", { class: "lander" }, lander),
-        quote.sample ? h("span", { class: "sample", title: "Preview only: a made-up figure. In ChatGPT this is your real Homemove price." }, "Sample price") : null,
-        h("div", { class: "for" }, `Your ${(product?.label ?? svc.noun).toLowerCase()}`),
+        q.sample ? h("span", { class: "sample", title: "Preview only: a sample figure. In ChatGPT this is your real Homemove price." }, "Sample price") : null,
+        h("div", { class: "for" }, `Your ${q.product.name}`),
         price,
-        h("p", { class: "note" }, quote.note ?? "Confirmed when you book."),
+        h("p", { class: "note" }, assumed ? `${assumed}. Tell us if that's not right. Confirmed when you book.` : "Confirmed when you book."),
         h("dl", {}, rows.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])),
         h("div", { class: "bar" },
-          h("button", { class: "ghost", onclick: () => { dismiss(); go(0); } }, "Change"),
-          h("button", { class: "cta", onclick: () => book(quote) }, `Book this ${svc.noun}`))));
+          h("button", { class: "ghost", onclick: () => { dismiss(); closeTakeover(); } }, "Close"),
+          h("button", { class: "cta", onclick: () => book(q) }, "Book this"))));
     document.body.append(dim, sheet, conf);
     const dismiss = () => { dim.remove(); sheet.remove(); conf.remove(); };
     dim.addEventListener("click", dismiss);
     lander.style.opacity = "0";
     requestAnimationFrame(() => dim.classList.add("on"));
-    // Sheet slides up (smooth), the Homie lands from 44px low at 0.6 scale (bouncy, +120ms),
-    // the price counts up, confetti bursts, and at 620ms the Homie does its one hop.
     spring(sheet, "smooth", { y: 110 }, { y: 0 }, (v) => ({ transform: `translate(-50%, ${v.y}%)` }));
     await wait(120);
     spring(lander, "bouncy", { y: 44, s: 0.6, o: 0 }, { y: 0, s: 1, o: 1 }, (v) => ({ transform: `translateY(${v.y}px) scale(${v.s})`, opacity: String(Math.min(1, Math.max(0, v.o))) }));
     await wait(200);
     confetti(conf);
-    const counting = rollingPrice(price, quote.price_gbp);
+    const counting = rollingPrice(price, q.price_gbp);
     await wait(300);
     hop(lander);
     await counting;
@@ -490,11 +498,10 @@
     say("There you go!");
   }
 
-  async function book(quote) {
+  async function book(q) {
     const oa = window.openai;
-    if (quote.booking_url && oa?.openExternal) return oa.openExternal({ href: quote.booking_url });
-    if (oa?.sendFollowUpMessage) return oa.sendFollowUpMessage({ prompt: `Book the ${SERVICES[state.service].noun} I was just quoted.` });
-    say("In ChatGPT this takes you to booking.");
+    if (oa?.sendFollowUpMessage) return oa.sendFollowUpMessage({ prompt: `I'd like to book the ${q.product.name} for ${q.property?.address ?? q.postcode} at £${q.price_gbp}.` });
+    say("In ChatGPT this starts your booking.");
   }
 
   boot();
