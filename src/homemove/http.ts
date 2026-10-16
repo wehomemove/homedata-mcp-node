@@ -13,6 +13,7 @@ import { DEFAULT_MOTUS_BASE_URL, MotusClient } from "./motus.js";
 import { PropertyLookup } from "./property.js";
 import { buildHomemoveServer } from "./server.js";
 import { HOMEMOVE_WIDGET_ASSETS } from "./widget.js";
+import { demoAsset } from "./demo.js";
 
 export const DEFAULT_HOMEMOVE_ORIGIN = "https://mcp.homemove.com";
 export const CALL_LIMIT_TEXT = "Homemove has reached its request limit for the moment. Tell the user Homemove is busy right now and to try again in a minute. Do not retry straight away.";
@@ -77,6 +78,15 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
         "X-Content-Type-Options": "nosniff",
       });
       return void res.end(req.method === "HEAD" ? undefined : asset.body);
+    }
+    if (requestPath === "/demo") return void res.writeHead(301, { Location: "/demo/" }).end();
+    if (requestPath.startsWith("/demo/")) {
+      // The frame is served from this same origin, so it loads the card's assets as ChatGPT does.
+      const demo = demoAsset(requestPath, `https://${req.headers.host ?? new URL(assetOrigin).host}`.replace("https://127.0.0.1", "http://127.0.0.1").replace("https://localhost", "http://localhost"));
+      if (!demo) return void send(res, 404, { error: "not_found" });
+      if (req.method !== "GET" && req.method !== "HEAD") { res.setHeader("Allow", "GET, HEAD"); return void send(res, 405, { error: "method_not_allowed" }); }
+      res.writeHead(200, { "Content-Type": demo.contentType, "Content-Length": String(demo.body.length), "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" });
+      return void res.end(req.method === "HEAD" ? undefined : demo.body);
     }
     if (requestPath === "/healthz") return void send(res, 200, { ok: true, service: "homemove", version: VERSION }, { "Cache-Control": "no-store" });
     if (requestPath === "/.well-known/openai-apps-challenge") {
