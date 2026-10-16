@@ -134,7 +134,8 @@ export async function removals(request: QuoteRequest & { to_postcode?: string; i
       booking_url: `https://homemove.com/removals/quote/?pc=${encodeURIComponent(request.postcode.replace(/\s+/g, "").toUpperCase())}`,
       breakdown: [],
       move: {
-        from: q.from_postcode ?? request.postcode, to: q.to_postcode ?? request.to_postcode!, distance_km: q.distance_km ?? null,
+        // As the person wrote them (motus echoes them without the space).
+        from: request.postcode.toUpperCase(), to: request.to_postcode!.toUpperCase(), distance_km: q.distance_km ?? null,
         cubic_meters: q.cubic_meters ?? null, van_type: q.van_type ?? null, num_vans: q.num_vans ?? null, crew_size: q.crew_size ?? null, estimated_hours: q.estimated_hours ?? null,
         items: Object.entries(inventory).map(([id, qty]) => ({ name: names.get(id) ?? `Item ${id}`, quantity: qty })),
         inventory,
