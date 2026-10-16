@@ -23,6 +23,8 @@ export interface HandoffService {
   clean_type?: "end_of_tenancy" | "deep";
   bedrooms?: number;
   name: string;
+  /** In a whole-move handoff: which home this service is for. */
+  for?: "property" | "to_property";
   answers?: Record<string, string | number>;
   quoted_gbp?: number;
   transaction?: string; tenure?: string; property_price?: number; funding_type?: string;
@@ -98,7 +100,15 @@ export function continueUrlForQuote(answer: QuoteAnswer, base: string | undefine
 
 /** The link for a whole move: every service on it, priced or not. */
 export function continueUrlForPlan(plan: MovePlan, request: { to_postcode?: string; from_postcode?: string }, base: string | undefined, now = new Date()): string {
-  const services = plan.lines.map((l) => serviceOf(l.answer)).filter((s): s is HandoffService => !!s).slice(0, MAX_SERVICES);
+  const flat = (pc?: string) => (pc ?? "").replace(/\s+/g, "").toUpperCase();
+  // Removals run from the home being left; everything else belongs to the home whose postcode it was quoted at.
+  const forOf = (line: MovePlan["lines"][number]): "property" | "to_property" => {
+    if ("product" in line.answer && line.answer.product.type === "removals") return "property";
+    return request.to_postcode && flat(line.postcode) === flat(request.to_postcode) && flat(line.postcode) !== flat(request.from_postcode) ? "to_property" : "property";
+  };
+  const services = plan.lines
+    .flatMap((l): HandoffService[] => { const s = serviceOf(l.answer); return s ? [{ ...s, for: forOf(l) }] : []; })
+    .slice(0, MAX_SERVICES);
   const first = plan.lines.map((l) => propertyOf(l.answer)).find(Boolean);
   const page = handoffUrl(base, {
     source: "chatgpt", created_at: now.toISOString(), situation: plan.situation,

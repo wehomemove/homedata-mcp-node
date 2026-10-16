@@ -33,6 +33,8 @@ export interface PlanRequest {
 
 export interface PlanLine {
   step: string;
+  /** The postcode this step was quoted at, as the plan asked (not motus's echo). */
+  postcode: string;
   why: string;
   service: string;
   answer: QuoteAnswer;
@@ -89,7 +91,7 @@ export async function planMove(plan: PlanRequest, deps: { motus: MotusClient; pr
     try { return await quote(n.request, deps); }
     catch { return { status: "quoted_by_hand", product: { id: 0, name: n.step, type: null }, postcode: n.request.postcode, answers: [] } as QuoteAnswer; }
   }));
-  const lines = needs.map((n, i) => ({ step: n.step, why: n.why, service: String(n.request.service), answer: answers[i]! }));
+  const lines = needs.map((n, i) => ({ step: n.step, postcode: n.request.postcode, why: n.why, service: String(n.request.service), answer: answers[i]! }));
   const priced = lines.filter((l) => l.answer.status === "priced");
   const total = priced.reduce((sum, l) => sum + (l.answer.status === "priced" ? l.answer.price_gbp : 0), 0);
 
