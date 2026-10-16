@@ -5,6 +5,8 @@ description: Use when someone asks which survey they need, whether they need a s
 
 Help the user choose a survey, then quote it. The user's own instructions come first.
 
+If they have already named the survey they want (for example "Level 2"), do not ask the questions below: call `homemove_quote` for that survey straight away with the postcode, the address if they gave it, and the price they are paying, and ask only for what the result says is missing.
+
 1. Ask about the home: roughly how old it is, whether it has been extended or altered, whether it is a new build, and whether they have seen any problems such as damp or cracks.
 2. Explain the fit in plain words: a Level 2 survey suits most homes in normal condition; a Level 3 building survey suits older, larger or altered homes or those with visible problems; a snagging survey is for a new build before or after completion. Specialist surveys (damp and timber, structural engineer, drone roof, asbestos) follow a specific concern. Make clear the choice is theirs.
 3. Call `homemove_quote` for the survey they choose with the postcode, the address if they give it, and the price they are paying. Ask any question the result returns.
