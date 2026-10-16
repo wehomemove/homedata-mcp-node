@@ -1,0 +1,105 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "homemove",
+  "version": "1.0.0",
+  "description": "Get Homemove quotes for moving home in ChatGPT: surveys, valuations, EPCs and safety certificates, conveyancing, removals and moving cleans, priced from the address, plus a whole move set out step by step with stamp duty.",
+  "author": {
+    "name": "Homemove",
+    "email": "hello@homemove.com",
+    "url": "https://homemove.com"
+  },
+  "homepage": "https://homemove.com/",
+  "license": "MIT",
+  "keywords": [
+    "moving home",
+    "moving house",
+    "house move",
+    "home survey",
+    "Level 2 survey",
+    "Level 3 survey",
+    "building survey",
+    "homebuyer survey",
+    "snagging survey",
+    "damp survey",
+    "drone roof survey",
+    "asbestos survey",
+    "structural survey",
+    "valuation",
+    "probate valuation",
+    "matrimonial valuation",
+    "Help to Buy valuation",
+    "shared ownership valuation",
+    "EPC",
+    "energy performance certificate",
+    "gas safety certificate",
+    "CP12",
+    "EICR",
+    "electrical safety certificate",
+    "landlord certificates",
+    "conveyancing",
+    "conveyancer",
+    "solicitor",
+    "legal fees",
+    "removals",
+    "removal company",
+    "man and van",
+    "moving van",
+    "end of tenancy clean",
+    "moving out clean",
+    "deep clean",
+    "carpet cleaning",
+    "packing",
+    "moving boxes",
+    "stamp duty",
+    "moving costs",
+    "moving checklist",
+    "buying a house",
+    "selling a house",
+    "first-time buyer",
+    "renting",
+    "landlord"
+  ],
+  "skills": "./skills/",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Homemove",
+        "shortDescription": "Quotes for every part of moving home",
+        "longDescription": "Homemove prices the services you need when you move home, right in the conversation, and shows each quote with the Homies.\n\nAsk what a survey, a valuation, an EPC, a gas safety or electrical certificate, conveyancing, removals or a moving clean would cost and Homemove works it out from Homemove's own pricing. Give the address and it fills in what it can from the property records, such as bedrooms and freehold or leasehold, so you answer fewer questions; anything it still needs, it asks. For removals, tell it what you are moving or pick room by room, and it works out the van, the crew and the guide price for the distance.\n\nPlanning a whole move? Say whether you are buying, selling, both, renting or letting, and Homemove sets out every step with its Homemove quote: the EPC, the conveyancing for each side, the survey, removals and the clean, plus the stamp duty you would pay to HMRC, shown apart from Homemove's fees. Not sure which survey you need? Homemove explains the difference and quotes the one that fits.\n\nWhen you are ready, each quote opens the matching booking page on homemove.com, with the service and postcode filled in.\n\nLimitations: Quotes are confirmed when you book on homemove.com. Some combinations, such as very large homes or expert-witness valuations, are quoted by the Homemove team rather than instantly. Homemove does not give mortgage advice, recommend lenders or quote insurance in ChatGPT. Stamp duty figures cover England and Northern Ireland and are estimates, not tax advice. Homemove needs no account and takes no payments in ChatGPT.",
+        "developerName": "Homemove",
+        "category": "Lifestyle",
+        "capabilities": [
+          "Survey and valuation quotes from the address",
+          "EPC, gas safety and electrical certificate quotes",
+          "Conveyancing quotes for buying or selling",
+          "Removals guide prices from what you are moving",
+          "End of tenancy and moving clean quotes",
+          "Your whole move set out step by step",
+          "Stamp duty at current HMRC rates",
+          "Book on homemove.com with the details filled in"
+        ],
+        "websiteURL": "https://homemove.com/",
+        "supportURL": "https://homemove.com/contact-us/",
+        "privacyPolicyURL": "https://homemove.com/privacy-policy/",
+        "termsOfServiceURL": "https://homemove.com/terms-of-use/",
+        "defaultPrompt": [
+          "How much is a Level 2 survey for 10 Downing Street, SW1A 2AA?",
+          "I'm selling in Manchester and buying in Leeds. What will my move cost?",
+          "What would removals from SW1A 2AA to LS1 4AP cost for a two-bed flat?"
+        ],
+        "brandColor": "#E71963",
+        "brandColorDark": "#FF4353",
+        "composerIcon": "./assets/logo.png",
+        "logo": "./assets/logo.png"
+      },
+      "review": {
+        "commerce": false,
+        "commerce_description": "Homemove takes no payments and sells nothing in ChatGPT. Quotes need no account; booking happens on homemove.com."
+      },
+      "publication": {
+        "countries": [],
+        "release_notes": "First release: Homemove quotes for surveys, valuations, EPCs and safety certificates, conveyancing, removals and moving cleans, filled in from the address; a whole move set out step by step with stamp duty; and skills for planning a move, choosing a survey and moving out of a rental."
+      }
+    }
+  }
+}

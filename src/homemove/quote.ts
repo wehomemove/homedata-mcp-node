@@ -1,5 +1,6 @@
 import { AddressNotMatched, type PropertyFacts, type PropertyLookup } from "./property.js";
-import { MotusRefusal, type MotusClient, type MotusProduct, type PricingInput } from "./motus.js";
+import { MotusRefusal, type MotusClient, type MotusProduct, type PickerRoom, type PricingInput } from "./motus.js";
+import { REMOVALS, removals, type MovingItem } from "./removals.js";
 
 /**
  * One quote: find the product, fill what the address can tell us, ask motus
@@ -15,8 +16,6 @@ const ALIASES: Array<[RegExp, RegExp]> = [
   [/\b(level ?3|l3|full structural|building survey)\b/i, /^level 3 survey$/i],
   [/\bsnag/i, /^snagging survey$/i],
   [/\b(end of tenancy|move ?out clean|moving clean|deep clean)\b/i, /^end of tenancy clean$/i],
-  [/\b(removal|remover|moving company|movers?)\b/i, /^removals$/i],
-  [/\b(man (and|&) van|man with a van)\b/i, /^man & van$/i],
   [/\b(epc|energy performance)\b/i, /^epc assessment$/i],
   [/\b(gas safe|gas safety|cp12)\b/i, /^gas cp12 +safety certificate$/i],
   [/\b(eicr|electrical (safety|condition|certificate|report))\b/i, /^electrical installation condition report$/i],
@@ -54,7 +53,9 @@ const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9+]+/g, " ").trim();
 
 /** The product a request names: its id, an alias, or the closest catalogue name. */
 export function resolveProduct(products: MotusProduct[], service: string | number): { product?: MotusProduct; candidates: MotusProduct[] } {
-  const live = products.filter((p) => !p.is_addon || /clean|packing|box|bubble|wardrobe|porter|dismantle|waiver/i.test(p.name));
+  // The bedroom grids on Removals (1054) and Man & Van (1056) are not what homemove.com quotes a
+  // move at (that is the inventory guide price), so they are never offered here.
+  const live = products.filter((p) => ![1054, 1056].includes(p.id) && (!p.is_addon || /clean|packing|box|bubble|wardrobe|porter|dismantle|waiver/i.test(p.name)));
   if (typeof service === "number" || /^\d+$/.test(String(service))) {
     const product = products.find((p) => p.id === Number(service));
     return { product, candidates: product ? [product] : [] };
@@ -100,24 +101,38 @@ export interface QuoteRequest {
   property_price?: number;
   bedrooms?: number;
   answers?: Record<string, unknown>;
+  /** Removals: where they are moving to, and what is moving (in their words, or picker ids). */
+  to_postcode?: string;
+  items?: MovingItem[];
+  inventory?: Record<string, number>;
+  home_size?: string;
+}
+
+export interface MoveView {
+  from: string; to: string; distance_km: number | null; cubic_meters: number | null; van_type: string | null;
+  num_vans: number | null; crew_size: number | null; estimated_hours: number | null; items: Array<{ name: string; quantity: number }>;
+  /** What was priced, as furniture_option_id → quantity (a typical household when indicative). */
+  inventory: Record<string, number>;
 }
 
 export type QuoteAnswer =
-  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }> }
-  | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[] }
-  | { status: "quoted_by_hand"; product: ProductView; postcode: string; property?: PropertyView; answers: AnswerView[] }
+  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }>; move?: MoveView; unmatched?: string[]; indicative?: string; legal?: LegalView }
+  | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[]; picker?: PickerRoom[]; unmatched?: string[]; legal?: LegalView }
+  | { status: "quoted_by_hand"; product: ProductView; postcode: string; property?: PropertyView; answers: AnswerView[]; legal?: LegalView }
   | { status: "choose_service"; options: ProductView[] }
   | { status: "unknown_service"; service: string }
   | { status: "address_not_found"; reason: string; postcode: string };
 
 export interface ProductView { id: number; name: string; type: string | null }
+/** What a conveyancing quote was priced on. property_price only when the user stated it, never an estimate. */
+export interface LegalView { transaction?: "purchase" | "sale"; tenure?: "freehold" | "leasehold"; property_price?: number; funding_type?: "mortgage" | "cash" }
 
 /**
  * Where a customer books what they were quoted: homemove.com's own quote wizard for that
  * product, opened on the product with the postcode filled in. Slugs are the website's
  * (motus resources/js/Website/Forms/configs/surveys.config.ts surveySlugToIdMap).
  */
-const SURVEY_SLUGS: Record<number, string> = {
+export const SURVEY_SLUGS: Record<number, string> = {
   2: "rics-level-2", 4: "rics-level-3", 1039: "snagging", 1045: "building", 1: "help-to-buy-valuation",
   6: "shared-ownership-valuation", 1043: "structural", 1044: "roof", 1040: "probate-valuation",
   1041: "matrimonial-valuation", 1042: "thermographic", 1038: "asbestos", 1081: "epc-assessment",
@@ -192,24 +207,28 @@ async function conveyancing(request: QuoteRequest, deps: { motus: MotusClient; p
     const q = transaction === "sale" ? LEGAL_QUESTIONS.funding_sale : LEGAL_QUESTIONS.funding_purchase;
     questions.push({ name: "funding_type", question: q.question, options: [...q.options] });
   }
-  if (questions.length) return { status: "needs_answers", product, postcode: request.postcode, property, assumed: assumed.filter((a) => a.name !== "property_price"), answers: shown, questions };
+  const legal: LegalView = { ...(transaction ? { transaction } : {}), ...(tenure ? { tenure } : {}), ...(request.property_price ? { property_price: Math.round(request.property_price) } : {}), ...(funding ? { funding_type: funding } : {}) };
+  if (questions.length) return { status: "needs_answers", product, postcode: request.postcode, property, assumed: assumed.filter((a) => a.name !== "property_price"), answers: shown, questions, legal };
 
   try {
-    const legal = await deps.motus.legalQuote({ transaction: transaction!, tenure: tenure!, propertyPrice: price!, fundingType: funding });
+    const quoted = await deps.motus.legalQuote({ transaction: transaction!, tenure: tenure!, propertyPrice: price!, fundingType: funding });
     for (const a of assumed) if (a.name === "property_price") a.value = `about ${bandLabel({ min: Math.floor(price! / 50000) * 50000 + 1, max: Math.ceil(price! / 50000) * 50000 })}`;
     return {
-      status: "priced", product, price_gbp: legal.total_gbp, postcode: request.postcode, property, assumed, answers: shown,
+      status: "priced", product, price_gbp: quoted.total_gbp, postcode: request.postcode, property, assumed, answers: shown, legal,
       booking_url: bookingUrl(product, request.postcode),
-      breakdown: [{ label: "Legal fees", amount_gbp: legal.legal_fee_gbp }, ...legal.disbursements],
-      ...(legal.search_pack_gbp ? { extras: [{ label: "Search pack", amount_gbp: legal.search_pack_gbp }] } : {}),
+      breakdown: [{ label: "Legal fees", amount_gbp: quoted.legal_fee_gbp }, ...quoted.disbursements],
+      ...(quoted.search_pack_gbp ? { extras: [{ label: "Search pack", amount_gbp: quoted.search_pack_gbp }] } : {}),
     };
   } catch (error) {
-    if (error instanceof MotusRefusal) return { status: "quoted_by_hand", product, postcode: request.postcode, property, answers: shown };
+    if (error instanceof MotusRefusal) return { status: "quoted_by_hand", product, postcode: request.postcode, property, answers: shown, legal };
     throw error;
   }
 }
 
 export async function quote(request: QuoteRequest, deps: { motus: MotusClient; property: PropertyLookup }): Promise<QuoteAnswer> {
+  if (/^(1054|1056)$/.test(String(request.service)) || (typeof request.service === "string" && REMOVALS.test(request.service) && !/\b(box|boxes|packing|bubble|porter|dismantle|waiver)\b/i.test(request.service))) {
+    return removals(request, deps.motus);
+  }
   // The widget re-asks with the product id; 1062/1063 are the conveyancing legs, priced by Atlas.
   const legalId = /^(1062|1063)$/.test(String(request.service)) ? String(request.service) : undefined;
   if (legalId) return conveyancing({ ...request, service: legalId === "1063" ? "conveyancing selling" : "conveyancing buying" }, deps);

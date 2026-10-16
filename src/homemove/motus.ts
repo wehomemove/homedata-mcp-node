@@ -41,6 +41,21 @@ export interface MotusLegalQuote {
   search_pack_gbp: number | null;
 }
 
+export interface PickerItem { id: number; name: string; cubic_meters: number }
+export interface PickerRoom { room: string; items: PickerItem[] }
+export interface MotusRemovalsQuote {
+  price_gbp: number | null;
+  picker?: PickerRoom[];
+  from_postcode?: string;
+  to_postcode?: string;
+  distance_km?: number;
+  cubic_meters?: number;
+  van_type?: string;
+  num_vans?: number;
+  crew_size?: number;
+  estimated_hours?: number;
+}
+
 /** A refusal motus gave for a reason the caller can act on (invalid_answer, quote_unavailable…). */
 export class MotusRefusal extends Error {
   constructor(readonly code: string, readonly status: number) { super(code); }
@@ -95,6 +110,21 @@ export class MotusClient {
       property_price: Math.round(input.propertyPrice),
       ...(input.fundingType ? { funding_type: input.fundingType } : {}),
     });
+  }
+
+  /** The removals guide price; with no inventory, the website's item picker and no price. */
+  async removalsQuote(input: { from: string; to: string; inventory: Record<string, number> }): Promise<MotusRemovalsQuote> {
+    return this.post<MotusRemovalsQuote>("/api/mcp/bookings/removals-quote", { from_postcode: input.from, to_postcode: input.to, inventory: input.inventory });
+  }
+
+  private picker: { at: number; rooms: PickerRoom[] } | null = null;
+
+  /** The picker is the same for every move; it is reused for an hour. */
+  async removalsPicker(): Promise<PickerRoom[]> {
+    if (this.picker && this.now() - this.picker.at < 3600_000) return this.picker.rooms;
+    const answer = await this.removalsQuote({ from: "SW1A 2AA", to: "SW1A 2AA", inventory: {} });
+    this.picker = { at: this.now(), rooms: answer.picker ?? [] };
+    return this.picker.rooms;
   }
 
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {

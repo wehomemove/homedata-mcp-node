@@ -11,7 +11,9 @@ import { createHomemoveHttpHandler } from "../homemove/http.js";
 import { MotusClient, type MotusProduct } from "../homemove/motus.js";
 import { PropertyLookup } from "../homemove/property.js";
 import { matchOption, quote, resolveProduct } from "../homemove/quote.js";
-import { buildHomemoveServer, quoteNarration } from "../homemove/server.js";
+import { buildHomemoveServer, planNarration, quoteNarration } from "../homemove/server.js";
+import { planMove } from "../homemove/plan.js";
+import { continueUrlForQuote } from "../homemove/handoff.js";
 import { HOMEMOVE_ASSET_PREFIX, HOMEMOVE_WIDGET_URI } from "../homemove/widget.js";
 
 const BANDS = [["1", "Up to £100,000"], ["5", "£300,001 - £400,000"], ["6", "£400,001 - £500,000"]].map(([value, label]) => ({ value: value!, label: label! }));
@@ -29,6 +31,14 @@ const PRODUCTS: MotusProduct[] = [
 
 type Sent = { url: string; body: Record<string, unknown> };
 
+/** The live website picker (is_default furniture), trimmed. */
+const PICKER = [
+  { room: "Bedrooms", items: [{ id: 1238, name: "Double Bed & Mattress", cubic_meters: 1.4213 }, { id: 1365, name: "Kingsize Bed & Mattress", cubic_meters: 1.995 }, { id: 1844, name: "Double Wardrobe", cubic_meters: 1.242 }] },
+  { room: "Living", items: [{ id: 1584, name: "Three Seater Sofa", cubic_meters: 1.4653 }, { id: 1611, name: "Two Seater Sofa", cubic_meters: 1.1154 }] },
+  { room: "Kitchen", items: [{ id: 1891, name: "Fridge Freezer", cubic_meters: 0.5575 }] },
+  { room: "Boxes & Bags", items: [{ id: 1411, name: "Medium Box", cubic_meters: 0.125 }] },
+];
+
 /** Atlas's live legal pricing as motus get_legal_quote totals it (£350k freehold purchase, mortgage: £1,152). */
 const LEGAL = { transaction: "purchase", tenure: "freehold", property_price: 350000, funding_type: "mortgage", total_gbp: 1152, legal_fee_gbp: 910,
   disbursements: [{ label: "Pre-Completion Searches", amount_gbp: 14 }, { label: "Bank Transfer", amount_gbp: 48 }, { label: "Financial Settlement & Clearance", amount_gbp: 120 }, { label: "SDLT Return Submission", amount_gbp: 60 }], search_pack_gbp: 399 };
@@ -40,6 +50,12 @@ function fakeMotus(sent: Sent[] = []) {
     const url = String(input), body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
     sent.push({ url, body });
     if (url.endsWith("/products")) return json({ products: PRODUCTS });
+    if (url.endsWith("/removals-quote")) {
+      const inv = (body["inventory"] ?? {}) as Record<string, number>;
+      if (!Object.keys(inv).length) return json({ price_gbp: null, needs: ["inventory"], picker: PICKER });
+      if (body["to_postcode"] === "ZZ9 9ZZ") return json("quote_unavailable", 503);
+      return json({ price_gbp: 913, from_postcode: "SW1A2AA", to_postcode: "LS14AP", distance_km: 25, cubic_meters: 16.6, van_type: "7.5 Tonne", num_vans: 1, crew_size: 3, estimated_hours: 8.7 });
+    }
     if (url.endsWith("/legal-quote")) return body["tenure"] === "leasehold" && body["transaction"] === "sale" ? json("quote_unavailable", 503) : json({ ...LEGAL, transaction: body["transaction"], tenure: body["tenure"] });
     const product = PRODUCTS.find((p) => p.id === body["product_id"])!;
     const answers = (body["answers"] ?? {}) as Record<string, string>;
@@ -55,6 +71,8 @@ function fakeMotus(sent: Sent[] = []) {
   return new MotusClient({ bearer: "test", baseUrl: "https://motus.test", fetchImpl });
 }
 
+function fakeHomedataClient(charged: string[] = []) { return (fakeHomedata(charged) as unknown as { homedata: HomedataClient }).homedata; }
+
 function fakeHomedata(charged: string[] = []) {
   const fetchImpl = (async (input: string | URL) => {
     const url = new URL(String(input));
@@ -65,6 +83,7 @@ function fakeHomedata(charged: string[] = []) {
       return json({ uprn: 100023336956, full_address: "10 DOWNING STREET, LONDON, SW1A 2AA", postcode: "SW1A 2AA" });
     }
     if (url.pathname.endsWith("/core/")) return json({ valuation_estimate: { estimate_gbp: 350000 } });
+    if (url.pathname === "/calculators/stamp-duty/") return json({ price: 350000, buyer_type: url.searchParams.get("buyer_type"), total_tax: 2500, note: "First-time buyer relief applied.", jurisdiction: "England and Northern Ireland", thresholds_from: "1 April 2025" });
     return json({ uprn: 100023336956, rooms: { bedrooms: null, predicted_bedrooms: 3 }, lr_title: { title_class: "Absolute freehold title" } });
   }) as typeof fetch;
   return new PropertyLookup(new HomedataClient({ apiKey: "test", fetchImpl }));
@@ -75,7 +94,8 @@ test("the words people type find the right product", () => {
   assert.equal(find("how much is a homebuyers survey"), "Level 2 Survey");
   assert.equal(find("RICS level 2"), "Level 2 Survey");
   assert.equal(find("move out clean"), "End of Tenancy Clean");
-  assert.equal(find("removal company quote"), "Removals");
+  assert.equal(find("removal company quote"), undefined, "the bedroom grid is never a removals price");
+  assert.equal(find("1054"), "Removals", "only an explicit id reaches the product, and quote() sends that to the guide price");
   assert.equal(find("gas safety certificate"), "Gas CP12  Safety Certificate");
   assert.equal(find("EPC"), "EPC Assessment");
   assert.equal(find("1039"), "Snagging Survey");
@@ -200,4 +220,90 @@ test("conveyancing asks what Atlas needs, fills tenure from the title, and quote
   const resold = await quote({ service: "1063", postcode: "SW1A 2AA", property_price: 250000, answers: { tenure: "Leasehold", funding_type: "No mortgage" } }, deps);
   assert.equal(resold.status, "quoted_by_hand", "Atlas not answering is never a guessed figure");
   assert.deepEqual(sent.at(-1)!.body, { transaction: "sale", tenure: "leasehold", property_price: 250000, funding_type: "cash" });
+});
+
+test("removals ask where to and how big, price a typical home as indicative, or the user's own list exactly", async () => {
+  const sent: Sent[] = [];
+  const deps = { motus: fakeMotus(sent), property: fakeHomedata() };
+  const ask = await quote({ service: "how much does a removal company cost", postcode: "SW1A 2AA" }, deps);
+  assert.equal(ask.status, "needs_answers");
+  assert.deepEqual(ask.status === "needs_answers" && ask.questions.map((q) => q.name), ["to_postcode", "home_size"]);
+
+  const typical = await quote({ service: "removals", postcode: "SW1A 2AA", to_postcode: "LS1 4AP", answers: { home_size: "2 bedrooms" } }, deps);
+  assert.equal(typical.status, "priced");
+  assert.equal(typical.status === "priced" && typical.indicative, "a typical 2-bedroom home");
+  assert.ok(Object.keys(sent.at(-1)!.body["inventory"] as object).length > 3, "a typical household from the picker's own items");
+  assert.match(quoteNarration(typical), /indicative removals price for a typical 2-bedroom home/);
+  assert.match(quoteNarration(typical), /Say it is indicative/);
+  assert.ok(ask.status === "needs_answers" && ask.picker?.length, "the card gets the picker");
+  assert.ok(!sent.some((s) => s.url.endsWith("/quote")), "the bedroom grid is never asked");
+
+  const priced = await quote({ service: "removals", postcode: "SW1A 2AA", to_postcode: "LS1 4AP", items: [{ item: "king size bed" }, { item: "sofa", quantity: 2 }, { item: "boxes", quantity: 20 }, { item: "grand piano" }] }, deps);
+  assert.equal(priced.status, "priced");
+  assert.deepEqual(sent.at(-1)!.body["inventory"], { "1365": 1, "1584": 2, "1411": 20 });
+  assert.deepEqual(priced.status === "priced" && priced.unmatched, ["grand piano"]);
+  const said = quoteNarration(priced);
+  assert.match(said, /£913/);
+  assert.equal(priced.status === "priced" && priced.indicative, undefined, "their own list is not 'indicative'");
+  assert.match(said, /7\.5 Tonne, a crew of 3/);
+  assert.match(said, /Not in the price \(not on the item list\): grand piano/);
+
+  const down = await quote({ service: "removals", postcode: "SW1A 2AA", to_postcode: "ZZ9 9ZZ", items: [{ item: "sofa" }] }, deps);
+  assert.equal(down.status, "quoted_by_hand");
+});
+
+test("a whole move is priced line by line; only priced lines count, and stamp duty stays HMRC's", async () => {
+  const charged: string[] = [];
+  const property = fakeHomedata(charged);
+  const plan = await planMove({ situation: "buying_and_selling", from_postcode: "M1 1AE", from_address: "10 Downing Street", to_postcode: "SW1A 2AA", to_address: "10 Downing Street", property_price: 350000, sale_price: 250000, first_time_buyer: true, mortgage: true },
+    { motus: fakeMotus(), property, homedata: fakeHomedataClient(charged) });
+  assert.deepEqual(plan.lines.map((l) => [l.step, l.answer.status]), [
+    ["Get an EPC", "priced"],
+    ["Instruct a conveyancer for the sale", "priced"],
+    ["Instruct a conveyancer for the purchase", "priced"],
+    ["Book a survey", "priced"],
+    ["Book removals", "needs_answers"],
+    ["Moving-out clean", "priced"],
+  ]);
+  // EPC 99 + sale conveyancing 1152 + purchase 1152 + L2 499 + clean (3 beds from the record) 376.
+  assert.equal(plan.total_gbp, 99 + 1152 + 1152 + 499 + 376);
+  assert.deepEqual(plan.unpriced, ["Book removals"]);
+  assert.equal(plan.stamp_duty?.total_tax, 2500);
+  const said = planNarration(plan);
+  assert.match(said, /Not in that total: Book removals/);
+  assert.match(said, /paid to HMRC, not Homemove, and is not in the total/);
+});
+
+test("every outcome links to homemove.com, carrying property and service details but never personal data", async () => {
+  const deps = { motus: fakeMotus(), property: fakeHomedata() };
+  const priced = await quote({ service: "level 2 survey", postcode: "SW1A 2AA", address: "10 Downing Street" }, deps);
+  const page = new URL(continueUrlForQuote(priced, "https://homemove.com/continue/", new Date("2026-10-16T12:00:00Z")));
+  assert.equal(page.origin + page.pathname, "https://homemove.com/continue/");
+  assert.equal(page.searchParams.get("v"), "1");
+  const data = JSON.parse(Buffer.from(page.searchParams.get("d")!, "base64url").toString());
+  assert.match(data.ref, /^[A-Za-z0-9_-]{12}$/, "an opaque random handoff id");
+  delete data.ref;
+  assert.deepEqual(data, { source: "chatgpt", created_at: "2026-10-16T12:00:00.000Z",
+    property: { postcode: "SW1A 2AA", address: "10 DOWNING STREET, LONDON, SW1A 2AA", uprn: "100023336956" },
+    services: [{ product_id: 2, slug: "rics-level-2", name: "Level 2 Survey", quoted_gbp: 499 }] });
+  const clean = await quote({ service: "end of tenancy clean", postcode: "SW1A 2AA", bedrooms: 3 }, deps);
+  const cleanData = JSON.parse(Buffer.from(new URL(continueUrlForQuote(clean, "https://homemove.com/continue/")).searchParams.get("d")!, "base64url").toString());
+  assert.deepEqual(cleanData.services, [{ kind: "cleaning", name: "End of Tenancy Clean", clean_type: "end_of_tenancy", bedrooms: 3, quoted_gbp: 376 }]);
+  assert.doesNotMatch(JSON.stringify(data), /350000|@|phone|email/i, "no estimate, no personal data");
+  // Without the page configured, the service's own wizard.
+  assert.equal(continueUrlForQuote(priced, undefined), "https://homemove.com/quote/surveys/rics-level-2?pc=SW1A2AA");
+  const byHand = await quote({ service: "end of tenancy clean", postcode: "SW1A 2AA", bedrooms: 6 }, deps);
+  assert.match(continueUrlForQuote(byHand, undefined), /^https:\/\/homemove\.com\/quote\/cleaning\/$/);
+});
+
+test("the handoff carries what conveyancing and removals need to be re-priced: stated price and funding, and the inventory", async () => {
+  const deps = { motus: fakeMotus(), property: fakeHomedata() };
+  const read = (a: Parameters<typeof continueUrlForQuote>[0]) => JSON.parse(Buffer.from(new URL(continueUrlForQuote(a, "https://homemove.com/continue/")).searchParams.get("d")!, "base64url").toString()).services[0];
+  const stated = await quote({ service: "conveyancing buying", postcode: "SW1A 2AA", address: "10 Downing Street", property_price: 350000, answers: { funding_type: "Mortgage" } }, deps);
+  assert.deepEqual(read(stated), { kind: "conveyancing", name: "Conveyancing (buying)", transaction: "purchase", tenure: "freehold", property_price: 350000, funding_type: "mortgage", quoted_gbp: 1152 });
+  const estimated = await quote({ service: "conveyancing buying", postcode: "SW1A 2AA", address: "10 Downing Street", answers: { funding_type: "Cash" } }, deps);
+  assert.equal(estimated.status, "priced");
+  assert.equal(read(estimated).property_price, undefined, "an estimated value is never handed on as theirs");
+  const moving = await quote({ service: "removals", postcode: "SW1A 2AA", to_postcode: "LS1 4AP", items: [{ item: "sofa", quantity: 2 }] }, deps);
+  assert.deepEqual(read(moving).inventory, { "1584": 2 });
 });
