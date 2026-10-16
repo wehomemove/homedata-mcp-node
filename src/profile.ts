@@ -35,6 +35,12 @@ export interface Profile {
    * in place of the API's own body. Absent: the API's body is passed through.
    */
   lowBalanceAnswer?: Readonly<Record<string, string>>;
+  /**
+   * Top-level fields dropped from a tool's successful answer in this profile,
+   * by tool name. The API keeps adding to property_core; what the profile's
+   * listing says it never does must not arrive through it.
+   */
+  omitResultFields?: Readonly<Record<string, readonly string[]>>;
   instructions: string;
 }
 
@@ -209,6 +215,10 @@ export const PROFILES: Record<Profile["name"], Profile> = {
     chatgptMetadata: true,
     descriptions: CHATGPT_DESCRIPTIONS,
     lowBalanceAnswer: CHATGPT_LOW_BALANCE_ANSWER,
+    // The ChatGPT listing and review cases say Homedata does not value homes. Since
+    // October 2026 property_core also returns valuation_estimate (measured 16 Oct:
+    // £84,087,000 for 10 Downing Street), so the ChatGPT profile leaves it out.
+    omitResultFields: { property_core: ["valuation_estimate"] },
     instructions: CHATGPT_INSTRUCTIONS,
   },
 };
