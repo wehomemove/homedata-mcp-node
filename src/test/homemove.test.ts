@@ -316,3 +316,19 @@ test("without motus's removals pricing, removals send people to homemove.com's r
   assert.equal(answer.status, "quoted_by_hand");
   assert.equal(continueUrlForQuote(answer, undefined), "https://homemove.com/removals/quote/?pc=SW1A2AA");
 });
+
+test("a client that accepts only JSON gets the tool list, not 406 (seen from ChatGPT desktop)", async () => {
+  const { createServer } = await import("node:http");
+  const handler = createHomemoveHttpHandler({ motus: fakeMotus(), property: fakeHomedata(), assetOrigin: "https://mcp.homemove.com" });
+  const server = createServer((req, res) => void handler(req, res));
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const port = (server.address() as { port: number }).port;
+  try {
+    for (const accept of ["application/json", "application/json, text/event-stream", "*/*"]) {
+      const res = await fetch(`http://127.0.0.1:${port}/mcp`, { method: "POST", headers: { "content-type": "application/json", accept },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }) });
+      assert.equal(res.status, 200, accept);
+      assert.ok(((await res.json()) as { result: { tools: unknown[] } }).result.tools.length >= 2, accept);
+    }
+  } finally { server.close(); }
+});

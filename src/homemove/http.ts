@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 
 import { HomedataClient } from "../client.js";
 import { isMain } from "../entry.js";
-import { checkAppsChallenge, checkCallsPerMinute, noStoreOnErrors } from "../http.js";
+import { acceptJsonClients, checkAppsChallenge, checkCallsPerMinute, noStoreOnErrors } from "../http.js";
 import { callerKey } from "../home/http.js";
 import { VERSION } from "../index.js";
 import { MinuteLimiter } from "../limiter.js";
@@ -109,6 +109,7 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });
     await server.connect(transport);
+    acceptJsonClients(req);
     await transport.handleRequest(req, res, body);
   };
 }
