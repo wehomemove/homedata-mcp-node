@@ -309,3 +309,10 @@ test("the handoff carries what conveyancing and removals need to be re-priced: s
   const moving = await quote({ service: "removals", postcode: "SW1A 2AA", to_postcode: "LS1 4AP", items: [{ item: "sofa", quantity: 2 }] }, deps);
   assert.deepEqual(read(moving).inventory, { "1584": 2 });
 });
+
+test("without motus's removals pricing, removals send people to homemove.com's removals form, not an error", async () => {
+  const down = new MotusClient({ bearer: "t", baseUrl: "https://motus.test", fetchImpl: (async () => new Response("{}", { status: 404 })) as typeof fetch });
+  const answer = await quote({ service: "removals", postcode: "SW1A 2AA", to_postcode: "LS1 4AP" }, { motus: down, property: fakeHomedata() });
+  assert.equal(answer.status, "quoted_by_hand");
+  assert.equal(continueUrlForQuote(answer, undefined), "https://homemove.com/removals/quote/?pc=SW1A2AA");
+});
