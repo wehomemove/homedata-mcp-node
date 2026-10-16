@@ -10,3 +10,4 @@ console.error('copied src/manifest → dist/manifest');
 // The Homemove quote widget (HTML/CSS/JS and its Homie art) is served from dist/ as-is.
 cpSync(join(ROOT, 'src/homemove/widget'), join(ROOT, 'dist/homemove/widget'), { recursive: true, filter: (src) => !src.endsWith('index.html') });
 console.error('copied src/homemove/widget → dist/homemove/widget');
+cpSync(join(ROOT, 'src/homemove/demo'), join(ROOT, 'dist/homemove/demo'), { recursive: true });

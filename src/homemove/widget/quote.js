@@ -256,7 +256,10 @@
     if (qp.get("open") === "1") openTakeover();
   }
   let RIG_BOOTED = false;
-  window.addEventListener("openai:set_globals", () => { if (window.openai?.toolOutput?.status && state.data !== window.openai.toolOutput) { state.data = null; boot(); } });
+  window.addEventListener("openai:set_globals", () => {
+    const out = window.openai?.toolOutput;
+    if ((out?.status || out?.view === "plan") && state.data !== out && state.plan !== out) { state.data = null; state.plan = null; boot(); }
+  });
 
   // ---------------------------------------------------------------- inline card
   function renderInline() {
