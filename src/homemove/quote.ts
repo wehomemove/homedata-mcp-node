@@ -1,5 +1,6 @@
 import { AddressNotMatched, type PropertyFacts, type PropertyLookup } from "./property.js";
-import { MotusRefusal, type MotusClient, type MotusProduct, type PricingInput } from "./motus.js";
+import { MotusRefusal, type MotusClient, type MotusProduct, type PickerRoom, type PricingInput } from "./motus.js";
+import { REMOVALS, removals, type MovingItem } from "./removals.js";
 
 /**
  * One quote: find the product, fill what the address can tell us, ask motus
@@ -15,8 +16,6 @@ const ALIASES: Array<[RegExp, RegExp]> = [
   [/\b(level ?3|l3|full structural|building survey)\b/i, /^level 3 survey$/i],
   [/\bsnag/i, /^snagging survey$/i],
   [/\b(end of tenancy|move ?out clean|moving clean|deep clean)\b/i, /^end of tenancy clean$/i],
-  [/\b(removal|remover|moving company|movers?)\b/i, /^removals$/i],
-  [/\b(man (and|&) van|man with a van)\b/i, /^man & van$/i],
   [/\b(epc|energy performance)\b/i, /^epc assessment$/i],
   [/\b(gas safe|gas safety|cp12)\b/i, /^gas cp12 +safety certificate$/i],
   [/\b(eicr|electrical (safety|condition|certificate|report))\b/i, /^electrical installation condition report$/i],
@@ -54,7 +53,9 @@ const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9+]+/g, " ").trim();
 
 /** The product a request names: its id, an alias, or the closest catalogue name. */
 export function resolveProduct(products: MotusProduct[], service: string | number): { product?: MotusProduct; candidates: MotusProduct[] } {
-  const live = products.filter((p) => !p.is_addon || /clean|packing|box|bubble|wardrobe|porter|dismantle|waiver/i.test(p.name));
+  // The bedroom grids on Removals (1054) and Man & Van (1056) are not what homemove.com quotes a
+  // move at (that is the inventory guide price), so they are never offered here.
+  const live = products.filter((p) => ![1054, 1056].includes(p.id) && (!p.is_addon || /clean|packing|box|bubble|wardrobe|porter|dismantle|waiver/i.test(p.name)));
   if (typeof service === "number" || /^\d+$/.test(String(service))) {
     const product = products.find((p) => p.id === Number(service));
     return { product, candidates: product ? [product] : [] };
@@ -100,11 +101,20 @@ export interface QuoteRequest {
   property_price?: number;
   bedrooms?: number;
   answers?: Record<string, unknown>;
+  /** Removals: where they are moving to, and what is moving (in their words, or picker ids). */
+  to_postcode?: string;
+  items?: MovingItem[];
+  inventory?: Record<string, number>;
+}
+
+export interface MoveView {
+  from: string; to: string; distance_km: number | null; cubic_meters: number | null; van_type: string | null;
+  num_vans: number | null; crew_size: number | null; estimated_hours: number | null; items: Array<{ name: string; quantity: number }>;
 }
 
 export type QuoteAnswer =
-  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }> }
-  | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[] }
+  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }>; move?: MoveView; unmatched?: string[] }
+  | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[]; picker?: PickerRoom[]; unmatched?: string[] }
   | { status: "quoted_by_hand"; product: ProductView; postcode: string; property?: PropertyView; answers: AnswerView[] }
   | { status: "choose_service"; options: ProductView[] }
   | { status: "unknown_service"; service: string }
@@ -210,6 +220,9 @@ async function conveyancing(request: QuoteRequest, deps: { motus: MotusClient; p
 }
 
 export async function quote(request: QuoteRequest, deps: { motus: MotusClient; property: PropertyLookup }): Promise<QuoteAnswer> {
+  if (/^(1054|1056)$/.test(String(request.service)) || (typeof request.service === "string" && REMOVALS.test(request.service) && !/\b(box|boxes|packing|bubble|porter|dismantle|waiver)\b/i.test(request.service))) {
+    return removals(request, deps.motus);
+  }
   // The widget re-asks with the product id; 1062/1063 are the conveyancing legs, priced by Atlas.
   const legalId = /^(1062|1063)$/.test(String(request.service)) ? String(request.service) : undefined;
   if (legalId) return conveyancing({ ...request, service: legalId === "1063" ? "conveyancing selling" : "conveyancing buying" }, deps);

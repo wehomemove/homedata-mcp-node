@@ -144,3 +144,25 @@ input[type=range]::-moz-range-thumb { width: 26px; height: 26px; border-radius: 
 .inline .inline-price { color: var(--paper); font-size: clamp(44px, 9vw, 64px); margin: 2px 0 8px; }
 .inline .inline-price .col span b { color: var(--paper); }
 .inline .cta { margin-top: 4px; }
+
+/* removals inventory */
+.inv { display: grid; gap: 12px; }
+.van-meter { display: grid; grid-template-columns: 64px 1fr; grid-template-rows: auto auto; align-items: center; gap: 4px 12px; padding: 10px 12px; background: #fff; border: 1.5px solid var(--ink); border-radius: 14px; box-shadow: 3px 3px 0 var(--ink); }
+.van-meter img { grid-row: span 2; width: 64px; height: 44px; object-fit: contain; transform-origin: 50% 100%; }
+.van-meter .fill { height: 10px; border-radius: 10px; background: var(--sand); border: 1.5px solid var(--ink); overflow: hidden; }
+.van-meter .fill i { display: block; height: 100%; width: 0; background: var(--grad); transition: width .45s cubic-bezier(.2,1.3,.4,1); }
+.van-meter b { font-size: 13px; color: #5a6573; font-weight: 700; }
+.rooms { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.rooms button { display: inline-flex; align-items: center; gap: 6px; flex: none; border: 1.5px solid #d9d2c6; background: #fff; border-radius: 99px; padding: 5px 12px 5px 6px; font-weight: 700; font-size: 13px; cursor: pointer; transition: all .18s var(--ui); }
+.rooms button img { width: 26px; height: 26px; object-fit: contain; }
+.rooms button[aria-selected=true] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.items { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; max-height: 300px; overflow-y: auto; padding: 2px 4px 6px 2px; }
+.item { border: 1.5px solid #d9d2c6; border-radius: 14px; background: #fff; display: grid; transition: border-color .18s var(--ui), box-shadow .18s var(--ui); }
+.item.sel { border-color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
+.item .add { border: 0; background: none; padding: 10px 8px 4px; cursor: pointer; display: grid; justify-items: center; gap: 6px; }
+.item .add img { width: 64px; height: 52px; object-fit: contain; }
+.item .add small { font-size: 12px; font-weight: 700; line-height: 1.2; text-align: center; color: var(--ink); }
+.step-qty { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 8px; }
+.step-qty button { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--ink); background: var(--paper); font-weight: 800; cursor: pointer; }
+.step-qty .qty { font-weight: 800; font-variant-numeric: tabular-nums; }
+.drive-van { position: fixed; left: 0; bottom: 46%; width: 220px; z-index: 14; pointer-events: none; }

@@ -38,6 +38,9 @@ const QUOTE_TOOL = {
       property_price: { type: "integer", minimum: 1, description: "What the home is worth or the price being paid, in pounds, if the user said. Sets a survey's price band." },
       bedrooms: { type: "integer", minimum: 1, maximum: 20, description: "Number of bedrooms, if the user said." },
       answers: { type: "object", additionalProperties: { type: "string" }, description: "Answers to questions a previous homemove_quote result asked, keyed by the question's name, e.g. {\"snagging_type\": \"Post-Completion\"}." },
+      inventory: { type: "object", additionalProperties: { type: "integer", minimum: 1, maximum: 100 }, description: "Removals, from the quote card only: picker item id → quantity." },
+      to_postcode: { type: "string", description: "Removals: the full postcode they are moving to. postcode is where they are moving from." },
+      items: { type: "array", maxItems: 60, items: { type: "object", additionalProperties: false, required: ["item"], properties: { item: { type: "string", description: "A thing being moved in the user's words, e.g. \"double bed\", \"3 seater sofa\", \"medium boxes\"." }, quantity: { type: "integer", minimum: 1, maximum: 100 } } }, description: "Removals: what is moving. Only what the user said; never invent a typical household." },
     },
   },
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -74,6 +77,12 @@ export function quoteNarration(answer: QuoteAnswer): string {
     case "priced": {
       const what: Record<string, string> = { beds: "bedrooms", tenure: "tenure", property_price: "value" };
       const assumed = answer.assumed.map((a) => `${what[a.name] ?? a.name} ${a.value} (from ${a.source})`).join("; ");
+      if (answer.move) {
+        const m = answer.move;
+        return `Homemove's removals guide price from ${m.from} to ${m.to} is £${answer.price_gbp.toLocaleString("en-GB")}: about ${m.cubic_meters} m³, ${m.num_vans && m.num_vans > 1 ? `${m.num_vans} × ` : ""}${m.van_type}, a crew of ${m.crew_size}, around ${m.estimated_hours} hours, ${m.distance_km} km.` +
+          (answer.unmatched?.length ? ` Not in the price (not on the item list): ${answer.unmatched.join(", ")}; say so.` : "") +
+          ` It's a guide price from the inventory; the final price is confirmed when they book on homemove.com: ${answer.booking_url}. The card shows it; keep your reply short.`;
+      }
       const extras = (answer.extras ?? []).map((x) => `${x.label} £${x.amount_gbp.toLocaleString("en-GB")} is a separate line`).join("; ");
       return `Homemove's price for a ${answer.product.name} at ${answer.property?.address ?? answer.postcode} is £${answer.price_gbp.toLocaleString("en-GB")}.` +
         (answer.band ? ` Priced on the ${bandLabel(answer.band)} value band.` : "") +
@@ -83,7 +92,10 @@ export function quoteNarration(answer: QuoteAnswer): string {
     }
     case "needs_answers":
       return `To price a ${answer.product.name}, ask: ` + answer.questions.map((q) => q.options.length ? `${q.question} (${q.options.join(" / ")})` : q.question).join(" ") +
-        " Then call homemove_quote again with the answers (property_price in pounds for the value).";
+        (answer.questions.some((q) => q.name === "inventory" || q.name === "to_postcode")
+          ? " Then call homemove_quote again with to_postcode and items (each thing they named, with a quantity). Never fill in a typical household for them; the card also lets them pick room by room."
+          : " Then call homemove_quote again with the answers (property_price in pounds for the value).") +
+        (answer.unmatched?.length ? ` These aren't on Homemove's item list, so ask what they're closest to: ${answer.unmatched.join(", ")}.` : "");
     case "quoted_by_hand":
       return `A ${answer.product.name} for this home is quoted by the Homemove team rather than instantly. Tell the user a specialist will price it, and do not estimate.`;
     case "choose_service":
@@ -146,6 +158,9 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
           property_price: typeof args["property_price"] === "number" && args["property_price"] > 0 ? args["property_price"] : undefined,
           bedrooms: typeof args["bedrooms"] === "number" && args["bedrooms"] > 0 ? Math.round(args["bedrooms"]) : undefined,
           answers,
+          to_postcode: typeof args["to_postcode"] === "string" && args["to_postcode"].trim() ? args["to_postcode"].trim() : undefined,
+          items: Array.isArray(args["items"]) ? (args["items"] as Array<{ item?: unknown; quantity?: unknown }>).filter((i) => typeof i?.item === "string").map((i) => ({ item: String(i.item), quantity: typeof i.quantity === "number" ? i.quantity : undefined })) : undefined,
+          inventory: args["inventory"] && typeof args["inventory"] === "object" && !Array.isArray(args["inventory"]) ? Object.fromEntries(Object.entries(args["inventory"] as Record<string, unknown>).filter(([, v]) => typeof v === "number").map(([k, v]) => [k, v as number])) : undefined,
         }, deps);
         return result(answer as unknown as Record<string, unknown>, quoteNarration(answer));
       }
