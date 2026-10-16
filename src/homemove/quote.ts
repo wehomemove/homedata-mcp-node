@@ -103,7 +103,7 @@ export interface QuoteRequest {
 }
 
 export type QuoteAnswer =
-  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number } }
+  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; booking_url: string }
   | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[] }
   | { status: "quoted_by_hand"; product: ProductView; postcode: string; property?: PropertyView; answers: AnswerView[] }
   | { status: "choose_service"; options: ProductView[] }
@@ -111,6 +111,30 @@ export type QuoteAnswer =
   | { status: "address_not_found"; reason: string; postcode: string };
 
 export interface ProductView { id: number; name: string; type: string | null }
+
+/**
+ * Where a customer books what they were quoted: homemove.com's own quote wizard for that
+ * product, opened on the product with the postcode filled in. Slugs are the website's
+ * (motus resources/js/Website/Forms/configs/surveys.config.ts surveySlugToIdMap).
+ */
+const SURVEY_SLUGS: Record<number, string> = {
+  2: "rics-level-2", 4: "rics-level-3", 1039: "snagging", 1045: "building", 1: "help-to-buy-valuation",
+  6: "shared-ownership-valuation", 1043: "structural", 1044: "roof", 1040: "probate-valuation",
+  1041: "matrimonial-valuation", 1042: "thermographic", 1038: "asbestos", 1081: "epc-assessment",
+  1085: "gas-cp12-safety-certificate", 1083: "epc-assessment-floorplan", 1055: "drone-roof-survey",
+  1087: "electrical-installation-condition-report",
+};
+
+export function bookingUrl(product: ProductView, postcode: string): string {
+  const pc = encodeURIComponent(postcode.replace(/\s+/g, "").toUpperCase());
+  const slug = SURVEY_SLUGS[product.id];
+  if (slug) return `https://homemove.com/quote/surveys/${slug}?pc=${pc}`;
+  if (product.type === "surveys") return `https://homemove.com/quote/surveys/?pc=${pc}`;
+  if (product.type === "removals") return `https://homemove.com/removals/quote/?pc=${pc}`;
+  if (product.type === "cleaning") return "https://homemove.com/quote/cleaning/";
+  if (product.type === "legal") return `https://homemove.com/legal/quote/?pc=${pc}`;
+  return "https://homemove.com/";
+}
 export interface PropertyView { address: string; postcode: string; uprn: string }
 export interface Assumption { name: string; value: string; source: string }
 export interface AnswerView { name: string; label: string }
@@ -173,7 +197,7 @@ export async function quote(request: QuoteRequest, deps: { motus: MotusClient; p
     const band = result.property_price_band ? { min: result.property_price_band.min, max: result.property_price_band.max } : undefined;
     for (const a of assumed) if (a.name === "property_price" && band) a.value = bandLabel(band);
     if (result.price_gbp && !result.from && result.needs.length === 0) {
-      return { status: "priced", product: view(product), price_gbp: result.price_gbp, postcode: result.postcode, property, assumed, answers: shown, band };
+      return { status: "priced", product: view(product), price_gbp: result.price_gbp, postcode: result.postcode, property, assumed, answers: shown, band, booking_url: bookingUrl(view(product), result.postcode) };
     }
     const questions = (result.needs.length ? result.needs : product.inputs.filter((i) => i.key === PROPERTY_PRICE_KEY))
       .map((input) => ({ name: input.name, question: questionFor(input), options: input.key === PROPERTY_PRICE_KEY ? [] : input.options.map((o) => o.label) }));
