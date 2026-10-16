@@ -198,8 +198,12 @@ export function buildServer(
     if (response.statusCode === 402 && profile.lowBalanceAnswer) {
       return { result: jsonResult({ ...profile.lowBalanceAnswer }, true), outcome };
     }
+    const omit = response.statusCode < 400 ? profile.omitResultFields?.[name] : undefined;
+    const body = omit && response.body && typeof response.body === "object" && !Array.isArray(response.body)
+      ? Object.fromEntries(Object.entries(response.body as Record<string, unknown>).filter(([key]) => !omit.includes(key)))
+      : response.body;
     return {
-      result: jsonResult(response.body, response.statusCode >= 400, spendMeta(response.headers)),
+      result: jsonResult(body, response.statusCode >= 400, spendMeta(response.headers)),
       outcome,
     };
   }

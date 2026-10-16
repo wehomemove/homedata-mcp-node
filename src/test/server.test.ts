@@ -7,6 +7,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { HomedataClient, errorGuidance } from "../client.js";
 import { staticTools, tools } from "../manifest.js";
 import { buildServer } from "../server.js";
+import { PROFILES, type Profile } from "../profile.js";
 
 interface Sent {
   method: string;
@@ -16,7 +17,7 @@ interface Sent {
   headers?: Record<string, string>;
 }
 
-async function connect(opts: { response?: () => Response; withKey?: boolean } = {}) {
+async function connect(opts: { response?: () => Response; withKey?: boolean; profile?: Profile } = {}) {
   const sent: Sent[] = [];
   const fetchImpl = (async (...args: Parameters<typeof fetch>) => {
     const [input, init] = args;
@@ -36,7 +37,7 @@ async function connect(opts: { response?: () => Response; withKey?: boolean } = 
   const homedata = opts.withKey === false ? null : new HomedataClient({ apiKey: "parity-test", fetchImpl });
   const [a, b] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "1" }, { capabilities: {} });
-  await Promise.all([buildServer(homedata).connect(a), client.connect(b)]);
+  await Promise.all([(opts.profile ? buildServer(homedata, opts.profile) : buildServer(homedata)).connect(a), client.connect(b)]);
   return { client, sent };
 }
 
@@ -222,3 +223,19 @@ for (const reason of [null, "no_match", "multiple_matches"] as const) {
     } finally { await client.close(); }
   });
 }
+
+test("in ChatGPT, property_core never carries a valuation; everywhere else it does", async () => {
+  // The ChatGPT listing and review cases say Homedata does not value homes. The API
+  // added valuation_estimate to property_core in October 2026 (measured 16 Oct).
+  const body = { uprn: 100023336956, address: { full_address: "10 DOWNING STREET" }, valuation_estimate: { estimate_gbp: 84087000 }, council_tax: { band: "H" } };
+  const respond = () => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+  const chatgpt = await connect({ response: respond, profile: PROFILES.chatgpt });
+  const answer = await chatgpt.client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
+  assert.deepEqual(answer.structuredContent, { uprn: 100023336956, address: { full_address: "10 DOWNING STREET" }, council_tax: { band: "H" } });
+  assert.doesNotMatch(JSON.stringify(answer.content), /valuation|84087000/, "nor in the text the model reads");
+  await chatgpt.client.close();
+  const stdio = await connect({ response: respond });
+  const full = await stdio.client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
+  assert.deepEqual((full.structuredContent as Record<string, unknown>)["valuation_estimate"], { estimate_gbp: 84087000 });
+  await stdio.client.close();
+});
