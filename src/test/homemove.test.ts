@@ -27,6 +27,9 @@ const PRODUCTS: MotusProduct[] = [
   { id: 1054, name: "Removals", type: "removals", is_addon: false, pricing: "linear", price_gbp: null, inputs: [{ key: 1, name: "beds", options: BEDS }] },
   { id: 1081, name: "EPC Assessment", type: "surveys", is_addon: false, pricing: "flat", price_gbp: 99, inputs: [] },
   { id: 1085, name: "Gas CP12  Safety Certificate", type: "surveys", is_addon: false, pricing: "flat", price_gbp: 119, inputs: [] },
+  { id: 19, name: "Insurance Reinstatement Survey", type: "surveys", is_addon: false, pricing: "linear", price_gbp: null, inputs: [{ key: 13, name: "property_price", options: BANDS }] },
+  { id: 1091, name: "Buildings Insurance", type: "insurance", is_addon: false, pricing: "flat", price_gbp: 120, inputs: [] },
+  { id: 1130, name: "B2B Subscription", type: "removals", is_addon: false, pricing: "flat", price_gbp: 39.99, inputs: [] },
 ];
 
 type Sent = { url: string; body: Record<string, unknown> };
@@ -100,6 +103,22 @@ test("the words people type find the right product", () => {
   assert.equal(find("EPC"), "EPC Assessment");
   assert.equal(find("1039"), "Snagging Survey");
   assert.equal(find("knitting lessons"), undefined);
+});
+
+test("insurance and trade products are never offered or quoted", async () => {
+  const found = resolveProduct(PRODUCTS, "home insurance");
+  assert.deepEqual(found.candidates.map((p) => p.name), ["Insurance Reinstatement Survey"], "a reinstatement survey is a survey; insurance itself is not quoted here");
+  assert.equal(resolveProduct(PRODUCTS, "1091").product, undefined, "not even by id");
+  assert.equal(resolveProduct(PRODUCTS, "b2b subscription").product, undefined);
+  assert.equal(resolveProduct(PRODUCTS, "1130").product, undefined);
+  const server = buildHomemoveServer({ motus: fakeMotus(), property: fakeHomedata(), assetOrigin: "https://mcp.homemove.com" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "t", version: "1" });
+  await Promise.all([server.connect(b), client.connect(a)]);
+  const listed = await client.callTool({ name: "homemove_services", arguments: {} });
+  const names = ((listed.structuredContent as { services: Array<{ name: string }> }).services).map((s) => s.name);
+  assert.ok(names.includes("Insurance Reinstatement Survey"));
+  assert.ok(!names.some((n) => /buildings insurance|b2b|subscription/i.test(n)), names.join(", "));
 });
 
 test("answers in the user's words become the option values motus expects", () => {
