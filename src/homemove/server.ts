@@ -10,7 +10,7 @@ import {
 import { VERSION } from "../index.js";
 import type { MotusClient } from "./motus.js";
 import type { PropertyLookup } from "./property.js";
-import { PROPERTY_PRICE_KEY, bandLabel, questionFor, quote, type QuoteAnswer } from "./quote.js";
+import { PROPERTY_PRICE_KEY, bandLabel, consumerProduct, questionFor, quote, type QuoteAnswer } from "./quote.js";
 import { homemoveWidgetHtml, HOMEMOVE_WIDGET_URI, HOMEMOVE_WIDGET_VERSION } from "./widget.js";
 import type { HomedataClient } from "../client.js";
 import { planMove, type MovePlan, type Situation } from "./plan.js";
@@ -267,7 +267,7 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
       }
       if (request.params.name === "homemove_services") {
         const type = typeof args["type"] === "string" ? args["type"] : undefined;
-        const products = type === "legal" ? [] : (await deps.motus.products()).filter((p) => !p.is_addon && (!type || p.type === type) && ["surveys", "cleaning", "removals"].includes(p.type ?? ""));
+        const products = type === "legal" ? [] : (await deps.motus.products()).filter((p) => !p.is_addon && (!type || p.type === type) && ["surveys", "cleaning", "removals"].includes(p.type ?? "") && consumerProduct(p));
         const services = products.map((p) => ({
           id: p.id,
           name: p.name.trim(),

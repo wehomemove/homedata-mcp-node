@@ -51,13 +51,21 @@ export function questionFor(input: PricingInput): string {
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9+]+/g, " ").trim();
 
+/**
+ * A product a consumer may be quoted here. Insurance is a regulated product this app does not
+ * quote, and trade products (the B2B subscription) are not for people moving home.
+ */
+export function consumerProduct(p: MotusProduct): boolean {
+  return ["surveys", "cleaning", "removals", "legal"].includes(p.type ?? "") && !/\b(b2b|subscription|insurance)\b/i.test(p.name.replace(/insurance reinstatement/i, ""));
+}
+
 /** The product a request names: its id, an alias, or the closest catalogue name. */
 export function resolveProduct(products: MotusProduct[], service: string | number): { product?: MotusProduct; candidates: MotusProduct[] } {
   // The bedroom grids on Removals (1054) and Man & Van (1056) are not what homemove.com quotes a
   // move at (that is the inventory guide price), so they are never offered here.
-  const live = products.filter((p) => ![1054, 1056].includes(p.id) && (!p.is_addon || /clean|packing|box|bubble|wardrobe|porter|dismantle|waiver/i.test(p.name)));
+  const live = products.filter((p) => consumerProduct(p) && ![1054, 1056].includes(p.id) && (!p.is_addon || /clean|packing|box|bubble|wardrobe|porter|dismantle|waiver/i.test(p.name)));
   if (typeof service === "number" || /^\d+$/.test(String(service))) {
-    const product = products.find((p) => p.id === Number(service));
+    const product = products.find((p) => p.id === Number(service) && consumerProduct(p));
     return { product, candidates: product ? [product] : [] };
   }
   const text = String(service);
