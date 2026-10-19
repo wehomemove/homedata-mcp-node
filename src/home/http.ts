@@ -6,7 +6,9 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 
 import { HomedataClient } from "../client.js";
 import { isMain } from "../entry.js";
-import { acceptJsonClients, checkAppsChallenge, checkCallsPerMinute, noStoreOnErrors } from "../http.js";
+import { SlackActivity, type ActivitySink } from "../activity.js";
+import { acceptJsonClients, checkAppsChallenge, checkCallsPerMinute, checkSlack, noStoreOnErrors } from "../http.js";
+import { HomeVisitors, shownToolName } from "./activity.js";
 import { VERSION } from "../index.js";
 import { MinuteLimiter } from "../limiter.js";
 import { AccountTools, DEFAULT_ACCOUNT_MCP_URL, DEFAULT_ISSUER, DEFAULT_RESOURCE, protectedResourceMetadata, type AccountSettings } from "./account.js";
@@ -40,6 +42,10 @@ export interface HomeHttpOptions {
   routes?: MapboxRoutes;
   /** Public origin used for this endpoint's widget assets. */
   assetOrigin?: string;
+  /** Told about every tool call (src/activity.ts); off when absent. */
+  activity?: ActivitySink;
+  /** Counts distinct ChatGPT users for the activity lines. */
+  visitors?: HomeVisitors;
   now?: () => number;
 }
 const send = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => res.writeHead(status, { "Content-Type": "application/json", ...headers }).end(JSON.stringify(body));
@@ -152,6 +158,10 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
   const account = options.account ? new AccountTools(options.account, options.client) : undefined;
   const assetOrigin = options.assetOrigin ?? options.account?.resource ?? DEFAULT_RESOURCE;
   const routes = options.routes ?? (options.mapboxToken ? new MapboxRoutes({ token: options.mapboxToken, referer: `${assetOrigin}/` }) : undefined);
+  const visitors = options.visitors ?? new HomeVisitors(undefined, now);
+  const report = (subject: unknown, call: { tool: string; outcome: string; ms: number; detail?: string }) => {
+    if (options.activity) options.activity({ organisation: `Home · ${visitors.label(subject)}`, ...call });
+  };
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     noStoreOnErrors(res);
     const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
@@ -197,8 +207,10 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
     const limited = (text: string) => single
       ? send(res, 200, { jsonrpc: "2.0", id: (body as { id?: unknown }).id ?? null, result: { content: [{ type: "text", text }], structuredContent: { available: false, limit_reached: true, reason: text }, isError: true } }, { "Cache-Control": "no-store" })
       : send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" });
-    if (calls.length && !callLimits.take(caller, calls.length)) return void limited(CALL_LIMIT_TEXT);
-    if (enrichmentCount && !enrichmentLimits.take(caller, enrichmentCount)) return void limited(ENRICHMENT_LIMIT_TEXT);
+    const subject = caller.startsWith("subject:") ? caller.slice("subject:".length) : undefined;
+    const reportLimited = () => { for (const call of calls) report(subject, { tool: shownToolName(call.name), outcome: "rate limited", ms: 0 }); };
+    if (calls.length && !callLimits.take(caller, calls.length)) { reportLimited(); return void limited(CALL_LIMIT_TEXT); }
+    if (enrichmentCount && !enrichmentLimits.take(caller, enrichmentCount)) { reportLimited(); return void limited(ENRICHMENT_LIMIT_TEXT); }
     // When atlas refuses the caller's token, the tool result carries the challenge
     // and the HTTP answer becomes a 401 with it, which is what makes ChatGPT ask
     // the user to reconnect. An unsigned call keeps a 200 with the challenge in
@@ -208,7 +220,7 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
     const server = buildHomeServer(
       options.client,
       account ? { tools: account, token: bearerToken(req), onRefused: (challenge) => { refused ??= challenge; } } : undefined,
-      { mapboxToken: options.mapboxToken, assetOrigin, routes, widgetViewId: randomBytes(12).toString("hex") },
+      { mapboxToken: options.mapboxToken, assetOrigin, routes, widgetViewId: randomBytes(12).toString("hex"), onToolCall: options.activity ? ({ subject: said, ...call }) => report(said, call) : undefined },
     );
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });
@@ -257,6 +269,7 @@ async function main(): Promise<void> {
   if (!apiKey) throw new Error("HOMEDATA_API_KEY is required for Home listing enrichment");
   const mapboxToken = mapboxTokenFromEnv(process.env);
   const account = accountFromEnv(process.env);
+  const slack = checkSlack(process.env);
   const assetOrigin = account?.resource ?? checkUrl("HOME_MCP_RESOURCE", (process.env["HOME_MCP_RESOURCE"] ?? "").trim() || DEFAULT_RESOURCE, true);
   const client = new HomeClient({
     homeBaseUrl: (process.env["HOME_BASE_URL"] ?? "").trim() || undefined,
@@ -273,9 +286,14 @@ async function main(): Promise<void> {
     account,
     mapboxToken,
     assetOrigin,
+    activity: slack ? new SlackActivity(slack, fetch, Date.now, (m) => console.error(m.replace("homedata-mcp-http", "home-mcp-http"))).report : undefined,
+    visitors: new HomeVisitors((process.env["HOME_ACTIVITY_STATE"] ?? "").trim() || undefined),
   });
   const port = Number(process.env["PORT"] || 4177); const host = process.env["HOST"] || "127.0.0.1";
-  createServer((req, res) => void handler(req, res).catch((error) => { console.error("[home-mcp-http] request failed:", error); if (!res.headersSent) send(res, 500, { error: "internal_error" }); })).listen(port, host, () => console.error(`home-mcp-http ${VERSION} listening on http://${host}:${port}`));
+  createServer((req, res) => void handler(req, res).catch((error) => { console.error("[home-mcp-http] request failed:", error); if (!res.headersSent) send(res, 500, { error: "internal_error" }); })).listen(port, host, () => {
+    console.error(`home-mcp-http ${VERSION} listening on http://${host}:${port}`);
+    console.error(slack ? `Slack activity: on, to ${slack.channel}` : "Slack activity: off (SLACK_API_TOKEN not set)");
+  });
 }
 
 if (isMain(import.meta.url)) void main().catch((error) => { console.error(`home-mcp-http: ${error instanceof Error ? error.message : String(error)}`); process.exit(1); });

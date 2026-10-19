@@ -19,6 +19,8 @@ import { TtlCache } from "../home/cache.js";
 import { HOME_PHOTO_LIMIT, orderedPhotos, cleanListingDescription, HomeClient, HomeUpstreamError, type HomeClientOptions } from "../home/client.js";
 import { ACCOUNT_TOOLS, SAVED_SEARCH_TYPES, type AccountSettings } from "../home/account.js";
 import { accountFromEnv, createHomeHttpHandler, mapboxTokenFromEnv } from "../home/http.js";
+import { coarsePlace, HomeVisitors } from "../home/activity.js";
+import { formatLine, type ActivitySink, type ToolCallEvent } from "../activity.js";
 import { HOME_RULES } from "../home/plugin.js";
 import { MAPBOX_GL_ASSET_PREFIX } from "../home/mapbox-assets.js";
 import { HOME_WIDGET_ASSET_PREFIX, HOME_WIDGET_ASSETS, HOME_WIDGET_CSS_PATH, HOME_WIDGET_SCRIPT_PATH } from "../home/widget-assets.js";
@@ -89,7 +91,7 @@ function fixtures(options: FixtureOptions = {}) {
   return { client: new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, logger: options.logger, ...options.client }), requests };
 }
 
-async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; clientIpHeader?: string; appsChallenge?: string; account?: AccountSettings; mapboxToken?: string } = {}) {
+async function start(fixtureOptions: FixtureOptions = {}, httpOptions: { callsPerMinute?: number; enrichmentsPerMinute?: number; clientIpHeader?: string; appsChallenge?: string; account?: AccountSettings; mapboxToken?: string; activity?: ActivitySink; visitors?: HomeVisitors } = {}) {
   const { client, requests } = fixtures(fixtureOptions);
   const handler = createHomeHttpHandler({ client, callsPerMinute: 20, ...httpOptions });
   const http: HttpServer = createServer((req, res) => void handler(req, res));
@@ -2417,4 +2419,42 @@ test("plan_viewings gives the same quickest order whatever order the homes are l
       assert.equal(b.body["total_driving_minutes"], a.body["total_driving_minutes"], second);
     }
   } finally { await app.stop(); }
+});
+
+test("activity: one line per call naming an anonymous visitor, area-level detail only, never an address", async () => {
+  const events: ToolCallEvent[] = [];
+  const { mcp, stop } = await start({}, { callsPerMinute: 2, activity: (e) => events.push(e), visitors: new HomeVisitors(undefined, () => Date.parse("2026-10-19T12:00:00Z")) });
+  try {
+    await mcp.callTool({ name: "search_homes", arguments: { location: "Bath", listing_type: "sale", max_price: 500000, min_beds: 3 }, _meta: { "openai/subject": "user-a" } });
+    await mcp.callTool({ name: "area_insights", arguments: { postcode: "BA1 1LZ" }, _meta: { "openai/subject": "user-a" } });
+    await mcp.callTool({ name: "typical_rents", arguments: { location: "12 Acacia Avenue, Bath" }, _meta: { "openai/subject": "user-b" } });
+    await mcp.callTool({ name: "typical_rents", arguments: { location: "Bath" }, _meta: { "openai/subject": "user-b" } });
+    await mcp.callTool({ name: "typical_rents", arguments: { location: "Bath" }, _meta: { "openai/subject": "user-b" } });
+    assert.equal(events.length, 5);
+    const [first, second, third, , limited] = events;
+    assert.match(first!.organisation, /^Home · visitor [0-9a-f]{6} \(new · 1 today · 1 ever\)$/);
+    assert.equal(first!.tool, "search_homes");
+    assert.equal(first!.outcome, "ok");
+    assert.match(first!.detail!, /^Bath, to buy, 3\+ beds, up to £500k, → \d+ homes?$/);
+    assert.match(second!.organisation, /^Home · visitor [0-9a-f]{6} \(1 today · 1 ever\)$/, "a returning visitor is not new");
+    assert.equal(second!.detail, "BA1", "a full postcode is cut to its district");
+    assert.match(third!.organisation, /\(new · 2 today · 2 ever\)/);
+    assert.equal(third!.detail, "an address");
+    assert.equal(limited!.outcome, "rate limited", "a refused call is still activity");
+    for (const event of events) assert.doesNotMatch(JSON.stringify(event), /Acacia|1LZ|user-a|user-b/);
+    assert.match(formatLine(first!), /· `search_homes` · ok · .* · Bath, to buy/);
+  } finally {
+    await stop();
+  }
+});
+
+test("activity: places shown at area level", () => {
+  assert.equal(coarsePlace("ls6 4ab"), "LS6");
+  assert.equal(coarsePlace("SW1A2AA"), "SW1A");
+  assert.equal(coarsePlace("ba1"), "BA1");
+  assert.equal(coarsePlace("Leeds"), "Leeds");
+  assert.equal(coarsePlace("Weston-super-Mare"), "Weston-super-Mare");
+  assert.equal(coarsePlace("Flat 2, 10 High St"), "an address");
+  assert.equal(coarsePlace("10 Downing Street London"), "an address");
+  assert.equal(coarsePlace(""), undefined);
 });

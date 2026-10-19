@@ -21,6 +21,8 @@ export interface ToolCallEvent {
   /** "ok", "API error 404", "invalid arguments", "sign-in required", "failed", ... */
   outcome: string;
   ms: number;
+  /** What the call was about, already reduced to what is safe to show (area level, counts). */
+  detail?: string;
 }
 
 export type ActivitySink = (event: ToolCallEvent) => void;
@@ -44,7 +46,7 @@ export function slackEscape(text: string): string {
 export function formatLine(event: ToolCallEvent): string {
   const seconds = event.ms < 1000 ? `${Math.round(event.ms)} ms` : `${(event.ms / 1000).toFixed(1)} s`;
   const icon = event.outcome === "ok" ? ":white_check_mark:" : ":warning:";
-  return `${icon} *${slackEscape(event.organisation)}* · \`${slackEscape(event.tool)}\` · ${slackEscape(event.outcome)} · ${seconds}`;
+  return `${icon} *${slackEscape(event.organisation)}* · \`${slackEscape(event.tool)}\` · ${slackEscape(event.outcome)} · ${seconds}${event.detail ? ` · ${slackEscape(event.detail)}` : ""}`;
 }
 
 export class SlackActivity {

@@ -4,6 +4,7 @@ import {
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
+  type CallToolRequest,
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
@@ -15,6 +16,7 @@ import { mapboxAssetTags } from "./mapbox-assets.js";
 import { homeWidgetAssetValues } from "./widget-assets.js";
 import { PLACE_KINDS, TRAVEL_MODES, type MapboxRoutes } from "./routes.js";
 import { WISHES } from "./wishes.js";
+import { callDetail, outcomeOf, shownToolName, type HomeCall } from "./activity.js";
 
 type Schema = Record<string, unknown>;
 type Tool = { name: string; title: string; description: string; inputSchema: Schema; outputSchema?: Schema; _meta?: Record<string, unknown> };
@@ -237,7 +239,7 @@ function positive(args: Record<string, unknown>, name: string, allowZero = false
   return value;
 }
 
-export function buildHomeServer(client: HomeClient, account?: HomeAccount, options: { mapboxToken?: string; assetOrigin?: string; routes?: MapboxRoutes; widgetViewId?: string } = {}): Server {
+export function buildHomeServer(client: HomeClient, account?: HomeAccount, options: { mapboxToken?: string; assetOrigin?: string; routes?: MapboxRoutes; widgetViewId?: string; onToolCall?: (call: HomeCall) => void } = {}): Server {
   const routes = options.routes;
   const assetOrigin = options.assetOrigin ?? "https://mcp.home.co.uk";
   const instructions = [HOME_INSTRUCTIONS, ...(routes ? [HOME_ROUTE_INSTRUCTIONS] : []), ...(account ? [HOME_ACCOUNT_INSTRUCTIONS] : [])].join(" ");
@@ -287,7 +289,7 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
       ...(account ? accountTools() : []),
     ],
   }));
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const handle = async (request: CallToolRequest): Promise<CallToolResult> => {
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
     try {
       if (account && isAccountTool(request.params.name)) {
@@ -333,6 +335,26 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
     } catch (error) {
       if (error instanceof HomeError) return result({ error: "invalid_request", detail: error.message }, true);
       if (error instanceof HomeUpstreamError) return result({ available: false, reason: UPSTREAM_TEXT }, true);
+      throw error;
+    }
+  };
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const started = Date.now();
+    const report = (outcome: string, answer?: CallToolResult) => {
+      try {
+        const tool = shownToolName(request.params.name);
+        const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+        options.onToolCall?.({ tool, outcome, ms: Date.now() - started, detail: callDetail(tool, args, answer?.isError ? undefined : answer?.structuredContent as Record<string, unknown> | undefined), subject: request.params._meta?.["openai/subject"] });
+      } catch {
+        // Reporting never changes a tool call's answer.
+      }
+    };
+    try {
+      const answer = await handle(request);
+      report(outcomeOf(answer), answer);
+      return answer;
+    } catch (error) {
+      report("failed");
       throw error;
     }
   });
