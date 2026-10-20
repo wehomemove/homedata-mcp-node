@@ -79,6 +79,8 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
       });
       return void res.end(req.method === "HEAD" ? undefined : asset.body);
     }
+    // ChatGPT's iPhone app can open this origin itself in a sheet; people belong on homemove.com, never a JSON 404.
+    if (requestPath === "/" && (req.method === "GET" || req.method === "HEAD")) return void res.writeHead(302, { Location: "https://homemove.com/", "Cache-Control": "no-store" }).end();
     if (requestPath === "/demo") return void res.writeHead(301, { Location: "/demo/" }).end();
     if (requestPath.startsWith("/demo/")) {
       // The frame is served from this same origin, so it loads the card's assets as ChatGPT does.
