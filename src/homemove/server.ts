@@ -19,7 +19,7 @@ import { continueUrlForPlan, continueUrlForQuote } from "./handoff.js";
 export const HOMEMOVE_INSTRUCTIONS = [
   "Homemove prices the services people need when they move home: surveys and valuations, EPCs and safety certificates, removals and man and van, end of tenancy and moving cleans, packing, and conveyancing.",
   "Whenever someone asks what any of these cost, call homemove_quote: it returns Homemove's own live price and shows it in a Homemove card. Do not open homemove.com, a Homemove app or a browser to find a price, and do not ask anyone to sign in: these tools answer directly and need no account. Pass the address when you have it: the property record fills in bedrooms and the value band, so you ask fewer questions.",
-  "If the result has questions, ask the user exactly those (offer the options), then call homemove_quote again with their answers. Never estimate, round or invent a price: quote only the price_gbp a result gives, and say the price is confirmed when they book.",
+  "Call homemove_quote as soon as you know the service: do not ask for a postcode, address or price first. When the price depends on the home's value, the result gives the price from and the card lets them pick their address or value range. If the result has other questions, ask the user exactly those (offer the options), then call homemove_quote again with their answers. Never estimate, round or invent a price: quote only the price_gbp a result gives, and say the price is confirmed when they book.",
   "When a figure was assumed from the property record (bedrooms, value band), say so in a few words and invite a correction.",
   "Use homemove_services when someone asks what Homemove offers or which survey or service they need.",
   "When someone is moving and asks what it will cost, what they need, or how to plan it, call homemove_move_plan: it prices every step of their move at once. Stamp duty is HMRC's tax, never a Homemove fee; say so.",
@@ -34,11 +34,12 @@ const QUOTE_TOOL = {
   inputSchema: {
     type: "object",
     additionalProperties: false,
-    required: ["service", "postcode"],
+    required: ["service"],
     properties: {
       service: { type: "string", description: "The service in the user's words, e.g. \"Level 2 survey\", \"end of tenancy clean\", \"removals\", \"EPC\", or a product id from homemove_services." },
-      postcode: { type: "string", description: "Full UK postcode of the property the service is for. Ask for it if the user has not said." },
+      postcode: { type: "string", description: "Full UK postcode of the property the service is for, if the user said. Leave out rather than asking: the card shows the price from, and lets them pick their address." },
       address: { type: "string", description: "First line of the address (house number and street), when known. Lets Homemove fill in bedrooms and the value band." },
+      uprn: { type: "string", pattern: "^\\d{1,15}$", description: "From the quote card only: the UPRN of the address the user picked." },
       property_price: { type: "integer", minimum: 1, description: "What the home is worth or the price being paid, in pounds, if the user said. Sets a survey's price band." },
       bedrooms: { type: "integer", minimum: 1, maximum: 20, description: "Number of bedrooms, if the user said." },
       answers: { type: "object", additionalProperties: { type: "string" }, description: "Answers to questions a previous homemove_quote result asked, keyed by the question's name, e.g. {\"snagging_type\": \"Post-Completion\"}." },
@@ -120,10 +121,22 @@ const SERVICES_TOOL = {
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
 } as const;
 
+const FIND_ADDRESS_TOOL = {
+  name: "homemove_find_address",
+  title: "Find an address",
+  description: "Used by the Homemove quote card to look up addresses as the user types: a full postcode lists its homes, anything else searches addresses. Returns each address with its UPRN.",
+  inputSchema: {
+    type: "object", additionalProperties: false, required: ["query"],
+    properties: { query: { type: "string", minLength: 3, maxLength: 120, description: "What the user typed: a postcode, or part of an address." } },
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  _meta: { "openai/widgetAccessible": true, ui: { visibility: ["app"] } },
+} as const;
+
 const NOAUTH = { securitySchemes: [{ type: "noauth" }] };
 
 /** Every tool the endpoint lists when Homedata is configured, for the plugin package's checks. */
-export const HOMEMOVE_TOOL_LIST = [QUOTE_TOOL, PLAN_TOOL, STAMP_TOOL, SERVICES_TOOL];
+export const HOMEMOVE_TOOL_LIST = [QUOTE_TOOL, PLAN_TOOL, STAMP_TOOL, SERVICES_TOOL, FIND_ADDRESS_TOOL];
 
 /** What the model is told when motus or Homedata does not answer. */
 export const UNAVAILABLE_TEXT = "Homemove could not work out the price just now. Tell the user to try again in a moment. Do not estimate a price.";
@@ -154,6 +167,11 @@ function quoteNarrationCore(answer: QuoteAnswer): string {
         " The price is confirmed when they book on homemove.com. The card shows it with a button to carry on there; keep your reply short.";
     }
     case "needs_answers":
+      if (answer.from_gbp && answer.bands) {
+        const top = answer.bands[answer.bands.length - 1]!;
+        return `${/^[aeiou]/i.test(answer.product.name) ? "An" : "A"} ${answer.product.name} with Homemove is from £${answer.from_gbp.toLocaleString("en-GB")}, depending on the home's value (£${top.price_gbp.toLocaleString("en-GB")} for ${top.label}). ` +
+          "Say that in a sentence. The card shows it and lets them pick their address, or a value range, for their exact price; do not ask for the postcode or price yourself. If they give the address or value in the chat, call homemove_quote again with it.";
+      }
       return `To price ${/^[aeiou]/i.test(answer.product.name) ? "an" : "a"} ${answer.product.name}, ask: ` + answer.questions.map((q) => q.options.length ? `${q.question} (${q.options.join(" / ")})` : q.question).join(" ") +
         (answer.questions.some((q) => q.name === "home_size" || q.name === "to_postcode")
           ? " Then call homemove_quote again with to_postcode and home_size for an indicative price, or items (each thing they named, with a quantity) for their own list. Never make up a list of their things; the card also lets them pick room by room."
@@ -210,7 +228,7 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
   });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [QUOTE_TOOL, ...(deps.homedata ? [PLAN_TOOL, STAMP_TOOL] : []), SERVICES_TOOL].map((tool) => ({ ...tool, outputSchema: { type: "object", additionalProperties: true }, ...NOAUTH, _meta: { ...NOAUTH, ...("_meta" in tool ? tool._meta : {}) } })),
+    tools: [QUOTE_TOOL, ...(deps.homedata ? [PLAN_TOOL, STAMP_TOOL] : []), SERVICES_TOOL, FIND_ADDRESS_TOOL].map((tool) => ({ ...tool, outputSchema: { type: "object", additionalProperties: true }, ...NOAUTH, _meta: { ...NOAUTH, ...("_meta" in tool ? tool._meta : {}) } })),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -219,13 +237,14 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
       if (request.params.name === "homemove_quote") {
         const postcode = typeof args["postcode"] === "string" ? args["postcode"].trim() : "";
         const service = args["service"];
-        if (!postcode || !/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(postcode)) return result({ error: "invalid_request", detail: "postcode must be a full UK postcode" }, "Ask the user for the full postcode of the property, then try again.", true);
+        if (postcode && !/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(postcode)) return result({ error: "invalid_request", detail: "postcode must be a full UK postcode" }, "Ask the user for the full postcode of the property, then try again.", true);
         if ((typeof service !== "string" || !service.trim()) && typeof service !== "number") return result({ error: "invalid_request", detail: "service is required" }, "Ask which service they want priced.", true);
         const answers = args["answers"] && typeof args["answers"] === "object" && !Array.isArray(args["answers"]) ? args["answers"] as Record<string, unknown> : undefined;
         const answer = await quote({
           service: service as string,
           postcode,
           address: typeof args["address"] === "string" ? args["address"] : undefined,
+          uprn: typeof args["uprn"] === "string" && /^\d{1,15}$/.test(args["uprn"]) ? args["uprn"] : undefined,
           property_price: typeof args["property_price"] === "number" && args["property_price"] > 0 ? args["property_price"] : undefined,
           bedrooms: typeof args["bedrooms"] === "number" && args["bedrooms"] > 0 ? Math.round(args["bedrooms"]) : undefined,
           answers,
@@ -264,6 +283,11 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
         if (sd.statusCode >= 400) throw new Error(`stamp duty answered ${sd.statusCode}`);
         const body = sd.body as { total_tax?: number; jurisdiction?: string };
         return result(sd.body as Record<string, unknown>, `Stamp duty on £${price.toLocaleString("en-GB")} is £${Number(body.total_tax ?? 0).toLocaleString("en-GB")} (${body.jurisdiction ?? "England and Northern Ireland"}). It is paid to HMRC. Scotland (LBTT) and Wales (LTT) have their own taxes.`);
+      }
+      if (request.params.name === "homemove_find_address") {
+        const query = typeof args["query"] === "string" ? args["query"].slice(0, 120) : "";
+        const addresses = await deps.property.search(query);
+        return result({ addresses }, `${addresses.length} addresses.`);
       }
       if (request.params.name === "homemove_services") {
         const type = typeof args["type"] === "string" ? args["type"] : undefined;

@@ -15,11 +15,13 @@ import { HOME_ROUTE_TOOLS, HOME_TOOLS } from "./server.js";
 import { ACCOUNT_TOOLS } from "./account.js";
 import { WISHES } from "./wishes.js";
 
-const KNOWN = new Set<string>([...HOME_TOOLS, ...HOME_ROUTE_TOOLS, ...ACCOUNT_TOOLS].map((tool) => tool.name));
+// Built on first use: server.ts imports this module, so its tool lists are not defined yet at load.
+let known: Set<string> | undefined;
 
 /** A tool name safe to show: one Home lists, never one the caller made up. */
 export function shownToolName(name: unknown): string {
-  return typeof name === "string" && KNOWN.has(name) ? name : "unknown tool";
+  known ??= new Set<string>([...HOME_TOOLS, ...HOME_ROUTE_TOOLS, ...ACCOUNT_TOOLS].map((tool) => tool.name));
+  return typeof name === "string" && known.has(name) ? name : "unknown tool";
 }
 
 const POSTCODE = /^([A-Z]{1,2}\d[A-Z\d]?)\s*\d[A-Z]{2}$/i;

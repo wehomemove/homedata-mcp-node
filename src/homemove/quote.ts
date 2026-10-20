@@ -117,8 +117,11 @@ const SAID: Array<[RegExp, RegExp]> = [
 
 export interface QuoteRequest {
   service: string | number;
+  /** Empty when not given: value-banded prices do not depend on it (motus records it only). */
   postcode: string;
   address?: string;
+  /** Set when the address was picked in the card: its UPRN, so no address match is spent. */
+  uprn?: string;
   property_price?: number;
   bedrooms?: number;
   answers?: Record<string, unknown>;
@@ -137,14 +140,16 @@ export interface MoveView {
 }
 
 export type QuoteAnswer =
-  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }>; move?: MoveView; unmatched?: string[]; indicative?: string; legal?: LegalView }
-  | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[]; picker?: PickerRoom[]; unmatched?: string[]; legal?: LegalView; to_postcode?: string }
+  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; bands?: BandView[]; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }>; move?: MoveView; unmatched?: string[]; indicative?: string; legal?: LegalView }
+  | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[]; bands?: BandView[]; from_gbp?: number; picker?: PickerRoom[]; unmatched?: string[]; legal?: LegalView; to_postcode?: string }
   | { status: "quoted_by_hand"; product: ProductView; postcode: string; property?: PropertyView; answers: AnswerView[]; legal?: LegalView }
   | { status: "choose_service"; options: ProductView[] }
   | { status: "unknown_service"; service: string }
   | { status: "address_not_found"; reason: string; postcode: string };
 
 export interface ProductView { id: number; name: string; type: string | null }
+/** A value band with its price, so the card can show "from £X" and let them pick. */
+export interface BandView { min: number; max: number; label: string; price_gbp: number }
 /** What a conveyancing quote was priced on. property_price only when the user stated it, never an estimate. */
 export interface LegalView { transaction?: "purchase" | "sale"; tenure?: "freehold" | "leasehold"; property_price?: number; funding_type?: "mortgage" | "cash" }
 
@@ -194,13 +199,23 @@ function pick(given: unknown, options: Record<string, RegExp>): string | undefin
   return Object.entries(options).find(([, re]) => re.test(text))?.[0];
 }
 
+/** Facts for the request's home: a picked UPRN, else an address match, else none. */
+async function factsFor(request: QuoteRequest, property: PropertyLookup): Promise<PropertyFacts | undefined> {
+  if (request.uprn && request.address?.trim()) return property.chosen(request.uprn, request.address.trim(), request.postcode);
+  if (request.address?.trim() && request.postcode) return property.find(request.address, request.postcode);
+  return undefined;
+}
+
+/** Where motus records a quote with no postcode: the price does not depend on it. */
+export const NO_POSTCODE = "NOT GIVEN";
+
 async function conveyancing(request: QuoteRequest, deps: { motus: MotusClient; property: PropertyLookup }): Promise<QuoteAnswer> {
   const given = Object.fromEntries(Object.entries(request.answers ?? {}).map(([k, v]) => [k.toLowerCase(), v]));
   const transaction = pick(given["transaction"] ?? (/\bsell/i.test(String(request.service)) ? "selling" : /\bbuy|purchas/i.test(String(request.service)) ? "buying" : undefined), { purchase: /buy|purchas/i, sale: /sell|sale/i }) as "purchase" | "sale" | undefined;
   const product: ProductView = transaction === "sale" ? { id: 1063, name: "Conveyancing (selling)", type: "legal" } : { id: 1062, name: transaction ? "Conveyancing (buying)" : "Conveyancing", type: "legal" };
   let facts: PropertyFacts | undefined;
-  if (request.address?.trim()) {
-    try { facts = await deps.property.find(request.address, request.postcode); } catch (error) {
+  {
+    try { facts = await factsFor(request, deps.property); } catch (error) {
       if (error instanceof AddressNotMatched) return { status: "address_not_found", reason: error.reason, postcode: request.postcode };
       throw error;
     }
@@ -262,10 +277,10 @@ export async function quote(request: QuoteRequest, deps: { motus: MotusClient; p
 
   let facts: PropertyFacts | undefined;
   let postcode = request.postcode;
-  if (request.address?.trim()) {
+  {
     try {
-      facts = await deps.property.find(request.address, request.postcode);
-      postcode = facts.postcode || postcode;
+      facts = await factsFor(request, deps.property);
+      postcode = facts?.postcode || postcode;
     } catch (error) {
       if (error instanceof AddressNotMatched) return { status: "address_not_found", reason: error.reason, postcode };
       throw error;
@@ -304,15 +319,18 @@ export async function quote(request: QuoteRequest, deps: { motus: MotusClient; p
   }
 
   try {
-    const result = await deps.motus.quote({ productId: product.id, postcode, propertyPrice, answers });
+    const result = await deps.motus.quote({ productId: product.id, postcode: postcode || NO_POSTCODE, propertyPrice, answers });
+    const shownPostcode = postcode ? result.postcode : "";
     const band = result.property_price_band ? { min: result.property_price_band.min, max: result.property_price_band.max } : undefined;
+    const bands = needsValue && result.bands.length ? result.bands.map((b) => ({ min: b.min, max: b.max, label: bandLabel(b), price_gbp: b.price_gbp })) : undefined;
     for (const a of assumed) if (a.name === "property_price" && band) a.value = bandLabel(band);
     if (result.price_gbp && !result.from && result.needs.length === 0) {
-      return { status: "priced", product: view(product), price_gbp: result.price_gbp, postcode: result.postcode, property, assumed, answers: shown, band, booking_url: bookingUrl(view(product), result.postcode) };
+      return { status: "priced", product: view(product), price_gbp: result.price_gbp, postcode: shownPostcode, property, assumed, answers: shown, band, ...(bands ? { bands } : {}), booking_url: bookingUrl(view(product), shownPostcode) };
     }
     const questions = (result.needs.length ? result.needs : product.inputs.filter((i) => i.key === PROPERTY_PRICE_KEY))
       .map((input) => ({ name: input.name, question: questionFor(input), options: input.key === PROPERTY_PRICE_KEY ? [] : input.options.map((o) => o.label) }));
-    return { status: "needs_answers", product: view(product), postcode: result.postcode, property, assumed: assumed.filter((a) => a.name !== "property_price"), answers: shown, questions };
+    const from = bands && questions.every((q) => q.name === "property_price") ? Math.min(...bands.map((b) => b.price_gbp)) : undefined;
+    return { status: "needs_answers", product: view(product), postcode: shownPostcode, property, assumed: assumed.filter((a) => a.name !== "property_price"), answers: shown, questions, ...(bands ? { bands } : {}), ...(from ? { from_gbp: from } : {}) };
   } catch (error) {
     if (error instanceof MotusRefusal && error.code === "quote_unavailable") return { status: "quoted_by_hand", product: view(product), postcode, property, answers: shown };
     throw error;

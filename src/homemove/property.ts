@@ -19,6 +19,12 @@ export interface PropertyFacts {
   estimated_value: number | null;
 }
 
+/** One address a person can pick in the card. */
+export interface AddressChoice { uprn: string; line: string; town: string; postcode: string }
+
+const POSTCODE = /^([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})$/i;
+const title = (s: string) => s.toLowerCase().replace(/(^|[\s\-'(/])([a-z])/g, (_, a, b) => a + b.toUpperCase());
+
 export class AddressNotMatched extends Error {
   constructor(readonly reason: string) { super(reason); }
 }
@@ -46,24 +52,69 @@ export class PropertyLookup {
     const uprn = String(record["uprn"] ?? "");
     if (!/^\d+$/.test(uprn)) throw new AddressNotMatched("no_match");
 
+    const facts = await this.factsFor(uprn, String(record["full_address"] ?? record["address"] ?? address), String(record["postcode"] ?? postcode));
+    if (this.cache.size > 5000) this.cache.clear();
+    this.cache.set(key, { at: this.now(), facts });
+    return facts;
+  }
+
+  /**
+   * Addresses for the card's picker. A full postcode lists that postcode's homes (2 tokens);
+   * anything else is an address search (2 tokens). Never more than 100.
+   */
+  async search(query: string): Promise<AddressChoice[]> {
+    const text = query.trim().replace(/\s+/g, " ");
+    if (text.length < 3) return [];
+    const pc = POSTCODE.exec(text);
+    if (pc) {
+      const answer = await this.homedata.send("GET", `/address/postcode/${pc[1]!.toUpperCase()}${pc[2]!.toUpperCase()}/`);
+      if (answer.statusCode === 404 || answer.statusCode === 422) return [];
+      if (answer.statusCode >= 400) throw new Error(`Homedata postcode lookup answered ${answer.statusCode}`);
+      const body = answer.body as { postcode?: string; addresses?: Array<Record<string, unknown>> };
+      return (body.addresses ?? []).slice(0, 100).flatMap((a) => {
+        const uprn = String(a["uprn"] ?? "");
+        if (!/^\d+$/.test(uprn)) return [];
+        const street = [a["building_number"], a["street"]].filter((v) => typeof v === "string" && v).join(" ");
+        const line = [a["sub_building"], a["building_name"], street].filter((v) => typeof v === "string" && v).map((v) => title(String(v))).join(", ")
+          || title(String(a["address"] ?? "").split(",")[0] ?? "");
+        return [{ uprn, line, town: title(String(a["town"] ?? "")), postcode: String(body.postcode ?? `${pc[1]} ${pc[2]}`).toUpperCase() }];
+      });
+    }
+    const answer = await this.homedata.send("GET", "/address/find/", { q: text, limit: "8" });
+    if (answer.statusCode >= 400) throw new Error(`Homedata address find answered ${answer.statusCode}`);
+    const body = answer.body as { suggestions?: Array<Record<string, unknown>> };
+    return (body.suggestions ?? []).flatMap((a) => {
+      const uprn = String(a["uprn"] ?? "");
+      return /^\d+$/.test(uprn) ? [{ uprn, line: String(a["address"] ?? ""), town: String(a["town"] ?? ""), postcode: String(a["postcode"] ?? "").toUpperCase() }] : [];
+    });
+  }
+
+  /** Facts for an address picked in the card: its UPRN is known, so no match is spent. */
+  async chosen(uprn: string, line: string, postcode: string): Promise<PropertyFacts> {
+    if (!/^\d{1,15}$/.test(uprn)) throw new AddressNotMatched("no_match");
+    const key = `uprn:${uprn}`;
+    const hit = this.cache.get(key);
+    if (hit && this.now() - hit.at < 24 * 3600_000) return hit.facts;
+    const facts = await this.factsFor(uprn, line, postcode);
+    if (this.cache.size > 5000) this.cache.clear();
+    this.cache.set(key, { at: this.now(), facts });
+    return facts;
+  }
+
+  private async factsFor(uprn: string, address: string, postcode: string): Promise<PropertyFacts> {
     const extra = await this.homedata.send("GET", `/property/${uprn}/`, { with: "rooms,lr_title" });
+    if (extra.statusCode === 404) throw new AddressNotMatched("no_match");
     const extraBody = (extra.statusCode < 400 ? extra.body : undefined) as { rooms?: Record<string, unknown>; lr_title?: { title_class?: unknown } } | undefined;
     const rooms = extraBody?.rooms ?? {};
     const titleClass = String(extraBody?.lr_title?.title_class ?? "").toLowerCase();
     const recorded = num(rooms["bedrooms"]), predicted = num(rooms["predicted_bedrooms"]);
-
-    const facts: PropertyFacts = {
-      uprn,
-      address: String(record["full_address"] ?? record["address"] ?? address),
-      postcode: String(record["postcode"] ?? postcode).toUpperCase(),
+    return {
+      uprn, address, postcode: postcode.toUpperCase(),
       bedrooms: recorded ?? predicted,
       bedrooms_source: recorded ? "recorded" : predicted ? "predicted" : null,
       tenure: titleClass.includes("leasehold") ? "leasehold" : titleClass.includes("freehold") ? "freehold" : null,
       estimated_value: null,
     };
-    if (this.cache.size > 5000) this.cache.clear();
-    this.cache.set(key, { at: this.now(), facts });
-    return facts;
   }
 
   /** The core record's value estimate (25 tokens), cached on the facts once fetched. */

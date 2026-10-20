@@ -201,3 +201,24 @@ input[type=range]::-moz-range-thumb { width: 26px; height: 26px; border-radius: 
 @media (max-width: 420px) { .tiles.sizes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .card.plan { padding-bottom: 0; }
 .card.plan .cta.wide { position: sticky; bottom: 16px; margin: 12px 0 16px; z-index: 2; }
+
+/* ---------- from price and the address picker ---------- */
+.from-row { display: flex; align-items: baseline; gap: 8px; }
+.from-row .from { font-weight: 800; font-size: 18px; color: #5a6573; }
+.field.addr input { font-size: 20px; letter-spacing: 0; text-transform: none; font-weight: 700; }
+.addr-status { margin: 10px 2px 0; min-height: 18px; font-size: 13px; color: #5a6573; }
+.addr-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; max-height: min(42vh, 340px); overflow-y: auto; }
+.addr-row, .addr-picked { width: 100%; display: grid; grid-template-columns: 40px 1fr; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; background: #fff; border: 1.5px solid #d9d2c6; border-radius: 14px; font: inherit; color: var(--ink); }
+.addr-row { cursor: pointer; transition: border-color .18s var(--ui), box-shadow .18s var(--ui), transform .18s var(--ui); }
+.addr-row:hover, .addr-row:focus-visible { border-color: var(--ink); box-shadow: 3px 3px 0 var(--ink); transform: translate(-2px, -2px); outline: 0; }
+.addr-row img, .addr-picked img { width: 40px; height: 40px; object-fit: contain; }
+.addr-row b, .addr-picked b { display: block; font-size: 15px; font-weight: 800; }
+.addr-row small, .addr-picked small { display: block; font-size: 13px; color: #5a6573; margin-top: 2px; }
+.addr-picked { border-color: var(--ink); box-shadow: 4px 4px 0 var(--ink); }
+.or { display: flex; align-items: center; gap: 12px; margin: 18px 0 10px; color: #5a6573; font-size: 13px; font-weight: 700; }
+.or::before, .or::after { content: ""; flex: 1; height: 1.5px; background: #e3ddd2; }
+.bands { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+.band { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px; border: 1.5px solid #d9d2c6; border-radius: 12px; background: #fff; font: inherit; color: var(--ink); cursor: pointer; transition: all .18s var(--ui); }
+.band span { font-size: 13px; font-weight: 700; white-space: nowrap; }
+.band b { font-size: 17px; font-weight: 800; }
+.band:hover, .band.sel { border-color: var(--ink); background: var(--ink); color: var(--paper); }

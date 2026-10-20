@@ -69,7 +69,7 @@ function fakeMotus(sent: Sent[] = []) {
     const grid: Record<number, number> = { 2: band?.id === 6 ? 599 : 499, 1097: [0, 209, 267, 376, 484][Number(answers["1"])] ?? 0, 1054: 999, 1039: 449, 1081: 99, 1085: 119 };
     const priced = missing.length === 0;
     return json({ product: { id: product.id, name: product.name, type: product.type }, postcode: "SW1A 2AA", price_gbp: priced ? grid[product.id] : 445,
-      pricing_basis: priced ? "answers" : "product_base_price", from: !priced, property_price_band: band, bands: [], needs: priced ? [] : missing, price_is_final: false, coverage_checked: false });
+      pricing_basis: priced ? "answers" : "product_base_price", from: !priced, property_price_band: band, bands: product.inputs.some((i) => i.key === 13) ? [{ band_id: 4, min: 1, max: 300000, price_gbp: 449 }, { band_id: 5, min: 300001, max: 400000, price_gbp: 499 }, { band_id: 6, min: 400001, max: 100000000, price_gbp: 599 }] : [], needs: priced ? [] : missing, price_is_final: false, coverage_checked: false });
   }) as typeof fetch;
   return new MotusClient({ bearer: "test", baseUrl: "https://motus.test", fetchImpl });
 }
@@ -85,6 +85,10 @@ function fakeHomedata(charged: string[] = []) {
       if (/nowhere/i.test(url.searchParams.get("address") ?? "")) return json({ reason: "no_match" }, 422);
       return json({ uprn: 100023336956, full_address: "10 DOWNING STREET, LONDON, SW1A 2AA", postcode: "SW1A 2AA" });
     }
+    if (url.pathname === "/address/postcode/NR46LL/") return json({ postcode: "NR4 6LL", count: 2, addresses: [
+      { uprn: 100090887383, address: "75 BARNESDALE ROAD, NORWICH, NR4 6LL", building_name: "", building_number: "75", sub_building: "", street: "Barnesdale Road", town: "Norwich" },
+      { uprn: 100090887399, address: "FLAT 2, THE MALTINGS, NORWICH, NR4 6LL", building_name: "THE MALTINGS", building_number: "", sub_building: "FLAT 2", street: "", town: "Norwich" }] });
+    if (url.pathname === "/address/find/") return json({ suggestions: [{ uprn: 2630185115, address: "75 Colney Lane", postcode: "NR4 7RQ", town: "Cringleford" }], count: 1 });
     if (url.pathname.endsWith("/core/")) return json({ valuation_estimate: { estimate_gbp: 350000 } });
     if (url.pathname === "/calculators/stamp-duty/") return json({ price: 350000, buyer_type: url.searchParams.get("buyer_type"), total_tax: 2500, note: "First-time buyer relief applied.", jurisdiction: "England and Northern Ireland", thresholds_from: "1 April 2025" });
     return json({ uprn: 100023336956, rooms: { bedrooms: null, predicted_bedrooms: 3 }, lr_title: { title_class: "Absolute freehold title" } });
@@ -187,7 +191,8 @@ test("ChatGPT sees two no-sign-in tools, the quote card template, and a widget t
   const client = new Client({ name: "t", version: "1" });
   await Promise.all([server.connect(b), client.connect(a)]);
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name), ["homemove_quote", "homemove_services"]);
+  assert.deepEqual(tools.map((t) => t.name), ["homemove_quote", "homemove_services", "homemove_find_address"]);
+  assert.deepEqual(tools[2]!._meta?.["ui"], { visibility: ["app"] }, "the address finder is the card's, not the model's");
   for (const tool of tools) {
     assert.deepEqual(tool._meta?.["securitySchemes"], [{ type: "noauth" }]);
     assert.equal(tool.annotations?.readOnlyHint, true);
@@ -379,4 +384,54 @@ test("the bare origin sends people to homemove.com, not a JSON 404 (seen in Chat
   await handler(req, res);
   assert.equal(status, 302);
   assert.equal(headers["Location"], "https://homemove.com/");
+});
+
+async function homemoveClient(charged: string[] = [], sent: Sent[] = []) {
+  const server = buildHomemoveServer({ motus: fakeMotus(sent), property: fakeHomedata(charged), assetOrigin: "https://mcp.homemove.com", handoffBase: "https://homemove.com/continue/" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "t", version: "1" });
+  await Promise.all([server.connect(b), client.connect(a)]);
+  return client;
+}
+
+test("asked with no postcode, a value-priced survey answers with its price from and every band, and tells ChatGPT not to quiz them", async () => {
+  const sent: Sent[] = [];
+  const client = await homemoveClient([], sent);
+  const res = await client.callTool({ name: "homemove_quote", arguments: { service: "Level 2 survey" } });
+  const out = res.structuredContent as Record<string, any>;
+  assert.equal(res.isError, undefined);
+  assert.equal(out["status"], "needs_answers");
+  assert.equal(out["from_gbp"], 449);
+  assert.deepEqual(out["bands"].map((b: any) => [b.label, b.price_gbp]), [["up to £300k", 449], ["£300k–£400k", 499], ["over £400k", 599]]);
+  assert.equal(out["postcode"], "");
+  assert.equal(sent.find((x) => x.url.endsWith("/quote"))!.body["postcode"], "NOT GIVEN", "motus records that none was given");
+  const text = (res.content as Array<{ text: string }>)[0]!.text;
+  assert.match(text, /from £449/);
+  assert.match(text, /do not ask for the postcode or price/);
+});
+
+test("an address picked in the card is priced on its own value band without spending an address match", async () => {
+  const charged: string[] = [];
+  const client = await homemoveClient(charged);
+  const res = await client.callTool({ name: "homemove_quote", arguments: { service: "2", postcode: "NR4 6LL", address: "75 Barnesdale Road", uprn: "100090887383" } });
+  const out = res.structuredContent as Record<string, any>;
+  assert.equal(out["status"], "priced");
+  assert.equal(out["price_gbp"], 499, "Homedata's estimate (£350k) picks the £300k–£400k band");
+  assert.deepEqual(out["property"], { address: "75 Barnesdale Road", postcode: "NR4 6LL", uprn: "100090887383" });
+  assert.ok(!charged.some((c) => c.startsWith("/address/match/")), charged.join(" "));
+  const handoff = JSON.parse(Buffer.from(new URL(out["continue_url"]).searchParams.get("d")!, "base64url").toString("utf8"));
+  assert.equal(handoff.property.uprn, "100090887383", "homemove.com gets the exact home");
+  assert.equal(handoff.property.address, "75 Barnesdale Road");
+});
+
+test("the card's address finder lists a postcode's homes, or searches an address", async () => {
+  const client = await homemoveClient();
+  const byPostcode = (await client.callTool({ name: "homemove_find_address", arguments: { query: "nr4 6ll" } })).structuredContent as { addresses: unknown[] };
+  assert.deepEqual(byPostcode.addresses, [
+    { uprn: "100090887383", line: "75 Barnesdale Road", town: "Norwich", postcode: "NR4 6LL" },
+    { uprn: "100090887399", line: "Flat 2, The Maltings", town: "Norwich", postcode: "NR4 6LL" }]);
+  const bySearch = (await client.callTool({ name: "homemove_find_address", arguments: { query: "75 colney" } })).structuredContent as { addresses: unknown[] };
+  assert.deepEqual(bySearch.addresses, [{ uprn: "2630185115", line: "75 Colney Lane", town: "Cringleford", postcode: "NR4 7RQ" }]);
+  const tooShort = (await client.callTool({ name: "homemove_find_address", arguments: { query: "nr" } })).structuredContent as { addresses: unknown[] };
+  assert.deepEqual(tooShort.addresses, []);
 });
