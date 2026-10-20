@@ -69,7 +69,7 @@ function fakeMotus(sent: Sent[] = []) {
     const grid: Record<number, number> = { 2: band?.id === 6 ? 599 : 499, 1097: [0, 209, 267, 376, 484][Number(answers["1"])] ?? 0, 1054: 999, 1039: 449, 1081: 99, 1085: 119 };
     const priced = missing.length === 0;
     return json({ product: { id: product.id, name: product.name, type: product.type }, postcode: "SW1A 2AA", price_gbp: priced ? grid[product.id] : 445,
-      pricing_basis: priced ? "answers" : "product_base_price", from: !priced, property_price_band: band, bands: product.inputs.some((i) => i.key === 13) ? [{ band_id: 4, min: 1, max: 300000, price_gbp: 449 }, { band_id: 5, min: 300001, max: 400000, price_gbp: 499 }, { band_id: 6, min: 400001, max: 100000000, price_gbp: 599 }] : [], needs: priced ? [] : missing, price_is_final: false, coverage_checked: false });
+      pricing_basis: priced ? "answers" : "product_base_price", from: !priced, property_price_band: band, bands: product.inputs.some((i) => i.key === 13) ? [{ band_id: 3, min: 1, max: 200000, price_gbp: 449 }, { band_id: 4, min: 200001, max: 300000, price_gbp: 449 }, { band_id: 5, min: 300001, max: 400000, price_gbp: 499 }, { band_id: 6, min: 400001, max: 100000000, price_gbp: 599 }] : [], needs: priced ? [] : missing, price_is_final: false, coverage_checked: false });
   }) as typeof fetch;
   return new MotusClient({ bearer: "test", baseUrl: "https://motus.test", fetchImpl });
 }

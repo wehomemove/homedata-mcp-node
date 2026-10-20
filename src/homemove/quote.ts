@@ -322,7 +322,13 @@ export async function quote(request: QuoteRequest, deps: { motus: MotusClient; p
     const result = await deps.motus.quote({ productId: product.id, postcode: postcode || NO_POSTCODE, propertyPrice, answers });
     const shownPostcode = postcode ? result.postcode : "";
     const band = result.property_price_band ? { min: result.property_price_band.min, max: result.property_price_band.max } : undefined;
-    const bands = needsValue && result.bands.length ? result.bands.map((b) => ({ min: b.min, max: b.max, label: bandLabel(b), price_gbp: b.price_gbp })) : undefined;
+    // Neighbouring bands at the same price read as one range ("up to £200k", not three of them).
+    const merged = result.bands.reduce<Array<{ min: number; max: number; price_gbp: number }>>((out, b) => {
+      const last = out[out.length - 1];
+      if (last && last.price_gbp === b.price_gbp && last.max + 1 >= b.min) last.max = b.max; else out.push({ min: b.min, max: b.max, price_gbp: b.price_gbp });
+      return out;
+    }, []);
+    const bands = needsValue && merged.length ? merged.map((b) => ({ ...b, label: bandLabel(b) })) : undefined;
     for (const a of assumed) if (a.name === "property_price" && band) a.value = bandLabel(band);
     if (result.price_gbp && !result.from && result.needs.length === 0) {
       return { status: "priced", product: view(product), price_gbp: result.price_gbp, postcode: shownPostcode, property, assumed, answers: shown, band, ...(bands ? { bands } : {}), booking_url: bookingUrl(view(product), shownPostcode) };
