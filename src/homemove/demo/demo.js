@@ -2,6 +2,8 @@
 // this endpoint's /mcp, then shows the real Homemove card with the result. Prices are live.
 (() => {
   const SCENARIOS = [
+    { id: "level2", label: "Level 2 survey", prompt: "How much is a Level 2 survey?",
+      tool: "homemove_quote", args: { service: "Level 2 survey" } },
     { id: "survey", label: "Survey", prompt: "How much is a Level 3 building survey for a £450,000 house in Bath, BA1 1LN?",
       tool: "homemove_quote", args: { service: "Level 3 survey", postcode: "BA1 1LN", property_price: 450000 } },
     { id: "move", label: "My whole move", prompt: "I'm selling my 2-bed in Manchester (M1 1AE) and buying in London (SW1A 2AA) for £350,000 with a mortgage. What will my move cost?",
@@ -19,7 +21,7 @@
   ];
   const REPLY = {
     priced: (d) => `Homemove's price is £${Number(d.price_gbp).toLocaleString("en-GB")}${d.indicative ? `, indicative for ${d.indicative}` : ""}. It's confirmed when you book, and the card can take you straight to homemove.com.`,
-    needs_answers: () => "I can price that. I just need a couple of details: answer here, or tap Get my price on the card.",
+    needs_answers: (d) => d.from_gbp ? `A ${d.product.name} with Homemove is from £${Number(d.from_gbp).toLocaleString("en-GB")}, depending on the home's value. Pick your address on the card for your exact price.` : "I can price that. I just need a couple of details: answer here, or tap Get my price on the card.",
     quoted_by_hand: () => "That one is priced by the Homemove team rather than instantly. The card links you to them.",
     plan: (d) => `Here's your move, step by step: £${Number(d.total_gbp).toLocaleString("en-GB")} for the ${d.priced} steps priced so far${d.stamp_duty ? `, with stamp duty of £${Number(d.stamp_duty.total_tax).toLocaleString("en-GB")} to HMRC shown separately` : ""}. Tap Price it on anything still to price.`,
   };

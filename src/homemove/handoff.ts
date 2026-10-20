@@ -84,6 +84,7 @@ function serviceOf(answer: QuoteAnswer): HandoffService | undefined {
 function propertyOf(answer: QuoteAnswer): HandoffProperty | undefined {
   if (!("postcode" in answer)) return undefined;
   const prop = "property" in answer ? answer.property : undefined;
+  if (!prop && !answer.postcode) return undefined;
   return { postcode: prop?.postcode ?? answer.postcode, ...(prop?.address ? { address: prop.address } : {}), ...(prop?.uprn ? { uprn: prop.uprn } : {}) };
 }
 

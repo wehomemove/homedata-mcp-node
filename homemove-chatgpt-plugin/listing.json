@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "homemove",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Get Homemove quotes for moving home in ChatGPT: surveys, valuations, EPCs and safety certificates, conveyancing, removals and moving cleans, worked out from the address, plus a whole move set out step by step with stamp duty.",
   "author": {
     "name": "Homemove",

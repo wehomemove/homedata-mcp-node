@@ -195,8 +195,9 @@
       { name: "snagging_type", question: "Is the snagging inspection before completion or after you've moved in?", options: ["Pre-inspection", "Post-Completion"] }], sample: true },
     clean: { status: "needs_answers", product: { id: 1097, name: "End of Tenancy Clean", type: "cleaning" }, postcode: "LS1 4AP", assumed: [], answers: [], questions: [
       { name: "beds", question: "How many bedrooms does the home have?", options: ["1 Bedroom", "2 Bedrooms", "3 Bedrooms", "4 Bedrooms", "5+ Bedrooms"] }], sample: true },
-    value: { status: "needs_answers", product: { id: 2, name: "Level 2 Survey", type: "surveys" }, postcode: "SW1A 2AA", assumed: [], answers: [], questions: [
-      { name: "property_price", question: "Roughly what is the home worth, or what are you paying for it?", options: [] }], sample: true },
+    value: { status: "needs_answers", product: { id: 2, name: "Level 2 Survey", type: "surveys" }, postcode: "", assumed: [], answers: [], from_gbp: 449, sample: true, questions: [
+      { name: "property_price", question: "Roughly what is the home worth, or what are you paying for it?", options: [] }],
+      bands: [{ min: 1, max: 200000, label: "up to £200k", price_gbp: 449 }, { min: 200001, max: 300000, label: "£200k–£300k", price_gbp: 499 }, { min: 300001, max: 500000, label: "£300k–£500k", price_gbp: 549 }, { min: 500001, max: 750000, label: "£500k–£750k", price_gbp: 649 }, { min: 750001, max: 1000000, label: "£750k–£1m", price_gbp: 749 }, { min: 1000001, max: 100000000, label: "over £1m", price_gbp: 899 }] },
   };
   DEMO.removals = { status: "needs_answers", product: { id: 1054, name: "Removals", type: "removals" }, postcode: "SW1A 2AA", assumed: [], answers: [], sample: true,
     questions: [{ name: "to_postcode", question: "What's the postcode you're moving to?", options: [] }, { name: "home_size", question: "How big is the home you're moving out of?", options: ["Studio", "1 bedroom", "2 bedrooms", "3 bedrooms", "4 bedrooms", "5+ bedrooms"] }],
@@ -210,6 +211,7 @@
       { step: "Book removals", why: "Priced from what you're moving and how far.", answer: DEMO.removals },
       { step: "Moving-out clean", why: "Leaves the home ready for the buyers.", answer: { status: "priced", product: { id: 1097, name: "End of Tenancy Clean", type: "cleaning" }, price_gbp: 436, postcode: "M1 1AE", sample: true } },
     ] };
+  const DEMO_ADDRESSES = [{ uprn: "1", line: "75 Barnesdale Road", town: "Norwich", postcode: "NR4 6LL" }, { uprn: "2", line: "77 Barnesdale Road", town: "Norwich", postcode: "NR4 6LL" }, { uprn: "3", line: "Flat 2, 79 Barnesdale Road", town: "Norwich", postcode: "NR4 6LL" }];
   const DEMO_PRICES = { "1039": { "1 Bedroom|Pre-inspection": 499, "2 Bedrooms|Post-Completion": 449 }, "1097": { "1 Bedroom": 209, "2 Bedrooms": 267, "3 Bedrooms": 376, "4 Bedrooms": 484 } };
 
   const app = $("#app");
@@ -217,7 +219,7 @@
 
   async function callQuote(extra) {
     const d = state.data;
-    const args = { service: String(d.product.id), postcode: d.postcode, ...(d.to_postcode ? { to_postcode: d.to_postcode } : {}), ...(d.property?.address ? { address: state.args.address ?? d.property.address.split(",")[0] } : {}), ...state.args, ...extra };
+    const args = { service: String(d.product.id), ...(d.postcode ? { postcode: d.postcode } : {}), ...(d.to_postcode ? { to_postcode: d.to_postcode } : {}), ...(d.property?.address ? { address: state.args.address ?? d.property.address.split(",")[0] } : {}), ...state.args, ...extra };
     const oa = window.openai;
     if (oa && typeof oa.callTool === "function") {
       const res = await oa.callTool("homemove_quote", args);
@@ -226,7 +228,10 @@
     await wait(800); // preview only
     const a = args.answers ?? {};
     const key = Object.values(a).join("|");
-    const price = DEMO_PRICES[d.product.id]?.[key] ?? (args.property_price ? (args.property_price > 400000 ? 599 : 499) : 449);
+    const demoBand = d.bands?.find((b) => (args.property_price ?? 280000) >= b.min && (args.property_price ?? 280000) <= b.max);
+    const price = DEMO_PRICES[d.product.id]?.[key] ?? demoBand?.price_gbp ?? (args.property_price ? (args.property_price > 400000 ? 599 : 499) : 449);
+    if (d.bands) return { status: "priced", product: d.product, price_gbp: price, postcode: args.postcode ?? "", assumed: args.property_price ? [] : [{ name: "property_price", value: demoBand.label, source: "Homedata's estimate for this home" }], answers: [], sample: true, bands: d.bands,
+      band: demoBand && { min: demoBand.min, max: demoBand.max }, ...(args.uprn ? { property: { address: args.address, postcode: args.postcode, uprn: args.uprn } } : {}) };
     if (a.beds === "5+ Bedrooms") return { ...d, status: "quoted_by_hand" };
     if (a.home_size && !args.inventory) {
       const n = { Studio: 0, "1 bedroom": 1, "2 bedrooms": 2, "3 bedrooms": 3, "4 bedrooms": 4, "5+ bedrooms": 5 }[a.home_size] ?? 2;
@@ -240,6 +245,21 @@
     }
     return { status: "priced", product: d.product, price_gbp: price, postcode: d.postcode, assumed: [], answers: Object.entries(a).map(([name, label]) => ({ name, label })), sample: true, ...(args.property_price ? { band: { min: 0, max: args.property_price } } : {}) };
   }
+
+  /** Addresses for the picker, from homemove_find_address (Homedata), newest query wins. */
+  async function findAddresses(query) {
+    const oa = window.openai;
+    if (oa && typeof oa.callTool === "function") {
+      const res = await oa.callTool("homemove_find_address", { query });
+      return (res?.structuredContent ?? res)?.addresses ?? [];
+    }
+    await wait(350); // preview only
+    return DEMO_ADDRESSES.filter((a) => `${a.line} ${a.postcode}`.toLowerCase().includes(query.toLowerCase().replace(/\s+/g, " ").split(" ")[0]));
+  }
+  /** A price that sits inside a band, for property_price. */
+  const valueIn = (b) => (b.max >= 100000000 ? b.min + 1 : Math.round((b.min + b.max) / 2));
+  /** Priced on the home's value, so an address (or a value range) changes the price. */
+  const valueBanded = (d) => Array.isArray(d.bands) && d.bands.length > 1;
 
   function boot() {
     if (!RIG) return fetch(`${A}rig.json`).then((r) => r.json()).then((rig) => { RIG = rig; boot(); });
@@ -269,13 +289,28 @@
     const copy = h("div", { class: "copy" });
     if (d.status === "priced") {
       const price = h("div", { class: "price inline-price", "aria-label": gbp(d.price_gbp) });
+      // With the home known, the next step is homemove.com. Without it, the card's next step is the address.
+      const addressNext = !d.property && valueBanded(d);
       copy.append(
         h("div", { class: "eyebrow" }, d.sample ? "Sample price · preview" : "Your Homemove quote"),
         h("h1", {}, d.product.name),
         price,
         h("p", {}, [d.property?.address ?? d.postcode, d.band ? `value band ${bandText(d.band)}` : null].filter(Boolean).join(" · ")),
-        h("div", { class: "inline-actions" }, h("button", { class: "cta", onclick: () => openTakeover() }, "See your quote"), h("button", { class: "link", onclick: () => book(d) }, "homemove.com →")));
+        h("div", { class: "inline-actions" },
+          addressNext ? h("button", { class: "cta", onclick: () => openTakeover("address") }, "Add your address")
+            : h("button", { class: "cta", onclick: () => book(d) }, "Continue on homemove.com"),
+          addressNext ? h("button", { class: "link", onclick: () => book(d) }, "homemove.com →")
+            : h("button", { class: "link", onclick: () => openTakeover() }, "Details")));
       rollingPrice(price, d.price_gbp);
+    } else if (d.status === "needs_answers" && d.from_gbp) {
+      const price = h("div", { class: "price inline-price", "aria-label": `from ${gbp(d.from_gbp)}` });
+      copy.append(
+        h("div", { class: "eyebrow" }, d.sample ? "Sample price · preview" : "Your Homemove quote"),
+        h("h1", {}, d.product.name),
+        h("div", { class: "from-row" }, h("span", { class: "from" }, "from"), price),
+        h("p", {}, "Your exact price depends on the home's value. Pick the address and we'll work it out."),
+        h("div", { class: "inline-actions" }, h("button", { class: "cta", onclick: () => openTakeover() }, "Get my exact price"), h("button", { class: "link", onclick: () => book(d) }, "homemove.com →")));
+      rollingPrice(price, d.from_gbp);
     } else if (d.status === "needs_answers") {
       copy.append(
         h("div", { class: "eyebrow" }, d.sample ? "Preview" : "Homemove"),
@@ -292,7 +327,7 @@
   }
 
   // ---------------------------------------------------------------- takeover
-  async function openTakeover() {
+  async function openTakeover(mode) {
     try { await window.openai?.requestDisplayMode?.({ mode: "fullscreen" }); } catch { /* inline is fine */ }
     const d = state.data, look = lookFor(d.product?.type);
     app.replaceChildren();
@@ -310,7 +345,8 @@
     state.step = 0;
     state.answers = {};
 
-    if (d.status === "needs_answers") renderStep(); else card.append(h("div", { class: "step" }, h("div", { class: "eyebrow" }, d.product.name), h("h2", {}, "Here it comes…")));
+    const pickAddress = mode === "address" || (d.status === "needs_answers" && valueBanded(d) && d.questions.every((q) => q.name === "property_price"));
+    if (pickAddress) addressStep(); else if (d.status === "needs_answers") renderStep(); else card.append(h("div", { class: "step" }, h("div", { class: "eyebrow" }, d.product.name), h("h2", {}, "Here it comes…")));
 
     if (reduced) { slot.append(livingHomie(look.homie)); say(look.hello); }
     else {
@@ -324,9 +360,9 @@
       w.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 250, fill: "forwards" });
       await spring(living, "bouncy", { y: 16, s: 0.92, o: 0 }, { y: 0, s: 1, o: 1 }, (v) => ({ transform: `translateY(${v.y}px) scale(${v.s})`, opacity: String(Math.min(1, v.o)) }));
       w.remove();
-      say(d.status === "priced" ? "I've got your price!" : look.hello);
+      say(pickAddress ? "Which home is it?" : d.status === "priced" ? "I've got your price!" : look.hello);
     }
-    if (d.status === "priced") { await wait(300); reveal(d); }
+    if (d.status === "priced" && !pickAddress) { await wait(300); reveal(d); }
   }
 
   function closeTakeover() {
@@ -367,14 +403,14 @@
     const back = h("button", { class: "back", hidden: state.step === 0, onclick: () => go(state.step - 1) }, "← Back");
     const ready = (ok) => { next.disabled = !ok; };
 
-    if (q.name === "to_postcode") {
-      const input = h("input", { inputmode: "text", autocomplete: "postal-code", placeholder: "LS1 4AP", maxlength: 8, value: state.args.to_postcode ?? "", "aria-label": "Postcode you're moving to" });
+    if (q.name === "to_postcode" || q.name === "postcode") {
+      const input = h("input", { inputmode: "text", autocomplete: "postal-code", placeholder: q.name === "postcode" ? "NR4 6LL" : "LS1 4AP", maxlength: 8, value: state.args[q.name] ?? "", "aria-label": q.name === "postcode" ? "Postcode you're moving from" : "Postcode you're moving to" });
       const field = h("label", { class: "field" }, h("span", { class: "pin" }, h("img", { src: `${A}icons/location.webp`, alt: "" })), input);
       const valid = (v) => /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(v.trim());
       input.addEventListener("input", () => {
         const ok = valid(input.value);
         field.classList.toggle("live", ok);
-        if (ok) state.args.to_postcode = input.value.trim().toUpperCase().replace(/\s*(\d[A-Z]{2})$/, " $1");
+        if (ok) state.args[q.name] = input.value.trim().toUpperCase().replace(/\s*(\d[A-Z]{2})$/, " $1");
         ready(ok);
       });
       input.addEventListener("keydown", (e) => { if (e.key === "Enter" && valid(input.value)) advance(); });
@@ -447,6 +483,99 @@
     body.append(h("div", { class: "actions" }, back, next));
     card.replaceChildren(progress, body);
     requestAnimationFrame(() => setTimeout(() => progress.children[state.step]?.classList.add("done"), 60));
+  }
+
+  // ---------------------------------------------------------------- the address picker
+  // Type a postcode to list its homes, or part of an address to search; pick one and the price is
+  // worked out from that home. Or skip the address and pick a value range: each shows its price.
+  function addressStep() {
+    const d = state.data, { card } = state.ui;
+    const body = h("div", { class: "step" });
+    const from = d.from_gbp ?? (d.bands ? Math.min(...d.bands.map((b) => b.price_gbp)) : null);
+    const input = h("input", { class: "addr-input", inputmode: "search", autocomplete: "off", spellcheck: "false", placeholder: "Postcode or address", "aria-label": "Postcode or address", value: state.addrQuery ?? "" });
+    const field = h("label", { class: "field addr" }, h("span", { class: "pin" }, h("img", { src: `${A}icons/location.webp`, alt: "" })), input);
+    const list = h("ul", { class: "addr-list", role: "listbox", "aria-label": "Addresses" });
+    const status = h("p", { class: "addr-status", "aria-live": "polite" }, "");
+    let seq = 0, timer, cached = { pc: null, rows: [] };
+    const PC = /([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})/i;
+    const show = (rows, filter) => {
+      const words = (filter ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+      const shown = rows.filter((a) => words.every((w) => `${a.line} ${a.town}`.toLowerCase().includes(w))).slice(0, 40);
+      status.textContent = rows.length && !shown.length ? "No address there matches. Check the number?" : rows.length > shown.length ? `${shown.length} of ${rows.length}: add the house number to narrow it down.` : "";
+      list.replaceChildren(...shown.map((a, i) => {
+        const li = h("li", {}, h("button", { class: "addr-row", role: "option", onclick: () => pick(a) },
+          h("img", { src: `${A}icons/home.webp`, alt: "" }), h("span", {}, h("b", {}, a.line), h("small", {}, [a.town, a.postcode].filter(Boolean).join(" · ")))));
+        if (!reduced) li.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 300, delay: Math.min(i, 8) * 30, easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" });
+        return li;
+      }));
+    };
+    const search = async () => {
+      const q = input.value.trim();
+      state.addrQuery = q;
+      const pc = PC.exec(q);
+      if (q.length < 3) { list.replaceChildren(); status.textContent = ""; return; }
+      // A postcode is looked up once; anything typed beside it filters that list here.
+      const key = pc ? (pc[1] + pc[2]).toUpperCase() : null;
+      const rest = pc ? q.replace(pc[0], "").trim() : "";
+      if (key && cached.pc === key) return show(cached.rows, rest);
+      const mine = ++seq;
+      field.classList.add("live");
+      try {
+        const rows = await findAddresses(key ? `${pc[1]} ${pc[2]}` : q);
+        if (mine !== seq) return;
+        if (key) cached = { pc: key, rows };
+        show(rows, rest);
+        if (!rows.length) status.textContent = key ? "No homes found at that postcode." : "Nothing found yet. Try the postcode.";
+      } catch { if (mine === seq) status.textContent = "Couldn't search just now. Pick a value range instead."; }
+      finally { if (mine === seq) field.classList.remove("live"); }
+    };
+    input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(search, 300); });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { clearTimeout(timer); search(); } });
+
+    const pick = async (a) => {
+      say("Let me look that up…");
+      hop(state.ui.slot.firstElementChild, 12);
+      list.replaceChildren(h("li", { class: "addr-picked" }, h("img", { src: `${A}icons/home.webp`, alt: "" }), h("span", {}, h("b", {}, a.line), h("small", {}, "Finding its value band…"))));
+      status.textContent = "";
+      state.args = { ...state.args, address: a.line, uprn: a.uprn, postcode: a.postcode };
+      await priceWith({});
+    };
+    const priceWith = async (extra) => {
+      try {
+        const next = await callQuote({ answers: Object.fromEntries((d.answers ?? []).map((x) => [x.name, x.label])), ...extra });
+        if (next?.status === "priced") { state.data = next; if (state.planLine != null && state.plan) { state.plan.lines[state.planLine].answer = next; recountPlan(); } return reveal(next); }
+        if (next?.status === "needs_answers" && next.questions.every((q) => q.name === "property_price")) {
+          // No value on record for this home: the range is theirs to pick.
+          state.data = { ...next, bands: next.bands ?? d.bands };
+          say("I couldn't find its value. Roughly what's it worth?");
+          bandsEl.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
+          return;
+        }
+        if (next?.status === "needs_answers") { state.data = next; state.step = 0; return renderStep(); }
+        if (next?.status === "quoted_by_hand") { state.data = next; say("That one needs a specialist."); return; }
+        throw new Error("no price");
+      } catch { say("Hmm, I couldn't price that just now. Try again in a moment?"); }
+    };
+
+    const bandsEl = h("div", { class: "bands", role: "list" }, (d.bands ?? []).map((b, i) => {
+      const chip = h("button", { class: "band", role: "listitem", onclick: async () => {
+        bandsEl.querySelectorAll(".band").forEach((c) => c.classList.toggle("sel", c === chip));
+        say(SAYS[i % SAYS.length]);
+        await priceWith({ property_price: valueIn(b) });
+      } }, h("span", {}, b.label), h("b", {}, gbp(b.price_gbp)));
+      if (!reduced) chip.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 380, delay: 200 + i * 40, easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" });
+      return chip;
+    }));
+    body.append(
+      h("div", { class: "eyebrow" }, from ? `${d.product.name} · from ${gbp(from)}` : d.product.name),
+      h("h2", {}, "Which home is it?"),
+      h("p", { class: "sub" }, "Pick the address for your exact price. We'll look up its value band, and homemove.com will have it ready."),
+      field, status, list,
+      d.bands?.length ? h("div", { class: "or" }, h("span", {}, "or pick what it's worth")) : null,
+      bandsEl);
+    card.replaceChildren(body);
+    if (state.addrQuery) search();
+    setTimeout(() => input.focus({ preventScroll: true }), 300);
   }
 
   function svgTick() {
@@ -543,23 +672,25 @@
     ] : [
       ["Service", q.product.name],
       ...(q.breakdown ?? []).map((r) => [r.label, gbp(r.amount_gbp)]),
-      q.property?.address ? ["Property", q.property.address] : ["Postcode", q.postcode],
+      q.property?.address ? ["Property", q.property.address] : q.postcode ? ["Postcode", q.postcode] : null,
       ...(q.band ? [["Value band", bandText(q.band)]] : []),
       ...(q.answers ?? []).filter((a) => !["property_price", "to_postcode"].includes(a.name)).map((a) => [a.name === "beds" ? "Bedrooms" : a.name.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()), a.label]),
-    ];
+    ].filter(Boolean);
     const assumed = (q.assumed ?? []).map((a) => `${({ beds: "Bedrooms", tenure: "Tenure", property_price: "Value" })[a.name] ?? a.name} from ${a.source}`).join(" · ");
     const sheet = h("div", { class: "sheet", role: "dialog", "aria-label": "Your quote" },
       h("div", { class: "quote" },
         h("div", { class: "lander" }, lander),
         q.unmatched?.length ? h("p", { class: "note" }, `Not in this price: ${q.unmatched.join(", ")}. Tell us what's closest.`) : null,
         q.sample ? h("span", { class: "sample", title: "Preview only: a sample figure. In ChatGPT this is your real Homemove price." }, "Sample price") : null,
-        h("div", { class: "for" }, `Your ${q.product.name}`),
+        h("div", { class: "for" }, q.property?.address ? `Your ${q.product.name} for ${q.property.address.split(",")[0]}` : `Your ${q.product.name}`),
         price,
         h("p", { class: "note" }, [q.indicative ? `Indicative, based on ${q.indicative}. List your own things for an exact guide price.` : null, assumed ? `${assumed}. Tell us if that's not right.` : null, ...(q.extras ?? []).map((x) => `${x.label}: ${gbp(x.amount_gbp)}, shown separately.`), "Confirmed when you book."].filter(Boolean).join(" ")),
         h("dl", {}, rows.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])),
         h("div", { class: "bar" },
           h("button", { class: "ghost", onclick: () => { dismiss(); if (state.plan && state.planLine != null) { state.planLine = null; openPlan(); } else closeTakeover(); } }, state.plan && state.planLine != null ? "Back to my move" : "Close"),
-          h("button", { class: "cta", onclick: () => book(q) }, "Continue on homemove.com"))));
+          !q.property && valueBanded(q) && state.ui?.card
+            ? h("button", { class: "cta", onclick: () => { dismiss(); addressStep(); say("Which home is it?"); } }, "Add your address")
+            : h("button", { class: "cta", onclick: () => book(q) }, "Continue on homemove.com"))));
     document.body.append(dim, sheet, conf);
     const dismiss = () => { dim.remove(); sheet.remove(); conf.remove(); };
     dim.addEventListener("click", dismiss);
