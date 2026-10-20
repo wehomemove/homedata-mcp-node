@@ -370,3 +370,13 @@ test("removals questions carry the destination already given, so the card does n
   assert.equal(ask.status === "needs_answers" && ask.to_postcode, "LS1 4AP");
   assert.deepEqual(ask.status === "needs_answers" && ask.questions.map((q) => q.name), ["home_size"]);
 });
+
+test("the bare origin sends people to homemove.com, not a JSON 404 (seen in ChatGPT on iPhone)", async () => {
+  const handler = createHomemoveHttpHandler({ motus: fakeMotus(), property: fakeHomedata() });
+  const req = Object.assign(Readable.from([]), { url: "/", method: "GET", headers: {}, socket: { remoteAddress: "127.0.0.1" } }) as unknown as IncomingMessage;
+  let status = 0; const headers: Record<string, string> = {};
+  const res = { headersSent: false, setHeader() {}, on() {}, writeHead(s: number, h?: Record<string, string>) { status = s; Object.assign(headers, h); return this; }, end() { return this; } } as unknown as ServerResponse;
+  await handler(req, res);
+  assert.equal(status, 302);
+  assert.equal(headers["Location"], "https://homemove.com/");
+});
