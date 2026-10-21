@@ -57,9 +57,9 @@ export function handoffUrl(base: string | undefined, payload: Omit<HandoffV1, "r
 }
 
 function serviceOf(answer: QuoteAnswer): HandoffService | undefined {
-  if (!("product" in answer)) return undefined;
+  if (!("product" in answer) || !answer.product) return undefined;
   const p = answer.product;
-  const given = Object.fromEntries((answer.answers ?? []).map((a) => [a.name, a.label]));
+  const given = Object.fromEntries(("answers" in answer ? answer.answers : []).map((a) => [a.name, a.label]));
   const priced = answer.status === "priced" ? answer.price_gbp : undefined;
   if (p.type === "legal") {
     const legal = "legal" in answer ? answer.legal : undefined;
@@ -95,7 +95,7 @@ export function continueUrlForQuote(answer: QuoteAnswer, base: string | undefine
   const page = service ? handoffUrl(base, { source: "chatgpt", created_at: now.toISOString(), ...(property ? { property } : {}), services: [service] }) : undefined;
   // Over the limits, or no page yet: the service's own wizard.
   if (page) return page;
-  if ("product" in answer && "postcode" in answer) return bookingUrl(answer.product, answer.postcode);
+  if ("product" in answer && answer.product && "postcode" in answer) return bookingUrl(answer.product, answer.postcode);
   return "https://homemove.com/";
 }
 
@@ -104,7 +104,7 @@ export function continueUrlForPlan(plan: MovePlan, request: { to_postcode?: stri
   const flat = (pc?: string) => (pc ?? "").replace(/\s+/g, "").toUpperCase();
   // Removals run from the home being left; everything else belongs to the home whose postcode it was quoted at.
   const forOf = (line: MovePlan["lines"][number]): "property" | "to_property" => {
-    if ("product" in line.answer && line.answer.product.type === "removals") return "property";
+    if ("product" in line.answer && line.answer.product?.type === "removals") return "property";
     return request.to_postcode && flat(line.postcode) === flat(request.to_postcode) && flat(line.postcode) !== flat(request.from_postcode) ? "to_property" : "property";
   };
   const services = plan.lines

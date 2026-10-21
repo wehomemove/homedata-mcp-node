@@ -145,7 +145,7 @@ export type QuoteAnswer =
   | { status: "quoted_by_hand"; product: ProductView; postcode: string; property?: PropertyView; answers: AnswerView[]; legal?: LegalView }
   | { status: "choose_service"; options: ProductView[] }
   | { status: "unknown_service"; service: string }
-  | { status: "address_not_found"; reason: string; postcode: string };
+  | { status: "address_not_found"; reason: string; postcode: string; product?: ProductView; said?: string };
 
 export interface ProductView { id: number; name: string; type: string | null }
 /** A value band with its price, so the card can show "from £X" and let them pick. */
@@ -216,7 +216,7 @@ async function conveyancing(request: QuoteRequest, deps: { motus: MotusClient; p
   let facts: PropertyFacts | undefined;
   {
     try { facts = await factsFor(request, deps.property); } catch (error) {
-      if (error instanceof AddressNotMatched) return { status: "address_not_found", reason: error.reason, postcode: request.postcode };
+      if (error instanceof AddressNotMatched) return { status: "address_not_found", reason: error.reason, postcode: request.postcode, product, said: request.address?.trim() };
       throw error;
     }
   }
@@ -282,7 +282,7 @@ export async function quote(request: QuoteRequest, deps: { motus: MotusClient; p
       facts = await factsFor(request, deps.property);
       postcode = facts?.postcode || postcode;
     } catch (error) {
-      if (error instanceof AddressNotMatched) return { status: "address_not_found", reason: error.reason, postcode };
+      if (error instanceof AddressNotMatched) return { status: "address_not_found", reason: error.reason, postcode, product: view(product), said: request.address?.trim() };
       throw error;
     }
   }

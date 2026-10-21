@@ -182,7 +182,7 @@ test("a hand-quoted combination, an unknown service and an unmatched address eac
   assert.equal((await quote({ service: "end of tenancy clean", postcode: "SW1A 2AA", bedrooms: 6 }, deps)).status, "quoted_by_hand");
   assert.equal((await quote({ service: "knitting lessons", postcode: "SW1A 2AA" }, deps)).status, "unknown_service");
   const lost = await quote({ service: "epc", postcode: "SW1A 2AA", address: "1 Nowhere Lane" }, deps);
-  assert.deepEqual(lost, { status: "address_not_found", reason: "no_match", postcode: "SW1A 2AA" });
+  assert.deepEqual(lost, { status: "address_not_found", reason: "no_match", postcode: "SW1A 2AA", product: { id: 1081, name: "EPC Assessment", type: "surveys" }, said: "1 Nowhere Lane" }, "the card can open the postcode's addresses for this product");
 });
 
 test("ChatGPT sees two no-sign-in tools, the quote card template, and a widget that loads from this origin", async () => {

@@ -163,6 +163,7 @@ function quoteNarrationCore(answer: QuoteAnswer): string {
       return `Homemove's price for ${/^[aeiou]/i.test(answer.product.name) ? "an" : "a"} ${answer.product.name} at ${answer.property?.address ?? answer.postcode} is £${answer.price_gbp.toLocaleString("en-GB")}.` +
         (answer.band ? ` Priced on the ${bandLabel(answer.band)} value band.` : "") +
         (assumed ? ` Assumed: ${assumed}; say so and invite a correction.` : "") +
+        (answer.assumed.some((a) => a.name === "property_price") && answer.bands ? " The card asks them to confirm the value range before it shows the price." : "") +
         (extras ? ` ${extras}, not in that total.` : "") +
         " The price is confirmed when they book on homemove.com. The card shows it with a button to carry on there; keep your reply short.";
     }
@@ -184,9 +185,8 @@ function quoteNarrationCore(answer: QuoteAnswer): string {
     case "unknown_service":
       return `Homemove has no instant price for "${answer.service}". Offer the closest service from homemove_services, or say the team can quote it.`;
     case "address_not_found":
-      return answer.reason === "multiple_matches"
-        ? "That address matches more than one property. Ask for the flat or house number exactly as it appears on post, then try again."
-        : "No property matches that address and postcode. Ask the user to check them, or quote with the postcode alone.";
+      return (answer.reason === "multiple_matches" ? "That address matches more than one home at that postcode." : "Homemove couldn't match that address at that postcode.") +
+        " The card lists the homes at the postcode for them to pick theirs; say so in a sentence and do not ask them to retype it. If they give the flat or house number in the chat, call homemove_quote again with it.";
   }
 }
 

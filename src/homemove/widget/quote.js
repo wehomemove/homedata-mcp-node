@@ -212,6 +212,8 @@
       { step: "Moving-out clean", why: "Leaves the home ready for the buyers.", answer: { status: "priced", product: { id: 1097, name: "End of Tenancy Clean", type: "cleaning" }, price_gbp: 436, postcode: "M1 1AE", sample: true } },
     ] };
   const DEMO_ADDRESSES = Array.from({ length: 30 }, (_, i) => ({ uprn: String(i + 1), line: `${i * 2 + 41} Barnesdale Road`, town: "Norwich", postcode: "NR4 6LL" }));
+  DEMO.estimated = { ...DEMO.value, status: "priced", price_gbp: 499, postcode: "NR4 6LL", property: { address: "75 Barnesdale Road", postcode: "NR4 6LL", uprn: "1" }, assumed: [{ name: "property_price", value: "£200k–£300k", source: "Homedata's estimate for this home" }], band: { min: 200001, max: 300000 } };
+  DEMO.lost = { status: "address_not_found", reason: "multiple_matches", postcode: "NR4 6LL", product: { id: 2, name: "Level 2 Survey", type: "surveys" }, said: "75 Barnesdale Rd", sample: true, bands: DEMO.value.bands };
   const DEMO_PRICES = { "1039": { "1 Bedroom|Pre-inspection": 499, "2 Bedrooms|Post-Completion": 449 }, "1097": { "1 Bedroom": 209, "2 Bedrooms": 267, "3 Bedrooms": 376, "4 Bedrooms": 484 } };
 
   const app = $("#app");
@@ -287,7 +289,24 @@
     const card = h("div", { class: "inline" });
     card.append(sky());
     const copy = h("div", { class: "copy" });
-    if (d.status === "priced") {
+    const estimated = d.status === "priced" && d.property && valueBanded(d) && (d.assumed ?? []).some((a) => a.name === "property_price");
+    if (estimated) {
+      // Found the home and its estimate: the price waits for them to confirm the value range.
+      const from = h("div", { class: "price inline-price", "aria-label": `from ${gbp(Math.min(...d.bands.map((b) => b.price_gbp)))}` });
+      copy.append(
+        h("div", { class: "eyebrow" }, d.sample ? "Sample price · preview" : "Your Homemove quote"),
+        h("h1", {}, d.product.name),
+        h("div", { class: "from-row" }, h("span", { class: "from" }, "from"), from),
+        h("p", {}, `Found ${d.property.address.split(",")[0]}. Check its value range for your price.`),
+        h("div", { class: "inline-actions" }, h("button", { class: "cta", onclick: () => openTakeover("value") }, "Check the value"), h("button", { class: "link", onclick: () => book(d) }, "homemove.com →")));
+      rollingPrice(from, Math.min(...d.bands.map((b) => b.price_gbp)));
+    } else if (d.status === "address_not_found" && d.product) {
+      copy.append(
+        h("div", { class: "eyebrow" }, "Homemove"),
+        h("h1", {}, "Which home is it?"),
+        h("p", {}, `Pick it from the addresses at ${d.postcode} and we'll price your ${d.product.name.toLowerCase()}.`),
+        h("div", { class: "inline-actions" }, h("button", { class: "cta", onclick: () => openTakeover("address") }, "Pick the address"), h("button", { class: "link", onclick: () => book(d) }, "homemove.com →")));
+    } else if (d.status === "priced") {
       const price = h("div", { class: "price inline-price", "aria-label": gbp(d.price_gbp) });
       // With the home known, the next step is homemove.com. Without it, the card's next step is the address.
       const addressNext = !d.property && valueBanded(d);
@@ -345,8 +364,14 @@
     state.step = 0;
     state.answers = {};
 
-    const pickAddress = mode === "address" || (d.status === "needs_answers" && valueBanded(d) && d.questions.every((q) => q.name === "property_price"));
-    if (pickAddress) addressStep(); else if (d.status === "needs_answers") renderStep(); else card.append(h("div", { class: "step" }, h("div", { class: "eyebrow" }, d.product.name), h("h2", {}, "Here it comes…")));
+    const pickAddress = mode === "address" || mode === "value" || (d.status === "needs_answers" && valueBanded(d) && d.questions.every((q) => q.name === "property_price"));
+    if (d.status === "address_not_found" && !state.addrQuery) {
+      // Start from their postcode, narrowed by the house or flat number they gave.
+      const number = (d.said ?? "").match(/^(flat\s*\d+\w*|\d+\w?)\b/i)?.[1];
+      state.addrQuery = [d.postcode, number].filter(Boolean).join(" ");
+    }
+    if (mode === "value" && d.property) { state.args = { ...state.args, address: d.property.address.split(",")[0], uprn: d.property.uprn, postcode: d.property.postcode }; valueStep(d); }
+    else if (pickAddress) addressStep(); else if (d.status === "needs_answers") renderStep(); else card.append(h("div", { class: "step" }, h("div", { class: "eyebrow" }, d.product.name), h("h2", {}, "Here it comes…")));
 
     if (reduced) { slot.append(livingHomie(look.homie)); say(look.hello); }
     else {
@@ -360,7 +385,7 @@
       w.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 250, fill: "forwards" });
       await spring(living, "bouncy", { y: 16, s: 0.92, o: 0 }, { y: 0, s: 1, o: 1 }, (v) => ({ transform: `translateY(${v.y}px) scale(${v.s})`, opacity: String(Math.min(1, v.o)) }));
       w.remove();
-      say(pickAddress ? "Which home is it?" : d.status === "priced" ? "I've got your price!" : look.hello);
+      say(mode === "value" ? "Found it! Does this look right?" : pickAddress ? "Which home is it?" : d.status === "priced" ? "I've got your price!" : look.hello);
     }
     if (d.status === "priced" && !pickAddress) { await wait(300); reveal(d); }
   }
