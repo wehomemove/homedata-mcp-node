@@ -200,7 +200,7 @@
       bands: [{ min: 1, max: 200000, label: "up to £200k", price_gbp: 449 }, { min: 200001, max: 300000, label: "£200k–£300k", price_gbp: 499 }, { min: 300001, max: 500000, label: "£300k–£500k", price_gbp: 549 }, { min: 500001, max: 750000, label: "£500k–£750k", price_gbp: 649 }, { min: 750001, max: 1000000, label: "£750k–£1m", price_gbp: 749 }, { min: 1000001, max: 100000000, label: "over £1m", price_gbp: 899 }] },
   };
   DEMO.removals = { status: "needs_answers", product: { id: 1054, name: "Removals", type: "removals" }, postcode: "SW1A 2AA", assumed: [], answers: [], sample: true,
-    questions: [{ name: "to_postcode", question: "What's the postcode you're moving to?", options: [] }, { name: "home_size", question: "How big is the home you're moving out of?", options: ["Studio", "1 bedroom", "2 bedrooms", "3 bedrooms", "4 bedrooms", "5+ bedrooms"] }],
+    questions: [{ name: "to_postcode", question: "And where are you moving to?", options: [] }, { name: "home_size", question: "How big is the home you're moving out of?", options: ["Studio", "1 bedroom", "2 bedrooms", "3 bedrooms", "4 bedrooms", "5+ bedrooms"] }],
     picker: [{"room": "Bedrooms", "items": [{"id": 1531, "name": "Single Bed & Mattress", "cubic_meters": 0.81}, {"id": 1238, "name": "Double Bed & Mattress", "cubic_meters": 1.4213}, {"id": 1365, "name": "Kingsize Bed & Mattress", "cubic_meters": 1.995}, {"id": 2010, "name": "Single Wardrobe", "cubic_meters": 0.5814}, {"id": 1844, "name": "Double Wardrobe", "cubic_meters": 1.242}, {"id": 1174, "name": "Chest Of Drawers", "cubic_meters": 0.5184}, {"id": 1109, "name": "Bedside Table", "cubic_meters": 0.0875}, {"id": 1848, "name": "Dressing Table", "cubic_meters": 0.7}, {"id": 2034, "name": "Television", "cubic_meters": 0.1376}, {"id": 1527, "name": "Side Table", "cubic_meters": 0.2871}]}, {"room": "Living", "items": [{"id": 1611, "name": "Two Seater Sofa", "cubic_meters": 1.1154}, {"id": 1584, "name": "Three Seater Sofa", "cubic_meters": 1.4653}, {"id": 1298, "name": "Four Seater Sofa", "cubic_meters": 1.7527}, {"id": 1090, "name": "Armchair", "cubic_meters": 1.1664}, {"id": 1191, "name": "Coffee Table", "cubic_meters": 0.269}, {"id": 2017, "name": "Small Television/TV (Less than 30\")", "cubic_meters": 0.0666}, {"id": 1386, "name": "Large Television/TV (Greater than 40\")", "cubic_meters": 0.1442}, {"id": 1609, "name": "TV Stand", "cubic_meters": 0.1014}, {"id": 1122, "name": "Bookcase", "cubic_meters": 0.378}, {"id": 1510, "name": "Rug", "cubic_meters": 0.0244}, {"id": 1291, "name": "Floor Lamp", "cubic_meters": 0.1152}]}, {"room": "Kitchen", "items": [{"id": 1891, "name": "Fridge Freezer", "cubic_meters": 0.5575}, {"id": 1627, "name": "Washing Machine", "cubic_meters": 0.4055}, {"id": 1606, "name": "Tumble Dryer", "cubic_meters": 0.306}, {"id": 1412, "name": "Microwave Oven", "cubic_meters": 0.0904}, {"id": 1201, "name": "Cooker", "cubic_meters": 0.888}, {"id": 1224, "name": "Dishwasher", "cubic_meters": 0.4055}, {"id": 1373, "name": "Kitchen Table", "cubic_meters": 0.9576}, {"id": 1112, "name": "Bin", "cubic_meters": 0.1875}, {"id": 2168, "name": "Ironing Board", "cubic_meters": 0.0552}]}, {"room": "Dining", "items": [{"id": 1077, "name": "6 Seater Dining Table", "cubic_meters": 0.9576}, {"id": 1079, "name": "8 Seater Dining Table", "cubic_meters": 1.2804}, {"id": 1832, "name": "Dining Chair", "cubic_meters": 0.2248}, {"id": 1529, "name": "Sideboard", "cubic_meters": 0.4741}, {"id": 1226, "name": "Display Cabinet", "cubic_meters": 0.5268}, {"id": 1075, "name": "4 Seater Dining Table", "cubic_meters": 0.4672}]}, {"room": "Boxes & Bags", "items": [{"id": 1384, "name": "Large Box", "cubic_meters": 0.1664}, {"id": 1411, "name": "Medium Box", "cubic_meters": 0.125}, {"id": 1539, "name": "Small Box", "cubic_meters": 0.0911}, {"id": 2171, "name": "Wardrobe Box", "cubic_meters": 0.2862}, {"id": 2029, "name": "Suitcase", "cubic_meters": 0.1579}, {"id": 1097, "name": "Bag", "cubic_meters": 0.0506}]}, {"room": "Office", "items": [{"id": 1430, "name": "Office Chair", "cubic_meters": 0.342}, {"id": 1220, "name": "Desk", "cubic_meters": 0.6013}, {"id": 1379, "name": "Lamp", "cubic_meters": 0.0073}, {"id": 1483, "name": "Printer", "cubic_meters": 0.0161}, {"id": 1873, "name": "Filing Cabinet", "cubic_meters": 0.1557}, {"id": 1196, "name": "Computer", "cubic_meters": 0.2}]}, {"room": "Bathroom", "items": [{"id": 1385, "name": "Large Mirror", "cubic_meters": 0.0413}, {"id": 2014, "name": "Small Mirror", "cubic_meters": 0.0281}, {"id": 1106, "name": "Bathroom Cabinet", "cubic_meters": 0.084}, {"id": 1769, "name": "Bath Tub", "cubic_meters": 0.6545}]}, {"room": "Garden", "items": [{"id": 1900, "name": "Garden Table", "cubic_meters": 1.2}, {"id": 2090, "name": "Garden Chair", "cubic_meters": 0.27}, {"id": 1388, "name": "Lawn Mower", "cubic_meters": 0.0817}, {"id": 1589, "name": "Tool Box", "cubic_meters": 0.016}, {"id": 1110, "name": "Bench", "cubic_meters": 0.3806}, {"id": 1444, "name": "Parasol", "cubic_meters": 0.0848}, {"id": 1773, "name": "Bicycle", "cubic_meters": 0.399}]}] };
   DEMO.plan = { view: "plan", situation: "buying_and_selling", total_gbp: 3278, priced: 5, unpriced: ["Book removals"], stamp_duty: { total_tax: 2500, note: "First-time buyer relief applied.", jurisdiction: "England and Northern Ireland", thresholds_from: "1 April 2025" },
     lines: [
@@ -447,19 +447,17 @@
         h("button", { class: "link skip", onclick: () => { state.answers.address = "skip"; advance(); } }, "Not found one yet? Skip →"));
       ready(false); next.hidden = true;
     } else if (q.name === "to_postcode" || q.name === "postcode") {
-      const input = h("input", { inputmode: "text", autocomplete: "postal-code", placeholder: q.name === "postcode" ? "NR4 6LL" : "LS1 4AP", maxlength: 8, value: state.args[q.name] ?? "", "aria-label": q.name === "postcode" ? "Postcode you're moving from" : "Postcode you're moving to" });
-      const field = h("label", { class: "field" }, h("span", { class: "pin" }, h("img", { src: `${A}icons/location.webp`, alt: "" })), input);
-      const valid = (v) => /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(v.trim());
-      input.addEventListener("input", () => {
-        const ok = valid(input.value);
-        field.classList.toggle("live", ok);
-        if (ok) state.args[q.name] = input.value.trim().toUpperCase().replace(/\s*(\d[A-Z]{2})$/, " $1");
-        ready(ok);
-      });
-      input.addEventListener("keydown", (e) => { if (e.key === "Enter" && valid(input.value)) advance(); });
-      body.append(field);
-      ready(valid(input.value));
-      setTimeout(() => input.focus({ preventScroll: true }), 300);
+      // As the homemove.com removals form asks it: the address, from the list; the move is priced on its postcode.
+      state.addrQuery = state.args[q.name] ?? "";
+      const PC = /^([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})$/i;
+      body.append(addressPicker((a) => { state.args[q.name] = a.postcode; advance(); }, false),
+        h("button", { class: "link skip", onclick: () => {
+          const m = PC.exec((state.addrQuery ?? "").trim());
+          if (!m) return say("Type the postcode first.");
+          state.args[q.name] = `${m[1]} ${m[2]}`.toUpperCase();
+          advance();
+        } }, "Just use the postcode →"));
+      next.hidden = true; ready(false);
     } else if (q.name === "home_size" && d.picker) {
       const tiles = h("div", { class: "tiles sizes", role: "radiogroup" });
       q.options.forEach((label, i) => {
@@ -535,7 +533,7 @@
   const steps = (i) => h("div", { class: "progress" }, [0, 1].map((n) => h("i", { class: n < i ? "done" : "" })));
 
   /** The address search: a postcode lists its homes (scrolling, narrowed by a house number), anything else searches. */
-  function addressPicker(onPick) {
+  function addressPicker(onPick, setsHome = true) {
     const input = h("input", { class: "addr-input", inputmode: "search", autocomplete: "off", spellcheck: "false", placeholder: "Postcode or address", "aria-label": "Postcode or address", value: state.addrQuery ?? "" });
     const field = h("label", { class: "field addr" }, h("span", { class: "pin" }, h("img", { src: `${A}icons/location.webp`, alt: "" })), input);
     const list = h("ul", { class: "addr-list", role: "listbox", "aria-label": "Addresses" });
@@ -581,7 +579,7 @@
       hop(state.ui.slot.firstElementChild, 12);
       list.replaceChildren(h("li", { class: "addr-picked" }, h("img", { src: `${A}icons/home.webp`, alt: "" }), h("span", {}, h("b", {}, a.line), h("small", {}, "Looking up this home…"))));
       status.textContent = "";
-      state.args = { ...state.args, address: a.line, uprn: a.uprn, postcode: a.postcode };
+      if (setsHome) state.args = { ...state.args, address: a.line, uprn: a.uprn, postcode: a.postcode };
       onPick(a);
     };
     if (state.addrQuery) search();
