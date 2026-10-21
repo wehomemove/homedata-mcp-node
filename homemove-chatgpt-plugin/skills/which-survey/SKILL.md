@@ -3,6 +3,8 @@ name: which-survey
 description: Use when someone asks which survey they need, whether they need a survey, or the difference between a Level 2 survey, a Level 3 building survey and a snagging survey.
 ---
 
+Use the Homemove tools in this chat for every price. Never open homemove.com, a Homemove desktop or phone app, or a browser to find one, and never ask the user to sign in: the tools need no account. The card links to homemove.com when they are ready.
+
 Help the user choose a survey, then quote it. The user's own instructions come first.
 
 If they have already named the survey they want (for example "Level 2"), do not ask the questions below: call `homemove_quote` for that survey straight away with whatever they have already said (postcode, address, price). Do not ask for those first: the card shows what it costs and lets them pick their address or a value range for the exact figure.
