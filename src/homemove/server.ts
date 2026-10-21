@@ -4,6 +4,7 @@ import {
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
+  type CallToolRequest,
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
@@ -15,6 +16,9 @@ import { homemoveWidgetHtml, HOMEMOVE_WIDGET_URI, HOMEMOVE_WIDGET_VERSION } from
 import type { HomedataClient } from "../client.js";
 import { planMove, type MovePlan, type Situation } from "./plan.js";
 import { continueUrlForPlan, continueUrlForQuote } from "./handoff.js";
+import { tagged } from "./utm.js";
+import { callDetail, shownToolName } from "./activity.js";
+import { outcomeOf, type HomeCall } from "../home/activity.js";
 import { pickDeals, type BroadbandClient, type BroadbandSort } from "./broadband.js";
 import { movingChecklist, type ChecklistSituation } from "./checklist.js";
 import { AddressNotMatched } from "./property.js";
@@ -297,7 +301,7 @@ export function planNarration(plan: MovePlan): string {
     " Prices are confirmed when they book. The card shows the plan; keep your reply short.";
 }
 
-export function buildHomemoveServer(deps: { motus: MotusClient; property: PropertyLookup; assetOrigin: string; homedata?: HomedataClient; handoffBase?: string; broadband?: BroadbandClient }): Server {
+export function buildHomemoveServer(deps: { motus: MotusClient; property: PropertyLookup; assetOrigin: string; homedata?: HomedataClient; handoffBase?: string; broadband?: BroadbandClient; onToolCall?: (call: HomeCall) => void }): Server {
   const server = new Server({ name: "homemove", version: VERSION }, { capabilities: { tools: {}, resources: {} }, instructions: HOMEMOVE_INSTRUCTIONS });
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
@@ -327,7 +331,7 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
     tools: [QUOTE_TOOL, ...(deps.homedata ? [PLAN_TOOL, STAMP_TOOL, MORTGAGE_TOOL, COUNCIL_TAX_TOOL] : []), SERVICES_TOOL, CHECKLIST_TOOL, FIND_ADDRESS_TOOL, ...(deps.broadband ? [BROADBAND_TOOL, BROADBAND_LINK_TOOL] : [])].map((tool) => ({ ...tool, outputSchema: { type: "object", additionalProperties: true }, ...NOAUTH, _meta: { ...NOAUTH, ...("_meta" in tool ? tool._meta : {}) } })),
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const handle = async (request: CallToolRequest): Promise<CallToolResult> => {
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
     try {
       if (request.params.name === "homemove_quote") {
@@ -349,8 +353,9 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
           items: Array.isArray(args["items"]) ? (args["items"] as Array<{ item?: unknown; quantity?: unknown }>).filter((i) => typeof i?.item === "string").map((i) => ({ item: String(i.item), quantity: typeof i.quantity === "number" ? i.quantity : undefined })) : undefined,
           inventory: args["inventory"] && typeof args["inventory"] === "object" && !Array.isArray(args["inventory"]) ? Object.fromEntries(Object.entries(args["inventory"] as Record<string, unknown>).filter(([, v]) => typeof v === "number").map(([k, v]) => [k, v as number])) : undefined,
         }, deps);
-        const continue_url = continueUrlForQuote(answer, deps.handoffBase);
-        const withLink = { ...answer, continue_url };
+        const what = "product" in answer && answer.product ? answer.product.name : answer.status === "front_door" ? answer.door : answer.status;
+        const continue_url = tagged(continueUrlForQuote(answer, deps.handoffBase), what);
+        const withLink = { ...answer, ...("booking_url" in answer && answer.booking_url ? { booking_url: tagged(answer.booking_url, what) } : {}), continue_url };
         return result(withLink as unknown as Record<string, unknown>, quoteNarration(withLink));
       }
       if (request.params.name === "homemove_move_plan" && deps.homedata) {
@@ -367,8 +372,8 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
           items: Array.isArray(args["items"]) ? (args["items"] as Array<{ item?: unknown; quantity?: unknown }>).filter((i) => typeof i?.item === "string").map((i) => ({ item: String(i.item), quantity: typeof i.quantity === "number" ? i.quantity : undefined })) : undefined,
         }, { motus: deps.motus, property: deps.property, homedata: deps.homedata });
         if (!plan.lines.length) return result({ view: "plan", ...plan } as unknown as Record<string, unknown>, "Ask for the postcode of the home they are moving to (and from, if they are selling or renting), then try again.");
-        const continue_url = continueUrlForPlan(plan, { to_postcode: pc("to_postcode"), from_postcode: pc("from_postcode") }, deps.handoffBase);
-        const lines = plan.lines.map((l) => ({ ...l, answer: { ...l.answer, continue_url: continueUrlForQuote(l.answer, deps.handoffBase) } }));
+        const continue_url = tagged(continueUrlForPlan(plan, { to_postcode: pc("to_postcode"), from_postcode: pc("from_postcode") }, deps.handoffBase), `move-plan-${situation}`);
+        const lines = plan.lines.map((l) => ({ ...l, answer: { ...l.answer, continue_url: tagged(continueUrlForQuote(l.answer, deps.handoffBase), "product" in l.answer && l.answer.product ? l.answer.product.name : "move-plan") } }));
         return result({ view: "plan", ...plan, lines, continue_url } as unknown as Record<string, unknown>, planNarration({ ...plan, lines }) + ` To carry on with everything on homemove.com: ${continue_url}`);
       }
       if (request.params.name === "homemove_stamp_duty" && deps.homedata) {
@@ -387,7 +392,7 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
         const sort: BroadbandSort = args["sort"] === "speed" ? "speed" : "price";
         const filters = { min_mbps: typeof args["min_mbps"] === "number" ? args["min_mbps"] : undefined, max_monthly_gbp: typeof args["max_monthly_gbp"] === "number" ? args["max_monthly_gbp"] : undefined };
         const deals = pickDeals(all, { sort, ...filters });
-        const compare = `https://homemove.com/broadband/compare/${encodeURIComponent(postcode.replace(/\s+/g, ""))}`;
+        const compare = tagged(`https://homemove.com/broadband/compare/${encodeURIComponent(postcode.replace(/\s+/g, ""))}`, "broadband");
         const body = { view: "broadband", postcode, sort, ...filters, total: all.length, deals, all_deals: all, continue_url: compare };
         if (!deals.length) return result(body, all.length ? "No deal on homemove.com's comparison matches those limits at that postcode; say so and offer to relax them." : "homemove.com's comparison lists no broadband deals for that postcode. Say so; they can check providers directly.");
         const top = deals.slice(0, 3).map((d) => `${d.provider} ${d.name}: ${d.download_mbps} Mbps, £${d.monthly_gbp}/month, ${d.contract_months ?? "?"}-month contract${d.setup_gbp ? `, £${d.setup_gbp} set-up` : ""}`).join("; ");
@@ -406,7 +411,7 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
         const moveDate = typeof args["move_date"] === "string" ? args["move_date"] : undefined;
         const stages = movingChecklist(situation, moveDate);
         const priced = stages.flatMap((st) => st.items.filter((i) => i.service).map((i) => i.service!));
-        return result({ situation, ...(moveDate ? { move_date: moveDate } : {}), stages, continue_url: "https://homemove.com/" },
+        return result({ situation, ...(moveDate ? { move_date: moveDate } : {}), stages, continue_url: tagged("https://homemove.com/", "moving-checklist") },
           `A moving checklist in ${stages.length} stages${moveDate ? `, dated back from ${moveDate}` : ""}: ` + stages.map((st) => `${st.when}${st.date ? ` (by ${st.date})` : ""}: ${st.items.map((i) => i.task).join("; ")}`).join(". ") +
           `. Give it as a short checklist. Homemove can price ${[...new Set(priced)].join(", ")}; offer to, with homemove_quote (or homemove_broadband for broadband).`);
       }
@@ -459,6 +464,20 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
       console.error("[homemove-mcp] tool failed:", error instanceof Error ? error.message : error);
       return result({ available: false, reason: UNAVAILABLE_TEXT }, UNAVAILABLE_TEXT, true);
     }
+  };
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const started = Date.now();
+    const answer = await handle(request);
+    try {
+      const tool = shownToolName(request.params.name);
+      const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+      const failed = answer.isError && (answer.structuredContent as { available?: unknown } | undefined)?.available === false;
+      deps.onToolCall?.({ tool, outcome: failed ? "failed" : outcomeOf(answer as never), ms: Date.now() - started,
+        detail: callDetail(tool, args, answer.structuredContent as Record<string, unknown> | undefined), subject: request.params._meta?.["openai/subject"] });
+    } catch {
+      // Reporting never changes a tool call's answer.
+    }
+    return answer;
   });
   return server;
 }

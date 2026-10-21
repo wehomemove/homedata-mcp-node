@@ -824,10 +824,20 @@
     say("There you go!");
   }
 
+  /** Every homemove.com link says it came from the ChatGPT app (the server tags them too). */
+  function tag(href) {
+    try {
+      const u = new URL(href);
+      if (!/(^|\.)homemove\.com$/.test(u.hostname) || u.searchParams.has("utm_source")) return href;
+      u.searchParams.set("utm_source", "chatgpt-plugin"); u.searchParams.set("utm_medium", "referral"); u.searchParams.set("utm_campaign", "homemove-chatgpt-app");
+      return u.toString();
+    } catch { return href; }
+  }
+
   async function book(q) {
     const oa = window.openai;
     // Booking happens on homemove.com's own quote wizard, opened on this product and postcode.
-    const href = q.continue_url ?? q.booking_url ?? "https://homemove.com/";
+    const href = tag(q.continue_url ?? q.booking_url ?? "https://homemove.com/");
     if (oa?.openExternal) return oa.openExternal({ href });
     return window.open(href, "_blank", "noopener");
     say("Ask in the chat and I'll help you book.");

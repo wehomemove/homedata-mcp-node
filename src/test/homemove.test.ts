@@ -13,6 +13,8 @@ import { PropertyLookup } from "../homemove/property.js";
 import { matchOption, quote, resolveProduct } from "../homemove/quote.js";
 import { buildHomemoveServer, planNarration, quoteNarration } from "../homemove/server.js";
 import { BroadbandClient } from "../homemove/broadband.js";
+import { tagged } from "../homemove/utm.js";
+import { HomeVisitors } from "../home/activity.js";
 import { planMove } from "../homemove/plan.js";
 import { continueUrlForPlan, continueUrlForQuote } from "../homemove/handoff.js";
 import { HOMEMOVE_ASSET_PREFIX, HOMEMOVE_WIDGET_URI } from "../homemove/widget.js";
@@ -463,13 +465,13 @@ test("broadband lists the comparison's deals in Mbps, sorted as asked, and opens
   const cheap = (await client.callTool({ name: "homemove_broadband", arguments: { postcode: "nr4 6ll" } })).structuredContent as Record<string, any>;
   assert.deepEqual(cheap["deals"].map((d: any) => [d.provider, d.download_mbps, d.monthly_gbp]), [["NOW", 11, 20], ["BT", 900, 49.99]], "unavailable deals are dropped; Kbps become Mbps");
   assert.equal(cheap["deals"][1].logo, null, "a logo is only ever loaded from homemove.com's CDN");
-  assert.equal(cheap["continue_url"], "https://homemove.com/broadband/compare/NR46LL");
+  assert.equal(cheap["continue_url"], "https://homemove.com/broadband/compare/NR46LL?utm_source=chatgpt-plugin&utm_medium=referral&utm_campaign=homemove-chatgpt-app&utm_content=broadband");
   const fast = (await client.callTool({ name: "homemove_broadband", arguments: { postcode: "NR4 6LL", sort: "speed", min_mbps: 100 } })).structuredContent as Record<string, any>;
   assert.deepEqual(fast["deals"].map((d: any) => d.id), [41]);
   assert.equal(calls.filter((c) => c.url.includes("/search?")).length, 1, "the postcode's deals are fetched once");
   const link = (await client.callTool({ name: "homemove_broadband_link", arguments: { deal_id: 41, postcode: "NR4 6LL" } })).structuredContent as Record<string, any>;
   assert.equal(link["url"], "https://www.awin1.com/cread.php?awinmid=1&clickref=abc");
-  assert.equal(calls.at(-1)!.body!["source"], "chatgpt");
+  assert.equal(calls.at(-1)!.body!["source"], "chatgpt-plugin");
   const { tools } = await client.listTools();
   assert.deepEqual(tools.find((t) => t.name === "homemove_broadband_link")!._meta?.["ui"], { visibility: ["app"] });
 });
@@ -528,4 +530,41 @@ test("mortgage repayments are sums, and the council tax band comes from the matc
   const ct = await client.callTool({ name: "homemove_council_tax", arguments: { postcode: "SW1A 2AA", address: "10 Downing Street" } });
   assert.equal((ct.structuredContent as { council_tax_band?: string }).council_tax_band, "B");
   assert.match((ct.content as Array<{ text: string }>)[0]!.text, /paid to the council, not Homemove/);
+});
+
+test("every homemove.com link says it came from the ChatGPT app; other sites and existing UTMs are left alone", async () => {
+  assert.equal(tagged("https://homemove.com/quote/surveys/rics-level-2?pc=NR46LL", "Level 2 Survey"),
+    "https://homemove.com/quote/surveys/rics-level-2?pc=NR46LL&utm_source=chatgpt-plugin&utm_medium=referral&utm_campaign=homemove-chatgpt-app&utm_content=level-2-survey");
+  assert.equal(tagged("https://www.awin1.com/cread.php?x=1"), "https://www.awin1.com/cread.php?x=1");
+  assert.equal(tagged("https://homemove.com/?utm_source=x"), "https://homemove.com/?utm_source=x");
+  const client = await homemoveClient();
+  const out = (await client.callTool({ name: "homemove_quote", arguments: { service: "home insurance" } })).structuredContent as Record<string, string>;
+  assert.equal(new URL(out["continue_url"]!).searchParams.get("utm_source"), "chatgpt-plugin");
+  const l2 = (await client.callTool({ name: "homemove_quote", arguments: { service: "Level 2 survey", postcode: "NR4 6LL", property_price: 350000 } })).structuredContent as Record<string, string>;
+  assert.equal(new URL(l2["continue_url"]!).searchParams.get("utm_content"), "level-2-survey");
+  assert.equal(new URL(l2["booking_url"]!).searchParams.get("utm_source"), "chatgpt-plugin");
+});
+
+test("activity: one line per Homemove call with the service and price at area level, never the street or the subject", async () => {
+  const events: Array<{ organisation: string; tool: string; outcome: string; detail?: string }> = [];
+  const handler = createHomemoveHttpHandler({ motus: fakeMotus(), property: fakeHomedata(), callsPerMinute: 2, activity: (e) => events.push(e), visitors: new HomeVisitors(undefined, () => Date.parse("2026-10-21T12:00:00Z")) });
+  const http = (await import("node:http")).createServer((req, res) => void handler(req, res));
+  await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+  const port = (http.address() as { port: number }).port;
+  const post = async (args: Record<string, unknown>, subject: string) => {
+    await fetch(`http://127.0.0.1:${port}/mcp`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "homemove_quote", arguments: args, _meta: { "openai/subject": subject } } }) }).then((r) => r.text());
+  };
+  try {
+  await post({ service: "Level 2 survey", postcode: "NR4 6LL", address: "75 Barnesdale Road", uprn: "100090887383" }, "user-a");
+  await post({ service: "home insurance" }, "user-a");
+  await post({ service: "EPC", postcode: "SW1A 2AA" }, "user-a");
+  assert.equal(events.length, 3);
+  assert.match(events[0]!.organisation, /^Homemove · visitor [0-9a-f]{6} \(new · 1 today · 1 ever\)$/);
+  assert.equal(events[0]!.outcome, "ok");
+  assert.equal(events[0]!.detail, "Level 2 Survey, priced £499 (from records), home picked, NR4");
+  assert.equal(events[1]!.detail, "front door: Home insurance");
+  assert.equal(events[2]!.outcome, "rate limited");
+  for (const e of events) assert.doesNotMatch(JSON.stringify(e), /Barnesdale|6LL|user-a|100090887383/);
+  } finally { http.closeAllConnections(); await new Promise((resolve) => http.close(resolve)); }
 });
