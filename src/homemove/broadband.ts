@@ -84,5 +84,5 @@ export class BroadbandClient {
 export function pickDeals(deals: BroadbandDeal[], o: { sort?: BroadbandSort; min_mbps?: number; max_monthly_gbp?: number; limit?: number }): BroadbandDeal[] {
   const kept = deals.filter((d) => (!o.min_mbps || d.download_mbps >= o.min_mbps) && (!o.max_monthly_gbp || d.monthly_gbp <= o.max_monthly_gbp));
   const sorted = [...kept].sort((a, b) => o.sort === "speed" ? b.download_mbps - a.download_mbps || a.monthly_gbp - b.monthly_gbp : a.monthly_gbp - b.monthly_gbp || b.download_mbps - a.download_mbps);
-  return sorted.slice(0, o.limit ?? 30);
+  return o.limit === Infinity ? sorted : sorted.slice(0, o.limit ?? 30);
 }

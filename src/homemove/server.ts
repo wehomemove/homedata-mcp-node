@@ -333,7 +333,7 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
         const body = { view: "broadband", postcode, sort, ...filters, total: all.length, deals, all_deals: all, continue_url: compare };
         if (!deals.length) return result(body, all.length ? "No deal on homemove.com's comparison matches those limits at that postcode; say so and offer to relax them." : "homemove.com's comparison lists no broadband deals for that postcode. Say so; they can check providers directly.");
         const top = deals.slice(0, 3).map((d) => `${d.provider} ${d.name}: ${d.download_mbps} Mbps, £${d.monthly_gbp}/month, ${d.contract_months ?? "?"}-month contract${d.setup_gbp ? `, £${d.setup_gbp} set-up` : ""}`).join("; ");
-        return result(body, `homemove.com's broadband comparison lists ${all.length} deals at ${postcode}${deals.length < all.length ? ` (${deals.length} within their limits)` : ""}. ${sort === "speed" ? "Fastest" : "Cheapest"} first: ${top}. ` +
+        return result(body, `homemove.com's broadband comparison lists ${all.length} deals at ${postcode}${filters.min_mbps || filters.max_monthly_gbp ? ` (${pickDeals(all, { ...filters, limit: Infinity }).length} within their limits)` : ""}. ${sort === "speed" ? "Fastest" : "Cheapest"} first: ${top}. ` +
           "These are listed prices; say to confirm availability and price with the provider before ordering, and that Homemove may earn a commission if they order through a link. Don't call any deal the best. The card shows them all with sorting and links.");
       }
       if (request.params.name === "homemove_broadband_link" && deps.broadband) {
