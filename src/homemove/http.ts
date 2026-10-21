@@ -10,6 +10,7 @@ import { callerKey } from "../home/http.js";
 import { VERSION } from "../index.js";
 import { MinuteLimiter } from "../limiter.js";
 import { DEFAULT_MOTUS_BASE_URL, MotusClient } from "./motus.js";
+import { BroadbandClient } from "./broadband.js";
 import { PropertyLookup } from "./property.js";
 import { buildHomemoveServer } from "./server.js";
 import { HOMEMOVE_WIDGET_ASSETS } from "./widget.js";
@@ -24,6 +25,8 @@ export interface HomemoveHttpOptions {
   homedata?: HomedataClient;
   /** monty/frontend's handoff page; unset, links open the quote wizards. */
   handoffBase?: string;
+  /** homemove.com's broadband comparison; unset, the broadband tools are not listed. */
+  broadband?: BroadbandClient;
   mcpPath?: string;
   callsPerMinute?: number;
   clientIpHeader?: string;
@@ -107,7 +110,7 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
         ? send(res, 200, { jsonrpc: "2.0", id: (body as { id?: unknown }).id ?? null, result: { content: [{ type: "text", text: CALL_LIMIT_TEXT }], structuredContent: { available: false, limit_reached: true, reason: CALL_LIMIT_TEXT }, isError: true } })
         : send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" }));
     }
-    const server = buildHomemoveServer({ motus: options.motus, property: options.property, assetOrigin, homedata: options.homedata, handoffBase: options.handoffBase });
+    const server = buildHomemoveServer({ motus: options.motus, property: options.property, assetOrigin, homedata: options.homedata, handoffBase: options.handoffBase, broadband: options.broadband });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });
     await server.connect(transport);
@@ -130,6 +133,7 @@ async function main(): Promise<void> {
     property,
     homedata,
     handoffBase: (process.env["HOMEMOVE_HANDOFF_URL"] ?? "").trim() || undefined,
+    broadband: process.env["HOMEMOVE_BROADBAND"] === "off" ? undefined : new BroadbandClient({ baseUrl: (process.env["HOMEMOVE_BROADBAND_URL"] ?? "").trim() || undefined }),
     mcpPath: process.env["HOMEMOVE_MCP_PATH"] || "/mcp",
     callsPerMinute: checkCallsPerMinute(process.env["MCP_CALLS_PER_MINUTE"]),
     clientIpHeader: (process.env["HOMEMOVE_CLIENT_IP_HEADER"] ?? "").trim() || undefined,

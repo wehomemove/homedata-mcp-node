@@ -15,6 +15,7 @@ import { homemoveWidgetHtml, HOMEMOVE_WIDGET_URI, HOMEMOVE_WIDGET_VERSION } from
 import type { HomedataClient } from "../client.js";
 import { planMove, type MovePlan, type Situation } from "./plan.js";
 import { continueUrlForPlan, continueUrlForQuote } from "./handoff.js";
+import { pickDeals, type BroadbandClient, type BroadbandSort } from "./broadband.js";
 
 export const HOMEMOVE_INSTRUCTIONS = [
   "Homemove prices the services people need when they move home: surveys and valuations, EPCs and safety certificates, removals and man and van, end of tenancy and moving cleans, packing, and conveyancing.",
@@ -22,6 +23,7 @@ export const HOMEMOVE_INSTRUCTIONS = [
   "Call homemove_quote as soon as you know the service: do not ask for a postcode, address or price first. When the price depends on the home's value, the result gives the price from and the card lets them pick their address or value range. If the result has other questions, ask the user exactly those (offer the options), then call homemove_quote again with their answers. Never estimate, round or invent a price: quote only the price_gbp a result gives, and say the price is confirmed when they book.",
   "When a figure was assumed from the property record (bedrooms, value band), say so in a few words and invite a correction.",
   "Use homemove_services when someone asks what Homemove offers or which survey or service they need.",
+  "When someone asks about broadband for a home (deals, what's available, cheapest or fastest), call homemove_broadband with the postcode: it lists the deals on homemove.com's broadband comparison. Present them neutrally, as listed prices to confirm with the provider; never call a deal the best.",
   "When someone is moving and asks what it will cost, what they need, or how to plan it, call homemove_move_plan: it prices every step of their move at once. Stamp duty is HMRC's tax, never a Homemove fee; say so.",
 ].join(" ");
 
@@ -133,10 +135,45 @@ const FIND_ADDRESS_TOOL = {
   _meta: { "openai/widgetAccessible": true, ui: { visibility: ["app"] } },
 } as const;
 
+const BROADBAND_TOOL = {
+  name: "homemove_broadband",
+  title: "Compare broadband",
+  description: "Broadband deals available at a UK postcode from homemove.com's broadband comparison: provider, download and upload speed, monthly price, set-up fee and contract length. Use this when someone asks what broadband they can get at a home, or for the cheapest or fastest broadband there.",
+  inputSchema: {
+    type: "object", additionalProperties: false, required: ["postcode"],
+    properties: {
+      postcode: { type: "string", description: "Full UK postcode of the home." },
+      sort: { type: "string", enum: ["price", "speed"], description: "price: cheapest first (default). speed: fastest first." },
+      min_mbps: { type: "integer", minimum: 1, description: "Only deals at least this fast (download, Mbps), if the user said." },
+      max_monthly_gbp: { type: "number", minimum: 1, description: "Only deals at or under this monthly price, if the user said." },
+    },
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  _meta: {
+    "openai/outputTemplate": HOMEMOVE_WIDGET_URI,
+    "openai/toolInvocation/invoking": "Finding broadband…",
+    "openai/toolInvocation/invoked": "Here's broadband at that address",
+    "openai/widgetAccessible": true,
+    ui: { resourceUri: HOMEMOVE_WIDGET_URI, visibility: ["model", "app"] },
+  },
+} as const;
+
+const BROADBAND_LINK_TOOL = {
+  name: "homemove_broadband_link",
+  title: "Open a broadband deal",
+  description: "Used by the Homemove card when the user taps a broadband deal: returns the provider's page for it.",
+  inputSchema: {
+    type: "object", additionalProperties: false, required: ["deal_id"],
+    properties: { deal_id: { type: "integer", minimum: 1 }, postcode: { type: "string", maxLength: 10 } },
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  _meta: { "openai/widgetAccessible": true, ui: { visibility: ["app"] } },
+} as const;
+
 const NOAUTH = { securitySchemes: [{ type: "noauth" }] };
 
 /** Every tool the endpoint lists when Homedata is configured, for the plugin package's checks. */
-export const HOMEMOVE_TOOL_LIST = [QUOTE_TOOL, PLAN_TOOL, STAMP_TOOL, SERVICES_TOOL, FIND_ADDRESS_TOOL];
+export const HOMEMOVE_TOOL_LIST = [QUOTE_TOOL, PLAN_TOOL, STAMP_TOOL, SERVICES_TOOL, FIND_ADDRESS_TOOL, BROADBAND_TOOL, BROADBAND_LINK_TOOL];
 
 /** What the model is told when motus or Homedata does not answer. */
 export const UNAVAILABLE_TEXT = "Homemove could not work out the price just now. Tell the user to try again in a moment. Do not estimate a price.";
@@ -202,7 +239,7 @@ export function planNarration(plan: MovePlan): string {
     " Prices are confirmed when they book. The card shows the plan; keep your reply short.";
 }
 
-export function buildHomemoveServer(deps: { motus: MotusClient; property: PropertyLookup; assetOrigin: string; homedata?: HomedataClient; handoffBase?: string }): Server {
+export function buildHomemoveServer(deps: { motus: MotusClient; property: PropertyLookup; assetOrigin: string; homedata?: HomedataClient; handoffBase?: string; broadband?: BroadbandClient }): Server {
   const server = new Server({ name: "homemove", version: VERSION }, { capabilities: { tools: {}, resources: {} }, instructions: HOMEMOVE_INSTRUCTIONS });
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
@@ -211,7 +248,8 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     const version = request.params.uri.match(/^ui:\/\/homemove\/quote-v([1-9]\d*)\.html$/)?.[1];
     if (!version || Number(version) > HOMEMOVE_WIDGET_VERSION) throw new Error("Unknown Homemove UI resource");
-    const csp = { connectDomains: [] as string[], resourceDomains: [deps.assetOrigin] };
+    // Broadband provider logos come from homemove.com's CDN.
+    const csp = { connectDomains: [] as string[], resourceDomains: [deps.assetOrigin, "https://cdn.homemove.com"] };
     return { contents: [{
       uri: request.params.uri,
       mimeType: "text/html;profile=mcp-app",
@@ -228,7 +266,7 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
   });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [QUOTE_TOOL, ...(deps.homedata ? [PLAN_TOOL, STAMP_TOOL] : []), SERVICES_TOOL, FIND_ADDRESS_TOOL].map((tool) => ({ ...tool, outputSchema: { type: "object", additionalProperties: true }, ...NOAUTH, _meta: { ...NOAUTH, ...("_meta" in tool ? tool._meta : {}) } })),
+    tools: [QUOTE_TOOL, ...(deps.homedata ? [PLAN_TOOL, STAMP_TOOL] : []), SERVICES_TOOL, FIND_ADDRESS_TOOL, ...(deps.broadband ? [BROADBAND_TOOL, BROADBAND_LINK_TOOL] : [])].map((tool) => ({ ...tool, outputSchema: { type: "object", additionalProperties: true }, ...NOAUTH, _meta: { ...NOAUTH, ...("_meta" in tool ? tool._meta : {}) } })),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -283,6 +321,26 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
         if (sd.statusCode >= 400) throw new Error(`stamp duty answered ${sd.statusCode}`);
         const body = sd.body as { total_tax?: number; jurisdiction?: string };
         return result(sd.body as Record<string, unknown>, `Stamp duty on £${price.toLocaleString("en-GB")} is £${Number(body.total_tax ?? 0).toLocaleString("en-GB")} (${body.jurisdiction ?? "England and Northern Ireland"}). It is paid to HMRC. Scotland (LBTT) and Wales (LTT) have their own taxes.`);
+      }
+      if (request.params.name === "homemove_broadband" && deps.broadband) {
+        const postcode = typeof args["postcode"] === "string" ? args["postcode"].trim().toUpperCase() : "";
+        if (!/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/.test(postcode)) return result({ error: "invalid_request", detail: "postcode must be a full UK postcode" }, "Ask for the full postcode of the home, then try again.", true);
+        const all = await deps.broadband.deals(postcode);
+        const sort: BroadbandSort = args["sort"] === "speed" ? "speed" : "price";
+        const filters = { min_mbps: typeof args["min_mbps"] === "number" ? args["min_mbps"] : undefined, max_monthly_gbp: typeof args["max_monthly_gbp"] === "number" ? args["max_monthly_gbp"] : undefined };
+        const deals = pickDeals(all, { sort, ...filters });
+        const compare = `https://homemove.com/broadband/compare/${encodeURIComponent(postcode.replace(/\s+/g, ""))}`;
+        const body = { view: "broadband", postcode, sort, ...filters, total: all.length, deals, all_deals: all, continue_url: compare };
+        if (!deals.length) return result(body, all.length ? "No deal on homemove.com's comparison matches those limits at that postcode; say so and offer to relax them." : "homemove.com's comparison lists no broadband deals for that postcode. Say so; they can check providers directly.");
+        const top = deals.slice(0, 3).map((d) => `${d.provider} ${d.name}: ${d.download_mbps} Mbps, £${d.monthly_gbp}/month, ${d.contract_months ?? "?"}-month contract${d.setup_gbp ? `, £${d.setup_gbp} set-up` : ""}`).join("; ");
+        return result(body, `homemove.com's broadband comparison lists ${all.length} deals at ${postcode}${deals.length < all.length ? ` (${deals.length} within their limits)` : ""}. ${sort === "speed" ? "Fastest" : "Cheapest"} first: ${top}. ` +
+          "These are listed prices; say to confirm availability and price with the provider before ordering, and that Homemove may earn a commission if they order through a link. Don't call any deal the best. The card shows them all with sorting and links.");
+      }
+      if (request.params.name === "homemove_broadband_link" && deps.broadband) {
+        const id = typeof args["deal_id"] === "number" ? Math.round(args["deal_id"]) : 0;
+        if (id < 1) return result({ error: "invalid_request", detail: "deal_id is required" }, "No deal chosen.", true);
+        const url = await deps.broadband.link(id, typeof args["postcode"] === "string" ? args["postcode"] : undefined);
+        return result({ url }, "The deal's page is open for the user.");
       }
       if (request.params.name === "homemove_find_address") {
         const query = typeof args["query"] === "string" ? args["query"].slice(0, 120) : "";

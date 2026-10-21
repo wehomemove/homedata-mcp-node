@@ -225,3 +225,18 @@ input[type=range]::-moz-range-thumb { width: 26px; height: 26px; border-radius: 
 .band b { font-size: 17px; font-weight: 800; }
 .band:hover { border-color: var(--ink); }
 .band.sel { border-color: var(--ink); box-shadow: 4px 4px 0 var(--ink); transform: translate(-2px, -2px); background: var(--sand); }
+
+/* ---------- broadband ---------- */
+.deals { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
+.deal { border: 1.5px solid #d9d2c6; border-radius: 16px; padding: 14px; display: grid; gap: 10px; background: #fff; }
+.deal-top { display: flex; align-items: center; gap: 10px; }
+.deal-top .logo { height: 26px; max-width: 90px; object-fit: contain; }
+.deal-top .logo-text { font-size: 15px; font-weight: 800; }
+.deal-name { font-weight: 700; color: #5a6573; font-size: 14px; }
+.deal-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.deal-facts span { display: grid; }
+.deal-facts b { font-size: 18px; font-weight: 800; }
+.deal-facts small { font-size: 12px; color: #5a6573; }
+.deal-note { margin: 0; font-size: 13px; color: #5a6573; }
+.cta.small { padding: 10px 16px; font-size: 15px; justify-self: start; }
+.ghost.wide { width: 100%; margin-top: 12px; }
