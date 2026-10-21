@@ -237,6 +237,12 @@ async function conveyancing(request: QuoteRequest, deps: { motus: MotusClient; p
   ];
   const questions: QuestionView[] = [];
   if (!transaction) questions.push({ name: "transaction", ...LEGAL_QUESTIONS.transaction, options: [...LEGAL_QUESTIONS.transaction.options] });
+  // As the homemove.com legal form does: the home next, so its title and value answer the rest.
+  if (!facts && !request.property_price && !/^skip$/i.test(String(given["address"] ?? ""))) {
+    questions.push({ name: "address", question: transaction === "sale" ? "Which home are you selling?" : "Which home are you buying?", options: [] });
+    const legal: LegalView = { ...(transaction ? { transaction } : {}), ...(funding ? { funding_type: funding } : {}) };
+    return { status: "needs_answers", product, postcode: request.postcode, property, assumed: [], answers: shown, questions, legal };
+  }
   if (!price) questions.push({ name: "property_price", question: "What's the price of the home?", options: [] });
   if (!tenure) questions.push({ name: "tenure", ...LEGAL_QUESTIONS.tenure, options: [...LEGAL_QUESTIONS.tenure.options] });
   if (!funding) {

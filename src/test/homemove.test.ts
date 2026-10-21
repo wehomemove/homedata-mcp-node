@@ -233,7 +233,11 @@ test("conveyancing asks what Atlas needs, fills tenure from the title, and quote
   const deps = { motus: fakeMotus(sent), property: fakeHomedata() };
   const first = await quote({ service: "how much are conveyancing fees", postcode: "SW1A 2AA" }, deps);
   assert.equal(first.status, "needs_answers");
-  assert.deepEqual(first.status === "needs_answers" && first.questions.map((q) => q.name), ["transaction", "property_price", "tenure", "funding_type"]);
+  assert.deepEqual(first.status === "needs_answers" && first.questions.map((q) => q.name), ["transaction", "address"], "the home next, as the homemove.com legal form asks");
+  const skipped = await quote({ service: "conveyancing buying", postcode: "SW1A 2AA", answers: { address: "skip" } }, deps);
+  assert.deepEqual(skipped.status === "needs_answers" && skipped.questions.map((q) => q.name), ["property_price", "tenure", "funding_type"], "no home yet: ask what the records would have said");
+  const picked = await quote({ service: "conveyancing buying", postcode: "NR4 6LL", address: "75 Barnesdale Road", uprn: "100090887383" }, deps);
+  assert.deepEqual(picked.status === "needs_answers" && picked.questions.map((q) => q.name), ["funding_type"], "tenure from the title, value from the estimate: only the mortgage is left");
 
   const priced = await quote({ service: "conveyancing for my purchase", postcode: "SW1A 2AA", address: "10 Downing Street", property_price: 350000, answers: { funding_type: "Mortgage" } }, deps);
   assert.equal(priced.status, "priced");

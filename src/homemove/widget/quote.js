@@ -437,7 +437,12 @@
     const back = h("button", { class: "back", hidden: state.step === 0, onclick: () => go(state.step - 1) }, "← Back");
     const ready = (ok) => { next.disabled = !ok; };
 
-    if (q.name === "to_postcode" || q.name === "postcode") {
+    if (q.name === "address") {
+      // Conveyancing: the home, as the homemove.com legal form asks it; tenure and value come from its records.
+      body.append(addressPicker((a) => { state.answers.address = a.line; advance(); }),
+        h("button", { class: "link skip", onclick: () => { state.answers.address = "skip"; advance(); } }, "Not found one yet? Skip →"));
+      ready(false); next.hidden = true;
+    } else if (q.name === "to_postcode" || q.name === "postcode") {
       const input = h("input", { inputmode: "text", autocomplete: "postal-code", placeholder: q.name === "postcode" ? "NR4 6LL" : "LS1 4AP", maxlength: 8, value: state.args[q.name] ?? "", "aria-label": q.name === "postcode" ? "Postcode you're moving from" : "Postcode you're moving to" });
       const field = h("label", { class: "field" }, h("span", { class: "pin" }, h("img", { src: `${A}icons/location.webp`, alt: "" })), input);
       const valid = (v) => /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(v.trim());
@@ -525,10 +530,8 @@
   // home has one. The price is only shown in the reveal.
   const steps = (i) => h("div", { class: "progress" }, [0, 1].map((n) => h("i", { class: n < i ? "done" : "" })));
 
-  function addressStep() {
-    const d = state.data, { card } = state.ui;
-    const body = h("div", { class: "step" });
-    const from = d.from_gbp ?? (d.bands ? Math.min(...d.bands.map((b) => b.price_gbp)) : null);
+  /** The address search: a postcode lists its homes (scrolling, narrowed by a house number), anything else searches. */
+  function addressPicker(onPick) {
     const input = h("input", { class: "addr-input", inputmode: "search", autocomplete: "off", spellcheck: "false", placeholder: "Postcode or address", "aria-label": "Postcode or address", value: state.addrQuery ?? "" });
     const field = h("label", { class: "field addr" }, h("span", { class: "pin" }, h("img", { src: `${A}icons/location.webp`, alt: "" })), input);
     const list = h("ul", { class: "addr-list", role: "listbox", "aria-label": "Addresses" });
@@ -569,13 +572,24 @@
     };
     input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(search, 300); });
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") { clearTimeout(timer); search(); } });
-
-    const pick = async (a) => {
+    const pick = (a) => {
       say("Let me look that up…");
       hop(state.ui.slot.firstElementChild, 12);
       list.replaceChildren(h("li", { class: "addr-picked" }, h("img", { src: `${A}icons/home.webp`, alt: "" }), h("span", {}, h("b", {}, a.line), h("small", {}, "Looking up this home…"))));
       status.textContent = "";
       state.args = { ...state.args, address: a.line, uprn: a.uprn, postcode: a.postcode };
+      onPick(a);
+    };
+    if (state.addrQuery) search();
+    setTimeout(() => input.focus({ preventScroll: true }), 300);
+    return h("div", {}, field, status, list);
+  }
+
+  function addressStep() {
+    const d = state.data, { card } = state.ui;
+    const body = h("div", { class: "step" });
+    const from = d.from_gbp ?? (d.bands ? Math.min(...d.bands.map((b) => b.price_gbp)) : null);
+    const picker = addressPicker(async () => {
       try {
         // Priced on Homedata's estimate, held back until they confirm the range.
         const next = await callQuote({ answers: Object.fromEntries((d.answers ?? []).map((x) => [x.name, x.label])) });
@@ -588,17 +602,14 @@
         if (next?.status === "quoted_by_hand") { state.data = next; say("That one needs a specialist."); return; }
         throw new Error("no price");
       } catch { say("Hmm, I couldn't look that up. Try again in a moment?"); }
-    };
-
+    });
     body.append(
       h("div", { class: "eyebrow" }, from ? `${d.product.name} · from ${gbp(from)}` : d.product.name),
       h("h2", {}, "Which home is it?"),
       h("p", { class: "sub" }, "Type the postcode and pick the address. Homemove.com will have it ready when you carry on."),
-      field, status, list,
+      picker,
       h("button", { class: "link skip", onclick: () => (state.bedsQuestion ? bedsStep(null, state.bedsQuestion.options) : valueStep(null)) }, "Don't have the address yet? Skip →"));
     card.replaceChildren(steps(0), body);
-    if (state.addrQuery) search();
-    setTimeout(() => input.focus({ preventScroll: true }), 300);
   }
 
   /** Step 2: the value range, prices hidden. guess is the quote priced on Homedata's estimate, if any. */
