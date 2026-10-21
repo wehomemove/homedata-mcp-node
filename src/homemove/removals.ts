@@ -117,8 +117,8 @@ export async function removals(request: QuoteRequest & { to_postcode?: string; i
     indicative = HOME_SIZES[size]!.label;
   }
   const questions = [];
-  if (!request.postcode) questions.push({ name: "postcode", question: "What's the postcode you're moving from?", options: [] as string[] });
-  if (!request.to_postcode) questions.push({ name: "to_postcode", question: "What's the postcode you're moving to?", options: [] as string[] });
+  if (!request.postcode) questions.push({ name: "postcode", question: "Where are you moving from?", options: [] as string[] });
+  if (!request.to_postcode) questions.push({ name: "to_postcode", question: "And where are you moving to?", options: [] as string[] });
   if (!Object.keys(inventory).length) questions.push({ name: "home_size", question: "How big is the home you're moving out of?", options: HOME_SIZE_OPTIONS });
   if (questions.length) {
     // The destination already given travels with the questions, so the card's re-ask keeps it.
