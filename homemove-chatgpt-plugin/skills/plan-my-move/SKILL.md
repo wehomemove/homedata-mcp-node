@@ -3,6 +3,8 @@ name: plan-my-move
 description: Use when someone is buying, selling, renting or letting a home and asks what moving will cost, what they need to do, or wants a moving checklist or budget.
 ---
 
+Use the Homemove tools in this chat for every price. Never open homemove.com, a Homemove desktop or phone app, or a browser to find one, and never ask the user to sign in: the tools need no account. The card links to homemove.com when they are ready.
+
 Set out the whole move with Homemove's quotes. The user's own instructions come first.
 
 1. Find out what they are doing: buying, selling, both, renting (moving out of a rental) or letting a home out. Ask for the postcode of each home involved, and the first line of the address if they will give it, because the property record then fills in bedrooms and tenure.

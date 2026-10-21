@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "homemove",
-  "version": "1.0.2",
-  "description": "Get Homemove quotes for moving home in ChatGPT: surveys, valuations, EPCs and safety certificates, conveyancing, removals and moving cleans, worked out from the address, plus a whole move set out step by step with stamp duty.",
+  "version": "1.0.4",
+  "description": "Get Homemove quotes for moving home in ChatGPT: surveys, valuations, EPCs and safety certificates, conveyancing, removals and moving cleans, worked out from the address, broadband available at the address, plus a whole move set out step by step with stamp duty.",
   "author": {
     "name": "Homemove",
     "email": "hello@homemove.com",
@@ -65,7 +65,7 @@
       "interface": {
         "displayName": "Homemove",
         "shortDescription": "Quotes for your home move",
-        "longDescription": "Homemove prices the services you need when you move home, right in the conversation, and shows each quote with the Homies.\n\nAsk what a survey, a valuation, an EPC, a gas safety or electrical certificate, conveyancing, removals or a moving clean would cost and Homemove works it out from Homemove's own pricing. Give the address and it fills in what it can from the property records, such as bedrooms and freehold or leasehold, so you answer fewer questions; anything it still needs, it asks. For removals, tell it what you are moving or pick room by room, and it works out the van, the crew and the guide price for the distance.\n\nPlanning a whole move? Say whether you are buying, selling, both, renting or letting, and Homemove sets out every step with its Homemove quote: the EPC, the conveyancing for each side, the survey, removals and the clean, plus the stamp duty you would pay to HMRC, shown apart from Homemove's fees. Not sure which survey you need? Homemove explains the difference and quotes the one that fits.\n\nWhen you are ready, each quote opens the matching booking page on homemove.com, with the service and postcode filled in.\n\nLimitations: Quotes are confirmed when you book on homemove.com. Some combinations, such as very large homes or expert-witness valuations, are quoted by the Homemove team rather than instantly. Homemove does not give mortgage advice, recommend lenders or quote insurance in ChatGPT. Stamp duty figures cover England and Northern Ireland and are estimates, not tax advice. Homemove needs no account and takes no payments in ChatGPT.",
+        "longDescription": "Homemove prices the services you need when you move home, right in the conversation, and shows each quote with the Homies.\n\nAsk what a survey, a valuation, an EPC, a gas safety or electrical certificate, conveyancing, removals or a moving clean would cost and Homemove works it out from Homemove's own pricing. Give the address and it fills in what it can from the property records, such as bedrooms and freehold or leasehold, so you answer fewer questions; anything it still needs, it asks. For removals, tell it what you are moving or pick room by room, and it works out the van, the crew and the guide price for the distance.\n\nPlanning a whole move? Say whether you are buying, selling, both, renting or letting, and Homemove sets out every step with its Homemove quote: the EPC, the conveyancing for each side, the survey, removals and the clean, plus the stamp duty you would pay to HMRC, shown apart from Homemove's fees. Not sure which survey you need? Homemove explains the difference and quotes the one that fits.\n\nMoving in? Homemove lists the broadband available at the address from homemove.com's broadband comparison, by speed or monthly cost, with a link to each provider.\n\nWhen you are ready, each quote opens the matching booking page on homemove.com, with the service and postcode filled in.\n\nLimitations: Quotes are confirmed when you book on homemove.com. Some combinations, such as very large homes or expert-witness valuations, are quoted by the Homemove team rather than instantly. Homemove does not give mortgage advice, recommend lenders or quote insurance in ChatGPT. Stamp duty figures cover England and Northern Ireland and are estimates, not tax advice. Homemove needs no account and takes no payments in ChatGPT.",
         "developerName": "Homemove",
         "category": "Lifestyle",
         "capabilities": [
@@ -98,7 +98,7 @@
       },
       "publication": {
         "countries": [],
-        "release_notes": "First release: Homemove quotes for surveys, valuations, EPCs and safety certificates, conveyancing, removals and moving cleans, filled in from the address; a whole move set out step by step with stamp duty; and skills for planning a move, choosing a survey and moving out of a rental."
+        "release_notes": "Pick the exact home by its address for the price, compare broadband available at an address, and every quote answered in the chat without opening an app or a browser."
       }
     }
   }
