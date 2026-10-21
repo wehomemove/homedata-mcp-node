@@ -473,3 +473,14 @@ test("without the broadband comparison configured, no broadband tool is listed",
   const { tools } = await client.listTools();
   assert.ok(!tools.some((t) => t.name.startsWith("homemove_broadband")));
 });
+
+test("a clean priced on bedrooms from the record carries the bedroom choices, so the card can offer a correction", async () => {
+  const deps = { motus: fakeMotus(), property: fakeHomedata() };
+  const answer = await quote({ service: "end of tenancy clean", postcode: "NR4 6LL", address: "75 Barnesdale Road", uprn: "100090887383" }, deps);
+  assert.equal(answer.status, "priced");
+  const priced = answer as Extract<typeof answer, { status: "priced" }>;
+  assert.equal(priced.assumed[0]!.name, "beds", "bedrooms came from the record");
+  assert.deepEqual(priced.beds_options, BEDS.map((o) => o.label));
+  const said = await quote({ service: "end of tenancy clean", postcode: "NR4 6LL", bedrooms: 2 }, deps);
+  assert.equal((said as { beds_options?: unknown }).beds_options, undefined, "stated bedrooms need no correction");
+});

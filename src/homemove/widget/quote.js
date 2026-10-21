@@ -239,6 +239,8 @@
     if (d.bands) return { status: "priced", product: d.product, price_gbp: price, postcode: args.postcode ?? "", assumed: args.property_price ? [] : [{ name: "property_price", value: demoBand.label, source: "Homedata's estimate for this home" }], answers: [], sample: true, bands: d.bands,
       band: demoBand && { min: demoBand.min, max: demoBand.max }, ...(args.uprn ? { property: { address: args.address, postcode: args.postcode, uprn: args.uprn } } : {}) };
     if (a.beds === "5+ Bedrooms") return { ...d, status: "quoted_by_hand" };
+    if (args.uprn && d.product.type === "cleaning" && !a.beds) return { status: "priced", product: d.product, price_gbp: 267, postcode: args.postcode, sample: true, property: { address: args.address, postcode: args.postcode, uprn: args.uprn },
+      answers: [{ name: "beds", label: "2 Bedrooms" }], assumed: [{ name: "beds", value: "2 Bedrooms", source: "the property record" }], beds_options: d.questions[0].options };
     if (a.home_size && !args.inventory) {
       const n = { Studio: 0, "1 bedroom": 1, "2 bedrooms": 2, "3 bedrooms": 3, "4 bedrooms": 4, "5+ bedrooms": 5 }[a.home_size] ?? 2;
       return { status: "priced", product: d.product, price_gbp: [420, 560, 760, 1050, 1390, 1720][n], postcode: d.postcode, assumed: [], answers: [], sample: true, indicative: `a typical ${n ? n + "-bedroom" : "studio"} home`,
@@ -339,7 +341,7 @@
       copy.append(
         h("div", { class: "eyebrow" }, d.sample ? "Preview" : "Homemove"),
         h("h1", {}, `Let's price your ${d.product.name.toLowerCase()}`),
-        h("p", {}, d.questions.length === 1 ? "One quick question and you'll have your price." : `${d.questions.length} quick questions and you'll have your price.`),
+        h("p", {}, d.product.type === "cleaning" && d.questions.length === 1 && d.questions[0].name === "beds" ? "Pick the address and we'll fill in the bedrooms from the property record." : d.questions.length === 1 ? "One quick question and you'll have your price." : `${d.questions.length} quick questions and you'll have your price.`),
         h("div", { class: "inline-actions" }, h("button", { class: "cta", onclick: () => openTakeover() }, "Get my price"), h("button", { class: "link", onclick: () => book(d) }, "homemove.com →")));
     } else if (d.status === "quoted_by_hand") {
       copy.append(h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, "This one's priced by hand"), h("p", {}, `A ${d.product.name.toLowerCase()} for this home needs a specialist's quote.`), h("button", { class: "cta", onclick: () => book(d) }, "Get a quote on homemove.com"));
@@ -369,7 +371,9 @@
     state.step = 0;
     state.answers = {};
 
-    const pickAddress = mode === "address" || mode === "value" || (d.status === "needs_answers" && valueBanded(d) && d.questions.every((q) => q.name === "property_price"));
+    const bedsOnly = d.status === "needs_answers" && d.product?.type === "cleaning" && d.questions.length === 1 && d.questions[0].name === "beds";
+    state.bedsQuestion = bedsOnly ? d.questions[0] : null;
+    const pickAddress = mode === "address" || mode === "value" || bedsOnly || (d.status === "needs_answers" && valueBanded(d) && d.questions.every((q) => q.name === "property_price"));
     if (d.status === "address_not_found" && !state.addrQuery) {
       // Start from their postcode, narrowed by the house or flat number they gave.
       const number = (d.said ?? "").match(/^(flat\s*\d+\w*|\d+\w?)\b/i)?.[1];
@@ -575,7 +579,10 @@
       try {
         // Priced on Homedata's estimate, held back until they confirm the range.
         const next = await callQuote({ answers: Object.fromEntries((d.answers ?? []).map((x) => [x.name, x.label])) });
+        if (next?.status === "priced" && next.beds_options) return bedsStep(next, next.beds_options);
+        if (next?.status === "priced" && !valueBanded(next)) { state.data = next; return reveal(next); }
         if (next?.status === "priced") return valueStep(next);
+        if (next?.status === "needs_answers" && next.questions.length === 1 && next.questions[0].name === "beds") return bedsStep(null, next.questions[0].options);
         if (next?.status === "needs_answers" && next.questions.every((q) => q.name === "property_price")) return valueStep(null);
         if (next?.status === "needs_answers") { state.data = next; state.step = 0; return renderStep(); }
         if (next?.status === "quoted_by_hand") { state.data = next; say("That one needs a specialist."); return; }
@@ -588,7 +595,7 @@
       h("h2", {}, "Which home is it?"),
       h("p", { class: "sub" }, "Type the postcode and pick the address. Homemove.com will have it ready when you carry on."),
       field, status, list,
-      h("button", { class: "link skip", onclick: () => valueStep(null) }, "Don't have the address yet? Skip →"));
+      h("button", { class: "link skip", onclick: () => (state.bedsQuestion ? bedsStep(null, state.bedsQuestion.options) : valueStep(null)) }, "Don't have the address yet? Skip →"));
     card.replaceChildren(steps(0), body);
     if (state.addrQuery) search();
     setTimeout(() => input.focus({ preventScroll: true }), 300);
@@ -633,6 +640,42 @@
       h("div", { class: "actions" }, h("button", { class: "back", onclick: () => addressStep() }, "← Back"), go));
     card.replaceChildren(steps(1), body);
     say(chosen ? "Found it! Does this look right?" : "Roughly what's it worth?");
+  }
+
+  /** Bedrooms for a bedroom-priced service, pre-picked from the property record when it has them. */
+  function bedsStep(guess, options) {
+    const d = state.data, { card } = state.ui;
+    const was = guess?.answers?.find((a) => a.name === "beds")?.label;
+    let chosen = options.includes(was) ? was : null;
+    const body = h("div", { class: "step" });
+    const go = h("button", { class: "cta", disabled: !chosen, onclick: async () => {
+      go.disabled = true; go.textContent = "Working it out…";
+      hop(state.ui.slot.firstElementChild, 14);
+      try {
+        const next = chosen === was && guess ? guess : await callQuote({ answers: { ...Object.fromEntries((d.answers ?? []).map((x) => [x.name, x.label])), beds: chosen } });
+        if (next?.status === "priced") { state.data = next; return reveal(next); }
+        if (next?.status === "quoted_by_hand") { state.data = next; say("That one needs a specialist."); go.textContent = "Ask in the chat"; return; }
+        throw new Error("no price");
+      } catch { go.disabled = false; go.textContent = "Show my price"; say("Hmm, I couldn't price that just now. Try again?"); }
+    } }, "Show my price");
+    const tiles = h("div", { class: "tiles sizes", role: "radiogroup" }, options.map((label, i) => {
+      const house = h("img", { src: `${A}icons/home.webp`, alt: "", style: `transform:scale(${0.62 + i * 0.09})` });
+      const tile = h("button", { class: "tile" + (label === chosen ? " sel" : ""), role: "radio", "aria-checked": String(label === chosen), onclick: () => {
+        chosen = label;
+        tiles.querySelectorAll(".tile").forEach((t) => { t.classList.toggle("sel", t === tile); t.setAttribute("aria-checked", String(t === tile)); });
+        go.disabled = false; hop(house, 8); hop(state.ui.slot.firstElementChild, 10);
+      } }, house, h("span", {}, h("b", {}, label)), h("span", { class: "tick" }, svgTick()));
+      return tile;
+    }));
+    const home = state.args.address;
+    body.append(
+      h("div", { class: "eyebrow" }, home ? `${d.product.name} · ${home}` : d.product.name),
+      h("h2", {}, "How many bedrooms?"),
+      h("p", { class: "sub" }, chosen ? "From the property record. Change it if it's not right." : "The clean is priced on the bedrooms."),
+      tiles,
+      h("div", { class: "actions" }, h("button", { class: "back", onclick: () => addressStep() }, "← Back"), go));
+    card.replaceChildren(steps(1), body);
+    say(chosen ? "Found it! Is that right?" : "How many bedrooms?");
   }
 
   function svgTick() {
