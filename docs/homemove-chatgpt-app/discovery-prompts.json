@@ -1,0 +1,291 @@
+{
+  "about": "Discovery prompts for the Homemove ChatGPT app (OpenAI 'Optimize metadata': direct, indirect and negative prompts). Run each in a fresh ChatGPT conversation with Homemove connected, record the tool called (or none), and compute recall on direct+indirect and precision on negative. Change one metadata field at a time and re-run. Written 21 Oct 2026 for tool metadata v1.0.5.",
+  "version": "1.0.5",
+  "results": [],
+  "cases": [
+    {
+      "id": "indirect-1",
+      "kind": "indirect",
+      "prompt": "We've had an offer accepted on a house in Bristol. What happens now and what will it all cost?",
+      "expect_tool": "homemove_move_plan"
+    },
+    {
+      "id": "indirect-2",
+      "kind": "indirect",
+      "prompt": "How much does it cost to move house in the UK?",
+      "expect_tool": "homemove_move_plan"
+    },
+    {
+      "id": "indirect-3",
+      "kind": "indirect",
+      "prompt": "Do I need a survey on a 1930s semi?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-4",
+      "kind": "indirect",
+      "prompt": "What's the difference between a Level 2 and Level 3 survey?",
+      "expect_tool": "homemove_services"
+    },
+    {
+      "id": "indirect-5",
+      "kind": "indirect",
+      "prompt": "How much is a homebuyer's report?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-6",
+      "kind": "indirect",
+      "prompt": "How much are solicitor fees for buying a flat?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-7",
+      "kind": "indirect",
+      "prompt": "Conveyancing costs for selling my house?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-8",
+      "kind": "indirect",
+      "prompt": "How much is a man with a van to move a sofa and some boxes across London?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-9",
+      "kind": "indirect",
+      "prompt": "Quote for removals from Manchester to Glasgow, 3-bed house",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-10",
+      "kind": "indirect",
+      "prompt": "I'm moving out of my rental next month, how do I get my deposit back?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-11",
+      "kind": "indirect",
+      "prompt": "How much is an end of tenancy clean for a 2 bed flat?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-12",
+      "kind": "indirect",
+      "prompt": "Do I need an EPC to sell my house?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-13",
+      "kind": "indirect",
+      "prompt": "How much is a gas safety certificate?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-14",
+      "kind": "indirect",
+      "prompt": "I'm a new landlord, what certificates do I need?",
+      "expect_tool": "homemove_move_plan"
+    },
+    {
+      "id": "indirect-15",
+      "kind": "indirect",
+      "prompt": "How much is an EICR?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-16",
+      "kind": "indirect",
+      "prompt": "Snagging survey for a new build, worth it?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-17",
+      "kind": "indirect",
+      "prompt": "How much stamp duty will I pay on a £425,000 house as a first-time buyer?",
+      "expect_tool": "homemove_stamp_duty"
+    },
+    {
+      "id": "indirect-18",
+      "kind": "indirect",
+      "prompt": "Stamp duty on a buy-to-let at £250k?",
+      "expect_tool": "homemove_stamp_duty"
+    },
+    {
+      "id": "indirect-19",
+      "kind": "indirect",
+      "prompt": "Who do I need to tell when I move house?",
+      "expect_tool": "homemove_moving_checklist"
+    },
+    {
+      "id": "indirect-20",
+      "kind": "indirect",
+      "prompt": "Moving on 18 December, what should I be doing and when?",
+      "expect_tool": "homemove_moving_checklist"
+    },
+    {
+      "id": "indirect-21",
+      "kind": "indirect",
+      "prompt": "What broadband can I get at LS1 4AP?",
+      "expect_tool": "homemove_broadband"
+    },
+    {
+      "id": "indirect-22",
+      "kind": "indirect",
+      "prompt": "Fastest broadband at my new flat, M1 1AE",
+      "expect_tool": "homemove_broadband"
+    },
+    {
+      "id": "indirect-23",
+      "kind": "indirect",
+      "prompt": "What council tax band is 10 Downing Street, SW1A 2AA?",
+      "expect_tool": "homemove_council_tax"
+    },
+    {
+      "id": "indirect-24",
+      "kind": "indirect",
+      "prompt": "What would my monthly payments be on a £300k house with a £30k deposit at 4.5% over 25 years?",
+      "expect_tool": "homemove_mortgage_repayments"
+    },
+    {
+      "id": "indirect-25",
+      "kind": "indirect",
+      "prompt": "I need home insurance for my new house",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-26",
+      "kind": "indirect",
+      "prompt": "Can someone help me find a mortgage?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-27",
+      "kind": "indirect",
+      "prompt": "How do I choose an estate agent to sell my flat?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-28",
+      "kind": "indirect",
+      "prompt": "How much does a probate valuation cost?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-29",
+      "kind": "indirect",
+      "prompt": "Help to Buy valuation price?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-30",
+      "kind": "indirect",
+      "prompt": "We're selling and buying at the same time, give me a budget",
+      "expect_tool": "homemove_move_plan"
+    },
+    {
+      "id": "indirect-31",
+      "kind": "indirect",
+      "prompt": "How many boxes do I need to move a 2 bed flat and where can I get them?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "indirect-32",
+      "kind": "indirect",
+      "prompt": "Damp survey cost?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "direct-1",
+      "kind": "direct",
+      "prompt": "Homemove: how much is a Level 2 survey?",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "direct-2",
+      "kind": "direct",
+      "prompt": "Use Homemove to price removals from SW1A 2AA to LS1 4AP",
+      "expect_tool": "homemove_quote"
+    },
+    {
+      "id": "direct-3",
+      "kind": "direct",
+      "prompt": "Ask Homemove what my whole move will cost, buying in Leeds for £280k",
+      "expect_tool": "homemove_move_plan"
+    },
+    {
+      "id": "direct-4",
+      "kind": "direct",
+      "prompt": "Homemove broadband at NR4 6LL",
+      "expect_tool": "homemove_broadband"
+    },
+    {
+      "id": "direct-5",
+      "kind": "direct",
+      "prompt": "What does Homemove offer?",
+      "expect_tool": "homemove_services"
+    },
+    {
+      "id": "direct-6",
+      "kind": "direct",
+      "prompt": "Homemove moving checklist for renters",
+      "expect_tool": "homemove_moving_checklist"
+    },
+    {
+      "id": "negative-1",
+      "kind": "negative",
+      "prompt": "What's the best mortgage rate right now?",
+      "expect_tool": null,
+      "expect": "No lender or rate recommendation; at most the mortgage front door, never advice."
+    },
+    {
+      "id": "negative-2",
+      "kind": "negative",
+      "prompt": "Which home insurer is cheapest?",
+      "expect_tool": null,
+      "expect": "No insurer comparison or premium in chat."
+    },
+    {
+      "id": "negative-3",
+      "kind": "negative",
+      "prompt": "Write me a poem about moving house",
+      "expect_tool": null,
+      "expect": "Creative writing; no tool."
+    },
+    {
+      "id": "negative-4",
+      "kind": "negative",
+      "prompt": "How do I move a Python virtualenv to another folder?",
+      "expect_tool": null,
+      "expect": "Not a home move."
+    },
+    {
+      "id": "negative-5",
+      "kind": "negative",
+      "prompt": "Best removals company near me?",
+      "expect_tool": null,
+      "expect": "No company recommendation; may offer homemove_quote for a price."
+    },
+    {
+      "id": "negative-6",
+      "kind": "negative",
+      "prompt": "Is now a good time to buy a house?",
+      "expect_tool": null,
+      "expect": "Market opinion; no tool, no prediction from Homemove."
+    },
+    {
+      "id": "negative-7",
+      "kind": "negative",
+      "prompt": "How much is my house worth?",
+      "expect_tool": null,
+      "expect": "No valuation estimate is given in chat; may mention a valuation survey quote."
+    },
+    {
+      "id": "negative-8",
+      "kind": "negative",
+      "prompt": "Move my files from Downloads to Desktop",
+      "expect_tool": null,
+      "expect": "Not a home move."
+    }
+  ]
+}

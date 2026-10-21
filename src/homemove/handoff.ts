@@ -90,6 +90,7 @@ function propertyOf(answer: QuoteAnswer): HandoffProperty | undefined {
 
 /** The link for one quote: the handoff page when configured, else the service's own wizard. */
 export function continueUrlForQuote(answer: QuoteAnswer, base: string | undefined, now = new Date()): string {
+  if (answer.status === "front_door") return answer.url;
   const service = serviceOf(answer);
   const property = propertyOf(answer);
   const page = service ? handoffUrl(base, { source: "chatgpt", created_at: now.toISOString(), ...(property ? { property } : {}), services: [service] }) : undefined;

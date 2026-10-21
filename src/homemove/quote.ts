@@ -145,7 +145,8 @@ export type QuoteAnswer =
   | { status: "quoted_by_hand"; product: ProductView; postcode: string; property?: PropertyView; answers: AnswerView[]; legal?: LegalView }
   | { status: "choose_service"; options: ProductView[] }
   | { status: "unknown_service"; service: string }
-  | { status: "address_not_found"; reason: string; postcode: string; product?: ProductView; said?: string };
+  | { status: "address_not_found"; reason: string; postcode: string; product?: ProductView; said?: string }
+  | { status: "front_door"; door: FrontDoor["kind"]; name: string; line: string; postcode: string; url: string };
 
 export interface ProductView { id: number; name: string; type: string | null }
 /** A value band with its price, so the card can show "from £X" and let them pick. */
@@ -182,6 +183,29 @@ export interface AnswerView { name: string; label: string }
 export interface QuestionView { name: string; question: string; options: string[] }
 
 const view = (p: MotusProduct): ProductView => ({ id: p.id, name: p.name.trim(), type: p.type });
+
+/**
+ * Services homemove.com runs end to end with a regulated partner, where ChatGPT is only the way
+ * in: no price, comparison or recommendation is given here, and the card opens homemove.com's own
+ * flow (with its disclosures). Checked before the catalogue so "home insurance" never resolves to a
+ * survey and "selling my house" never to a valuation.
+ */
+export interface FrontDoor { kind: "home_insurance" | "mortgage" | "estate_agent"; name: string; line: string; said: RegExp; url: (postcode: string) => string }
+export const FRONT_DOORS: FrontDoor[] = [
+  { kind: "home_insurance", name: "Home insurance", line: "Buildings, contents or both, quoted on homemove.com by Homemove's insurance partner.",
+    said: /\b(home|house|buildings?|contents|landlords?)\s+insurance\b|^insurance$|\binsure (my|the|our) (home|house|flat)\b/i, url: () => "https://homemove.com/quote/home-insurance/" },
+  { kind: "mortgage", name: "Mortgage", line: "Homemove's mortgage service on homemove.com puts you in touch with an adviser for a purchase or a remortgage.",
+    said: /\b(re-?mortgag\w*|mortgage (advice|adviser|advisor|broker|deal|deals|offer|in principle)|mortgage$|get a mortgage)\b/i, url: () => "https://homemove.com/mortgages/search/" },
+  { kind: "estate_agent", name: "Estate agents", line: "Homemove helps you choose an estate agent to sell your home on homemove.com.",
+    said: /\b(estate agents?|sell(ing)? (my|our|the) (home|house|flat|property)|agent to sell)\b/i,
+    url: (pc) => `https://homemove.com/estate-agents/search/${pc ? `${encodeURIComponent(pc.replace(/\s+/g, "").toUpperCase())}/` : ""}` },
+];
+
+export function frontDoorFor(service: string | number, postcode: string): QuoteAnswer | undefined {
+  if (typeof service !== "string" || /reinstatement|survey|valuation for|probate|matrimonial/i.test(service)) return undefined;
+  const door = FRONT_DOORS.find((d) => d.said.test(service.trim()));
+  return door && { status: "front_door", door: door.kind, name: door.name, line: door.line, postcode, url: door.url(postcode) };
+}
 
 /** Conveyancing is priced by Atlas (motus get_legal_quote), not from a product grid. */
 export const CONVEYANCING = /\b(convey\w*|solicitors?|legal (fees?|work|costs?)|legals|lawyers?)\b/i;
@@ -275,6 +299,8 @@ export async function quote(request: QuoteRequest, deps: { motus: MotusClient; p
   const legalId = /^(1062|1063)$/.test(String(request.service)) ? String(request.service) : undefined;
   if (legalId) return conveyancing({ ...request, service: legalId === "1063" ? "conveyancing selling" : "conveyancing buying" }, deps);
   if (typeof request.service === "string" && CONVEYANCING.test(request.service)) return conveyancing(request, deps);
+  const door = frontDoorFor(request.service, request.postcode);
+  if (door) return door;
   const products = await deps.motus.products();
   const { product, candidates } = resolveProduct(products, request.service);
   if (!product) {
