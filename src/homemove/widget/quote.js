@@ -214,6 +214,10 @@
   const DEMO_ADDRESSES = Array.from({ length: 30 }, (_, i) => ({ uprn: String(i + 1), line: `${i * 2 + 41} Barnesdale Road`, town: "Norwich", postcode: "NR4 6LL" }));
   DEMO.estimated = { ...DEMO.value, status: "priced", price_gbp: 499, postcode: "NR4 6LL", property: { address: "75 Barnesdale Road", postcode: "NR4 6LL", uprn: "1" }, assumed: [{ name: "property_price", value: "£200k–£300k", source: "Homedata's estimate for this home" }], band: { min: 200001, max: 300000 } };
   DEMO.lost = { status: "address_not_found", reason: "multiple_matches", postcode: "NR4 6LL", product: { id: 2, name: "Level 2 Survey", type: "surveys" }, said: "75 Barnesdale Rd", sample: true, bands: DEMO.value.bands };
+  DEMO.broadband = { view: "broadband", postcode: "NR4 6LL", sort: "price", total: 6, sample: true, continue_url: "https://homemove.com/broadband/compare/NR46LL",
+    all_deals: [["NOW", "Brilliant Broadband", 10, 20, 12], ["NOW", "Fab Fibre", 36, 24, 12], ["Vodafone", "Full Fibre 150", 150, 26, 24], ["Sky", "Full Fibre 500", 500, 35, 18], ["BT", "Full Fibre 900", 900, 49.99, 24], ["Hyperoptic", "1Gb", 1000, 45, 24]]
+      .map(([provider, name, down, monthly, months], i) => ({ id: i + 1, provider, logo: null, name, download_mbps: down, upload_mbps: Math.round(down / 5), monthly_gbp: monthly, setup_gbp: 0, contract_months: months, offer: null, landline: false, tv: false, features: ["Unlimited usage"] })) };
+  DEMO.broadband.deals = DEMO.broadband.all_deals;
   const DEMO_PRICES = { "1039": { "1 Bedroom|Pre-inspection": 499, "2 Bedrooms|Post-Completion": 449 }, "1097": { "1 Bedroom": 209, "2 Bedrooms": 267, "3 Bedrooms": 376, "4 Bedrooms": 484 } };
 
   const app = $("#app");
@@ -267,12 +271,13 @@
     if (!RIG) return fetch(`${A}rig.json`).then((r) => r.json()).then((rig) => { RIG = rig; boot(); });
     const qp = new URLSearchParams(location.search);
     const data = window.openai?.toolOutput ?? (qp.get("demo") ? DEMO[qp.get("demo")] : null);
-    if (!data || (!data.status && data.view !== "plan")) {
+    if (!data || (!data.status && data.view !== "plan" && data.view !== "broadband")) {
       // The tool result arrives after the widget loads in ChatGPT.
       app.replaceChildren(h("div", { class: "inline" }, sky(), h("div", { class: "copy" }, h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, "Working out your price…")), h("div", { class: "stage-mini" }, livingHomie("welcome"))));
       return;
     }
     if (data.view === "plan") { state.plan = data; renderPlanInline(); if (qp.get("open") === "1") openPlan(); return; }
+    if (data.view === "broadband") { state.bb = data; renderBroadbandInline(); if (qp.get("open") === "1") openBroadband(); return; }
     state.data = data;
     renderInline();
     if (qp.get("open") === "1") openTakeover();
@@ -280,7 +285,7 @@
   let RIG_BOOTED = false;
   window.addEventListener("openai:set_globals", () => {
     const out = window.openai?.toolOutput;
-    if ((out?.status || out?.view === "plan") && state.data !== out && state.plan !== out) { state.data = null; state.plan = null; boot(); }
+    if ((out?.status || out?.view === "plan" || out?.view === "broadband") && state.data !== out && state.plan !== out && state.bb !== out) { state.data = null; state.plan = null; state.bb = null; boot(); }
   });
 
   // ---------------------------------------------------------------- inline card
@@ -831,6 +836,79 @@
     state.ui = { stage, bubble: stage.querySelector(".bubble"), slot: stage.querySelector(".homie-slot"), card };
     await rollingPrice(total, p.total_gbp);
     if (!p.unpriced.length && !reduced) { const conf = h("canvas", { class: "confetti" }); document.body.append(conf); confetti(conf); setTimeout(() => conf.remove(), 2600); }
+  }
+
+  // ---------------------------------------------------------------- broadband
+  // Deals as homemove.com's comparison lists them: the user sorts and filters, nothing is called best.
+  const money2 = (n) => "£" + (Math.round(n * 100) / 100).toLocaleString("en-GB", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
+  const speed = (mbps) => (mbps >= 1000 ? `${+(mbps / 1000).toFixed(1)} Gbps` : `${mbps} Mbps`);
+  const BB_SPEEDS = [[0, "Any speed"], [30, "30+ Mbps"], [100, "100+ Mbps"], [500, "500+ Mbps"], [900, "900+ Mbps"]];
+
+  function renderBroadbandInline() {
+    const b = state.bb, list = b.deals.length ? b.deals : b.all_deals;
+    const cheapest = Math.min(...b.all_deals.map((d) => d.monthly_gbp)), fastest = Math.max(...b.all_deals.map((d) => d.download_mbps));
+    const price = h("div", { class: "price inline-price", "aria-label": `from ${money2(cheapest)} a month` });
+    app.replaceChildren(h("div", { class: "inline" }, sky(),
+      h("div", { class: "copy" },
+        h("div", { class: "eyebrow" }, b.sample ? "Sample deals · preview" : `Broadband at ${b.postcode}`),
+        h("h1", {}, `${b.total} deals here`),
+        h("div", { class: "from-row" }, h("span", { class: "from" }, "from"), price, h("span", { class: "from" }, "/month")),
+        h("p", {}, `Up to ${speed(fastest)}. ${list.slice(0, 3).map((d) => d.provider).filter((v, i, a) => a.indexOf(v) === i).join(", ")} and more.`),
+        h("div", { class: "inline-actions" }, h("button", { class: "cta", onclick: () => openBroadband() }, "Compare deals"), h("button", { class: "link", onclick: () => book(b) }, "homemove.com →"))),
+      h("div", { class: "stage-mini" }, livingHomie("welcome"))));
+    rollingPrice(price, Math.floor(cheapest));
+  }
+
+  async function openBroadband() {
+    try { await window.openai?.requestDisplayMode?.({ mode: "fullscreen" }); } catch { /* inline is fine */ }
+    const b = state.bb;
+    const view = { sort: b.sort ?? "price", min: b.min_mbps ?? 0 };
+    app.replaceChildren();
+    const list = h("ol", { class: "deals" });
+    const count = h("p", { class: "sub" });
+    const draw = () => {
+      const shown = b.all_deals.filter((d) => d.download_mbps >= view.min)
+        .sort((x, y) => view.sort === "speed" ? y.download_mbps - x.download_mbps || x.monthly_gbp - y.monthly_gbp : x.monthly_gbp - y.monthly_gbp || y.download_mbps - x.download_mbps);
+      count.textContent = `${shown.length} of ${b.total} deals at ${b.postcode}, ${view.sort === "speed" ? "fastest" : "cheapest"} first.`;
+      list.replaceChildren(...shown.map((d, i) => {
+        const open = h("button", { class: "cta small", onclick: async () => {
+          open.disabled = true; open.textContent = "Opening…";
+          try {
+            const oa = window.openai;
+            const res = oa?.callTool ? await oa.callTool("homemove_broadband_link", { deal_id: d.id, postcode: b.postcode }) : null;
+            const url = (res?.structuredContent ?? res)?.url;
+            if (url) { if (oa?.openExternal) await oa.openExternal({ href: url }); else window.open(url, "_blank", "noopener"); }
+            else if (!oa) window.open(b.continue_url, "_blank", "noopener");
+          } catch { say("Couldn't open that deal just now."); }
+          open.disabled = false; open.textContent = "See deal";
+        } }, "See deal");
+        const li = h("li", { class: "deal" },
+          h("div", { class: "deal-top" }, d.logo ? h("img", { class: "logo", src: d.logo, alt: d.provider }) : h("b", { class: "logo-text" }, d.provider), h("span", { class: "deal-name" }, d.name)),
+          h("div", { class: "deal-facts" },
+            h("span", {}, h("b", {}, speed(d.download_mbps)), h("small", {}, "download")),
+            h("span", {}, h("b", {}, money2(d.monthly_gbp)), h("small", {}, "a month")),
+            h("span", {}, h("b", {}, d.contract_months ? `${d.contract_months} mo` : "—"), h("small", {}, "contract"))),
+          h("p", { class: "deal-note" }, [d.setup_gbp ? `${money2(d.setup_gbp)} set-up` : "No set-up fee", d.offer, ...d.features.slice(0, 2)].filter(Boolean).join(" · ")),
+          open);
+        if (!reduced && i < 8) li.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 380, delay: i * 40, easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" });
+        return li;
+      }));
+    };
+    const sortChips = h("div", { class: "chips" }, [["price", "Cheapest"], ["speed", "Fastest"]].map(([k, label]) =>
+      h("button", { class: "chip" + (view.sort === k ? " sel" : ""), onclick: (e) => { view.sort = k; sortChips.querySelectorAll(".chip").forEach((c) => c.classList.toggle("sel", c === e.currentTarget)); draw(); } }, label)));
+    const speedChips = h("div", { class: "chips" }, BB_SPEEDS.map(([m, label]) =>
+      h("button", { class: "chip" + (view.min === m ? " sel" : ""), onclick: (e) => { view.min = m; speedChips.querySelectorAll(".chip").forEach((c) => c.classList.toggle("sel", c === e.currentTarget)); draw(); } }, label)));
+    const card = h("div", { class: "card plan" },
+      h("div", { class: "eyebrow" }, b.sample ? "Sample deals · preview" : "Broadband"),
+      h("h2", {}, `Broadband at ${b.postcode}`), count, sortChips, speedChips, list,
+      h("p", { class: "note" }, "Listed prices from homemove.com's broadband comparison. Check availability and price with the provider before you order. Homemove may earn a commission if you order through a link."),
+      h("button", { class: "ghost wide", onclick: () => book(b) }, "See them all on homemove.com"));
+    const stage = h("div", { class: "stage" }, h("div", { class: "bubble on" }, "Let's get you connected!"), h("div", { class: "homie-slot" }, livingHomie("welcome")));
+    app.append(h("div", { class: "takeover" }, sky(),
+      h("div", { class: "topbar" }, h("img", { src: `${A}logo-red.png`, alt: "homemove" }), h("button", { class: "close", "aria-label": "Close", onclick: () => { try { window.openai?.requestDisplayMode?.({ mode: "inline" }); } catch {} renderBroadbandInline(); } }, "✕")),
+      h("div", { class: "main" }, card, stage)));
+    state.ui = { stage, bubble: stage.querySelector(".bubble"), slot: stage.querySelector(".homie-slot"), card };
+    draw();
   }
 
   // ---------------------------------------------------------------- removals inventory

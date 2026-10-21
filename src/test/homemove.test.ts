@@ -12,6 +12,7 @@ import { MotusClient, type MotusProduct } from "../homemove/motus.js";
 import { PropertyLookup } from "../homemove/property.js";
 import { matchOption, quote, resolveProduct } from "../homemove/quote.js";
 import { buildHomemoveServer, planNarration, quoteNarration } from "../homemove/server.js";
+import { BroadbandClient } from "../homemove/broadband.js";
 import { planMove } from "../homemove/plan.js";
 import { continueUrlForPlan, continueUrlForQuote } from "../homemove/handoff.js";
 import { HOMEMOVE_ASSET_PREFIX, HOMEMOVE_WIDGET_URI } from "../homemove/widget.js";
@@ -434,4 +435,41 @@ test("the card's address finder lists a postcode's homes, or searches an address
   assert.deepEqual(bySearch.addresses, [{ uprn: "2630185115", line: "75 Colney Lane", town: "Cringleford", postcode: "NR4 7RQ" }]);
   const tooShort = (await client.callTool({ name: "homemove_find_address", arguments: { query: "nr" } })).structuredContent as { addresses: unknown[] };
   assert.deepEqual(tooShort.addresses, []);
+});
+
+test("broadband lists the comparison's deals in Mbps, sorted as asked, and opens a deal through the click endpoint as chatgpt", async () => {
+  const calls: Array<{ url: string; body?: Record<string, unknown> }> = [];
+  const fetchImpl = (async (input: string | URL, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}) });
+    const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "Content-Type": "application/json" } });
+    if (url.endsWith("/click")) return json({ status: "success", outlink: "https://www.awin1.com/cread.php?awinmid=1&clickref=abc" });
+    return json({ status: "success", total: 3, products: [
+      { id: 29, name: "Brilliant Broadband", network: { shortName: "NOW", logo: "https://cdn.homemove.com/images/broadband/providers/now.png" }, downloadSpeed: 11264, uploadSpeed: 1024, monthlyCost: 20, setupFee: 0, contractLength: 12, offerText: null, landLine: true, tv: false, features: ["Unlimited usage"], isAvailable: true },
+      { id: 41, name: "Full Fibre 900", network: { shortName: "BT", logo: "https://evil.example/x.png" }, downloadSpeed: 921600, uploadSpeed: 112640, monthlyCost: 49.99, setupFee: 9.99, contractLength: 24, offerText: "Free router", isAvailable: true },
+      { id: 50, name: "Gone", network: { shortName: "X" }, downloadSpeed: 1024, monthlyCost: 5, isAvailable: false },
+    ] });
+  }) as typeof fetch;
+  const server = buildHomemoveServer({ motus: fakeMotus(), property: fakeHomedata(), assetOrigin: "https://mcp.homemove.com", broadband: new BroadbandClient({ baseUrl: "https://motus.test/api/broadband", fetchImpl }) });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "t", version: "1" });
+  await Promise.all([server.connect(b), client.connect(a)]);
+  const cheap = (await client.callTool({ name: "homemove_broadband", arguments: { postcode: "nr4 6ll" } })).structuredContent as Record<string, any>;
+  assert.deepEqual(cheap["deals"].map((d: any) => [d.provider, d.download_mbps, d.monthly_gbp]), [["NOW", 11, 20], ["BT", 900, 49.99]], "unavailable deals are dropped; Kbps become Mbps");
+  assert.equal(cheap["deals"][1].logo, null, "a logo is only ever loaded from homemove.com's CDN");
+  assert.equal(cheap["continue_url"], "https://homemove.com/broadband/compare/NR46LL");
+  const fast = (await client.callTool({ name: "homemove_broadband", arguments: { postcode: "NR4 6LL", sort: "speed", min_mbps: 100 } })).structuredContent as Record<string, any>;
+  assert.deepEqual(fast["deals"].map((d: any) => d.id), [41]);
+  assert.equal(calls.filter((c) => c.url.includes("/search?")).length, 1, "the postcode's deals are fetched once");
+  const link = (await client.callTool({ name: "homemove_broadband_link", arguments: { deal_id: 41, postcode: "NR4 6LL" } })).structuredContent as Record<string, any>;
+  assert.equal(link["url"], "https://www.awin1.com/cread.php?awinmid=1&clickref=abc");
+  assert.equal(calls.at(-1)!.body!["source"], "chatgpt");
+  const { tools } = await client.listTools();
+  assert.deepEqual(tools.find((t) => t.name === "homemove_broadband_link")!._meta?.["ui"], { visibility: ["app"] });
+});
+
+test("without the broadband comparison configured, no broadband tool is listed", async () => {
+  const client = await homemoveClient();
+  const { tools } = await client.listTools();
+  assert.ok(!tools.some((t) => t.name.startsWith("homemove_broadband")));
 });
