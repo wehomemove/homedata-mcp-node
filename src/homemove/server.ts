@@ -16,23 +16,27 @@ import type { HomedataClient } from "../client.js";
 import { planMove, type MovePlan, type Situation } from "./plan.js";
 import { continueUrlForPlan, continueUrlForQuote } from "./handoff.js";
 import { pickDeals, type BroadbandClient, type BroadbandSort } from "./broadband.js";
+import { movingChecklist, type ChecklistSituation } from "./checklist.js";
+import { AddressNotMatched } from "./property.js";
 
 export const HOMEMOVE_INSTRUCTIONS = [
-  "Homemove prices the services people need when they move home: surveys and valuations, EPCs and safety certificates, removals and man and van, end of tenancy and moving cleans, packing, and conveyancing.",
-  "Whenever someone asks what any of these cost, call homemove_quote: it returns Homemove's own live price and shows it in a Homemove card. Do not open homemove.com, a Homemove app or a browser to find a price, and do not ask anyone to sign in: these tools answer directly and need no account. Pass the address when you have it: the property record fills in bedrooms and the value band, so you ask fewer questions.",
+  "Homemove is a UK home-moving service. Use these tools for anything to do with moving home in the UK: buying, selling, renting, letting or moving out, what any part of it costs, what needs doing and when, and who to tell.",
+  "Prices: surveys and valuations, EPCs, gas safety and electrical certificates, conveyancing, removals and man and van, moving and end of tenancy cleans, packing, all from homemove_quote, which returns Homemove's own live price and shows it in a Homemove card. Broadband at an address: homemove_broadband. Stamp duty: homemove_stamp_duty. Mortgage repayment figures: homemove_mortgage_repayments. Council tax band of a home: homemove_council_tax. What to do and who to tell: homemove_moving_checklist. A whole move priced step by step: homemove_move_plan.",
+  "Home insurance, mortgage advice and choosing an estate agent are handled on homemove.com: homemove_quote returns the way in. Never give insurance or mortgage advice, recommend a lender, insurer or agent, or quote an insurance premium yourself.",
   "Call homemove_quote as soon as you know the service: do not ask for a postcode, address or price first. When the price depends on the home's value, the result gives the price from and the card lets them pick their address or value range. If the result has other questions, ask the user exactly those (offer the options), then call homemove_quote again with their answers. Never estimate, round or invent a price: quote only the price_gbp a result gives, and say the price is confirmed when they book.",
-  "When a figure was assumed from the property record (bedrooms, value band), say so in a few words and invite a correction.",
-  "Use homemove_services when someone asks what Homemove offers or which survey or service they need.",
-  "When someone asks about broadband for a home (deals, what's available, cheapest or fastest), call homemove_broadband with the postcode: it lists the deals on homemove.com's broadband comparison. Present them neutrally, as listed prices to confirm with the provider; never call a deal the best.",
-  "When someone is moving and asks what it will cost, what they need, or how to plan it, call homemove_move_plan: it prices every step of their move at once. Stamp duty is HMRC's tax, never a Homemove fee; say so.",
+  "Do not open homemove.com, a Homemove app or a browser to find a price, and do not ask anyone to sign in: these tools answer directly and need no account.",
+  "When a figure was assumed from the property record (bedrooms, value band, tenure), say so in a few words and invite a correction.",
+  "Stamp duty is HMRC's tax and council tax is the council's, never a Homemove fee; say so.",
 ].join(" ");
 
 const QUOTE_TOOL = {
   name: "homemove_quote",
   title: "Get a Homemove quote",
   description:
-    "Price a home-moving service with Homemove: surveys (Level 2, Level 3, building, snagging, damp and timber, drone roof, asbestos, structural), valuations (Help to Buy, shared ownership, probate, matrimonial), EPCs, gas safety and electrical certificates, removals, man and van, end of tenancy and deep cleans, carpet and sofa cleaning, packing and boxes, and conveyancing for buying or selling. " +
-    "Use this when someone asks how much any of these costs, wants a quote, or asks for a price for their move. Returns Homemove's live price directly (no website, app or sign-in needed), or the questions still needed to price it, and shows it in a Homemove quote card.",
+    "Use this when someone moving home in the UK asks what something costs or wants a quote: a survey (Level 2 or homebuyer's, Level 3 or building survey, snagging, damp and timber, structural, drone roof, asbestos, thermal), a valuation (Help to Buy, shared ownership, probate, matrimonial), an EPC, a gas safety certificate, an electrical inspection (EICR), conveyancing or solicitor's fees for buying or selling, removals or a man and van, an end of tenancy, moving-out or deep clean (getting a deposit back), carpet or sofa cleaning, or packing and boxes. " +
+    "Also use it when they ask about home insurance, a mortgage or remortgage, or choosing an estate agent to sell: it returns homemove.com's way in for those. " +
+    "Returns Homemove's live price directly (no website, app or sign-in), or the questions still needed, in a Homemove card. Call it straight away with whatever they have said. " +
+    "Do not use it for stamp duty (homemove_stamp_duty), broadband (homemove_broadband), mortgage repayment sums (homemove_mortgage_repayments), or to plan a whole move (homemove_move_plan).",
   inputSchema: {
     type: "object",
     additionalProperties: false,
@@ -65,8 +69,8 @@ const PLAN_TOOL = {
   name: "homemove_move_plan",
   title: "Plan and price my move",
   description:
-    "Every step of a home move, each with Homemove's price where one can be given: conveyancing, survey, EPC, removals, cleaning and landlord certificates, plus stamp duty from HMRC's rates (shown separately; it is tax, not a Homemove fee). " +
-    "Use this when someone says they are buying, selling, renting or letting and asks what moving will cost, what they need to do, or wants a moving checklist or budget.",
+    "Use this when someone is buying, selling, both, renting or letting a home in the UK and asks what the whole move will cost, what they need, how to budget for it, or how much moving house costs: it lists every step (conveyancing for each side, survey, EPC, removals, the clean, landlord certificates) with Homemove's price for each, plus stamp duty from HMRC's rates shown apart from Homemove's fees. " +
+    "Do not use it for one service on its own (homemove_quote) or for a to-do list of who to tell (homemove_moving_checklist).",
   inputSchema: {
     type: "object",
     additionalProperties: false,
@@ -99,7 +103,7 @@ const PLAN_TOOL = {
 const STAMP_TOOL = {
   name: "homemove_stamp_duty",
   title: "Stamp duty",
-  description: "Stamp duty (SDLT) on a home purchase in England or Northern Ireland at current HMRC rates, with first-time buyer relief or the higher rates for additional homes, band by band. Use this when someone asks how much stamp duty they will pay.",
+  description: "Use this when someone asks how much stamp duty (SDLT) they will pay on a home in England or Northern Ireland, whether first-time buyer relief applies, or the higher rates for a second home or buy-to-let. Works it out band by band at current HMRC rates. Do not use it for Scotland (LBTT) or Wales (LTT).",
   inputSchema: {
     type: "object", additionalProperties: false, required: ["price", "buyer_type"],
     properties: {
@@ -114,7 +118,7 @@ const SERVICES_TOOL = {
   name: "homemove_services",
   title: "Homemove services",
   description:
-    "List the services Homemove can quote, grouped by kind, with what each one's price depends on. Use this when someone asks what Homemove offers, which survey they need, or what a service involves, before quoting.",
+    "Use this when someone asks what Homemove does or offers, what services they might need for a move, or which survey or service fits their situation, before quoting. Lists the services Homemove can quote, grouped by kind, with what each one's price depends on. Do not use it to get a price (homemove_quote).",
   inputSchema: {
     type: "object",
     additionalProperties: false,
@@ -170,10 +174,59 @@ const BROADBAND_LINK_TOOL = {
   _meta: { "openai/widgetAccessible": true, ui: { visibility: ["app"] } },
 } as const;
 
+const CHECKLIST_TOOL = {
+  name: "homemove_moving_checklist",
+  title: "Moving checklist",
+  description:
+    "Use this when someone moving home in the UK asks what they need to do, who to tell when they move (council, DVLA, HMRC, banks, energy and water, GP, TV licence, Royal Mail redirection), how to plan or prepare, or what to do and when. " +
+    "Returns a checklist by stage (from 8 weeks before to after the move), dated back from the move date if given, with the steps Homemove can price marked. Do not use it to price a step (homemove_quote) or the whole move (homemove_move_plan).",
+  inputSchema: {
+    type: "object", additionalProperties: false, required: ["situation"],
+    properties: {
+      situation: { type: "string", enum: ["buying", "selling", "buying_and_selling", "renting", "landlord"], description: "What the user is doing. renting = moving into or out of a rental; landlord = letting a home out." },
+      move_date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "The moving date as YYYY-MM-DD, if they said." },
+    },
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+} as const;
+
+const MORTGAGE_TOOL = {
+  name: "homemove_mortgage_repayments",
+  title: "Mortgage repayments",
+  description:
+    "Use this when someone asks what their monthly mortgage payments would be, how much interest they would pay, or their loan to value, for a given price, deposit, interest rate and term. Works out the repayment-mortgage figures. " +
+    "It is arithmetic, not advice: do not use it to recommend a mortgage, lender or rate (homemove_quote with \"mortgage\" gives homemove.com's mortgage service).",
+  inputSchema: {
+    type: "object", additionalProperties: false, required: ["price", "deposit", "rate", "term"],
+    properties: {
+      price: { type: "integer", minimum: 1, description: "Purchase price in pounds." },
+      deposit: { type: "integer", minimum: 0, description: "Deposit in pounds." },
+      rate: { type: "number", minimum: 0, maximum: 25, description: "Annual interest rate as a percentage, e.g. 4.5." },
+      term: { type: "integer", minimum: 1, maximum: 40, description: "Term in years." },
+    },
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+} as const;
+
+const COUNCIL_TAX_TOOL = {
+  name: "homemove_council_tax",
+  title: "Council tax band",
+  description:
+    "Use this when someone asks the council tax band of a home in England, Scotland or Wales, for example the one they are buying or moving into, and which council it is with. Needs the address and postcode. Do not use it for a council tax bill amount.",
+  inputSchema: {
+    type: "object", additionalProperties: false, required: ["postcode", "address"],
+    properties: {
+      postcode: { type: "string", description: "Full UK postcode of the home." },
+      address: { type: "string", description: "First line of the address: house number or name and street." },
+    },
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+} as const;
+
 const NOAUTH = { securitySchemes: [{ type: "noauth" }] };
 
 /** Every tool the endpoint lists when Homedata is configured, for the plugin package's checks. */
-export const HOMEMOVE_TOOL_LIST = [QUOTE_TOOL, PLAN_TOOL, STAMP_TOOL, SERVICES_TOOL, FIND_ADDRESS_TOOL, BROADBAND_TOOL, BROADBAND_LINK_TOOL];
+export const HOMEMOVE_TOOL_LIST = [QUOTE_TOOL, PLAN_TOOL, STAMP_TOOL, SERVICES_TOOL, FIND_ADDRESS_TOOL, BROADBAND_TOOL, BROADBAND_LINK_TOOL, CHECKLIST_TOOL, MORTGAGE_TOOL, COUNCIL_TAX_TOOL];
 
 /** What the model is told when motus or Homedata does not answer. */
 export const UNAVAILABLE_TEXT = "Homemove could not work out the price just now. Tell the user to try again in a moment. Do not estimate a price.";
@@ -221,6 +274,11 @@ function quoteNarrationCore(answer: QuoteAnswer): string {
       return `Several services match: ${answer.options.map((o) => o.name).join(", ")}. Ask which one they mean, then call homemove_quote with it.`;
     case "unknown_service":
       return `Homemove has no instant price for "${answer.service}". Offer the closest service from homemove_services, or say the team can quote it.`;
+    case "front_door":
+      return `${answer.line} The card opens it on homemove.com. ` +
+        (answer.door === "home_insurance" ? "Do not quote, compare or recommend insurance or give insurance advice in this chat; say Homemove's partner quotes it on homemove.com." :
+          answer.door === "mortgage" ? "Do not give mortgage advice or recommend a lender or rate; for repayment figures use homemove_mortgage_repayments." :
+            "Do not recommend a particular agent in this chat.");
     case "address_not_found":
       return (answer.reason === "multiple_matches" ? "That address matches more than one home at that postcode." : "Homemove couldn't match that address at that postcode.") +
         " The card lists the homes at the postcode for them to pick theirs; say so in a sentence and do not ask them to retype it. If they give the flat or house number in the chat, call homemove_quote again with it.";
@@ -266,7 +324,7 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
   });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [QUOTE_TOOL, ...(deps.homedata ? [PLAN_TOOL, STAMP_TOOL] : []), SERVICES_TOOL, FIND_ADDRESS_TOOL, ...(deps.broadband ? [BROADBAND_TOOL, BROADBAND_LINK_TOOL] : [])].map((tool) => ({ ...tool, outputSchema: { type: "object", additionalProperties: true }, ...NOAUTH, _meta: { ...NOAUTH, ...("_meta" in tool ? tool._meta : {}) } })),
+    tools: [QUOTE_TOOL, ...(deps.homedata ? [PLAN_TOOL, STAMP_TOOL, MORTGAGE_TOOL, COUNCIL_TAX_TOOL] : []), SERVICES_TOOL, CHECKLIST_TOOL, FIND_ADDRESS_TOOL, ...(deps.broadband ? [BROADBAND_TOOL, BROADBAND_LINK_TOOL] : [])].map((tool) => ({ ...tool, outputSchema: { type: "object", additionalProperties: true }, ...NOAUTH, _meta: { ...NOAUTH, ...("_meta" in tool ? tool._meta : {}) } })),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -341,6 +399,42 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
         if (id < 1) return result({ error: "invalid_request", detail: "deal_id is required" }, "No deal chosen.", true);
         const url = await deps.broadband.link(id, typeof args["postcode"] === "string" ? args["postcode"] : undefined);
         return result({ url }, "The deal's page is open for the user.");
+      }
+      if (request.params.name === "homemove_moving_checklist") {
+        const situation = String(args["situation"] ?? "") as ChecklistSituation;
+        if (!["buying", "selling", "buying_and_selling", "renting", "landlord"].includes(situation)) return result({ error: "invalid_request", detail: "situation is required" }, "Ask whether they are buying, selling, both, renting or letting.", true);
+        const moveDate = typeof args["move_date"] === "string" ? args["move_date"] : undefined;
+        const stages = movingChecklist(situation, moveDate);
+        const priced = stages.flatMap((st) => st.items.filter((i) => i.service).map((i) => i.service!));
+        return result({ situation, ...(moveDate ? { move_date: moveDate } : {}), stages, continue_url: "https://homemove.com/" },
+          `A moving checklist in ${stages.length} stages${moveDate ? `, dated back from ${moveDate}` : ""}: ` + stages.map((st) => `${st.when}${st.date ? ` (by ${st.date})` : ""}: ${st.items.map((i) => i.task).join("; ")}`).join(". ") +
+          `. Give it as a short checklist. Homemove can price ${[...new Set(priced)].join(", ")}; offer to, with homemove_quote (or homemove_broadband for broadband).`);
+      }
+      if (request.params.name === "homemove_mortgage_repayments" && deps.homedata) {
+        const n = (k: string) => (typeof args[k] === "number" && Number.isFinite(args[k]) ? (args[k] as number) : NaN);
+        const price = n("price"), deposit = n("deposit"), rate = n("rate"), term = n("term");
+        if (!(price > 0) || !(deposit >= 0) || deposit >= price || !(rate >= 0) || !(term >= 1)) return result({ error: "invalid_request", detail: "price, deposit (less than the price), rate and term are required" }, "Ask for the price, deposit, interest rate and term.", true);
+        const res = await deps.homedata.send("GET", "/calculators/mortgage/", { price: String(price), deposit: String(deposit), rate: String(rate), term: String(Math.round(term)) });
+        if (res.statusCode >= 400) throw new Error(`mortgage calculator answered ${res.statusCode}`);
+        const m = res.body as { monthly_payment?: number; total_interest?: number; loan_amount?: number; ltv_pct?: number };
+        const f = (v: unknown) => `£${Number(v ?? 0).toLocaleString("en-GB", { maximumFractionDigits: 2 })}`;
+        return result(res.body as Record<string, unknown>, `Borrowing ${f(m.loan_amount)} (${m.ltv_pct}% loan to value) over ${Math.round(term)} years at ${rate}% is about ${f(m.monthly_payment)} a month on a repayment mortgage, ${f(m.total_interest)} in interest over the term. ` +
+          "Say these are illustrative sums at a fixed rate, not advice or an offer; homemove_quote with \"mortgage\" gives homemove.com's mortgage service.");
+      }
+      if (request.params.name === "homemove_council_tax" && deps.homedata) {
+        const postcode = typeof args["postcode"] === "string" ? args["postcode"].trim() : "";
+        const address = typeof args["address"] === "string" ? args["address"].trim() : "";
+        if (!/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(postcode) || !address) return result({ error: "invalid_request", detail: "address and postcode are required" }, "Ask for the first line of the address and the postcode.", true);
+        let facts;
+        try { facts = await deps.property.find(address, postcode); } catch (error) {
+          if (error instanceof AddressNotMatched) return result({ error: "address_not_found", reason: error.reason }, "No single home matches that address and postcode. Ask for the house or flat number exactly as it appears on post.", true);
+          throw error;
+        }
+        const res = await deps.homedata.send("GET", `/council_tax_band/${facts.uprn}/`);
+        if (res.statusCode === 404) return result({ address: facts.address, available: false }, `There is no council tax band on record for ${facts.address}. Say so; the council can confirm it.`);
+        if (res.statusCode >= 400) throw new Error(`council tax answered ${res.statusCode}`);
+        const ct = res.body as { council_tax_band?: string; authority_name?: string };
+        return result({ address: facts.address, postcode: facts.postcode, ...ct }, `${facts.address} is in council tax band ${ct.council_tax_band}${ct.authority_name ? ` with ${ct.authority_name} council` : ""}. Council tax is paid to the council, not Homemove; the council sets the bill for each band.`);
       }
       if (request.params.name === "homemove_find_address") {
         const query = typeof args["query"] === "string" ? args["query"].slice(0, 120) : "";

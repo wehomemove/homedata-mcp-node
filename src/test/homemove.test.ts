@@ -90,6 +90,8 @@ function fakeHomedata(charged: string[] = []) {
       { uprn: 100090887383, address: "75 BARNESDALE ROAD, NORWICH, NR4 6LL", building_name: "", building_number: "75", sub_building: "", street: "Barnesdale Road", town: "Norwich" },
       { uprn: 100090887399, address: "FLAT 2, THE MALTINGS, NORWICH, NR4 6LL", building_name: "THE MALTINGS", building_number: "", sub_building: "FLAT 2", street: "", town: "Norwich" }] });
     if (url.pathname === "/address/find/") return json({ suggestions: [{ uprn: 2630185115, address: "75 Colney Lane", postcode: "NR4 7RQ", town: "Cringleford" }], count: 1 });
+    if (url.pathname === "/calculators/mortgage/") return json({ loan_amount: 270000, deposit: 30000, property_price: 300000, annual_rate_pct: 4.5, term_years: 25, monthly_payment: 1500.75, total_interest: 180224.31, ltv_pct: 90 });
+    if (url.pathname.startsWith("/council_tax_band/")) return json({ council_tax_band: "B", authority_name: "Norwich" });
     if (url.pathname.endsWith("/core/")) return json({ valuation_estimate: { estimate_gbp: 350000 } });
     if (url.pathname === "/calculators/stamp-duty/") return json({ price: 350000, buyer_type: url.searchParams.get("buyer_type"), total_tax: 2500, note: "First-time buyer relief applied.", jurisdiction: "England and Northern Ireland", thresholds_from: "1 April 2025" });
     return json({ uprn: 100023336956, rooms: { bedrooms: null, predicted_bedrooms: 3 }, lr_title: { title_class: "Absolute freehold title" } });
@@ -192,8 +194,8 @@ test("ChatGPT sees two no-sign-in tools, the quote card template, and a widget t
   const client = new Client({ name: "t", version: "1" });
   await Promise.all([server.connect(b), client.connect(a)]);
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name), ["homemove_quote", "homemove_services", "homemove_find_address"]);
-  assert.deepEqual(tools[2]!._meta?.["ui"], { visibility: ["app"] }, "the address finder is the card's, not the model's");
+  assert.deepEqual(tools.map((t) => t.name), ["homemove_quote", "homemove_services", "homemove_moving_checklist", "homemove_find_address"]);
+  assert.deepEqual(tools[3]!._meta?.["ui"], { visibility: ["app"] }, "the address finder is the card's, not the model's");
   for (const tool of tools) {
     assert.deepEqual(tool._meta?.["securitySchemes"], [{ type: "noauth" }]);
     assert.equal(tool.annotations?.readOnlyHint, true);
@@ -487,4 +489,43 @@ test("a clean priced on bedrooms from the record carries the bedroom choices, so
   assert.deepEqual(priced.beds_options, BEDS.map((o) => o.label));
   const said = await quote({ service: "end of tenancy clean", postcode: "NR4 6LL", bedrooms: 2 }, deps);
   assert.equal((said as { beds_options?: unknown }).beds_options, undefined, "stated bedrooms need no correction");
+});
+
+test("insurance, mortgages and estate agents are a way into homemove.com, never a price or advice here", async () => {
+  const deps = { motus: fakeMotus(), property: fakeHomedata() };
+  const door = (service: string) => quote({ service, postcode: "NR4 6LL" }, deps);
+  const insurance = await door("home insurance");
+  assert.deepEqual(insurance, { status: "front_door", door: "home_insurance", name: "Home insurance", line: "Buildings, contents or both, quoted on homemove.com by Homemove's insurance partner.", postcode: "NR4 6LL", url: "https://homemove.com/quote/home-insurance/" });
+  assert.match(quoteNarration({ ...insurance, continue_url: "x" } as never), /Do not quote, compare or recommend insurance/);
+  assert.equal((await door("contents insurance")).status, "front_door");
+  assert.equal(((await door("remortgage")) as { door?: string }).door, "mortgage");
+  assert.equal(((await door("estate agent to sell my house")) as { url?: string }).url, "https://homemove.com/estate-agents/search/NR46LL/");
+  assert.notEqual((await door("insurance reinstatement survey")).status, "front_door", "a reinstatement survey is a survey");
+  assert.notEqual((await quote({ service: "conveyancing buying with a mortgage", postcode: "NR4 6LL" }, deps)).status, "front_door", "conveyancing is priced, mortgage or not");
+});
+
+test("the moving checklist is dated back from the move, marks what Homemove prices, and a landlord's is the letting duties", async () => {
+  const client = await homemoveClient();
+  const res = await client.callTool({ name: "homemove_moving_checklist", arguments: { situation: "buying", move_date: "2026-12-18" } });
+  const out = res.structuredContent as { stages: Array<{ when: string; date?: string; items: Array<{ task: string; service?: string }> }> };
+  assert.equal(out.stages[0]!.items[0]!.task, "Instruct a conveyancer");
+  assert.equal(out.stages.find((s) => s.when === "4 weeks before")!.date, "2026-11-20");
+  assert.ok(out.stages.flatMap((s) => s.items).some((i) => i.task === "Update the DVLA"));
+  assert.match((res.content as Array<{ text: string }>)[0]!.text, /Homemove can price .*removals.*broadband/);
+  const landlord = (await client.callTool({ name: "homemove_moving_checklist", arguments: { situation: "landlord" } })).structuredContent as typeof out;
+  assert.deepEqual(landlord.stages.map((s) => s.when), ["Before the tenants move in"]);
+});
+
+test("mortgage repayments are sums, and the council tax band comes from the matched home", async () => {
+  const server = buildHomemoveServer({ motus: fakeMotus(), property: fakeHomedata(), assetOrigin: "https://mcp.homemove.com", homedata: fakeHomedataClient() });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "t", version: "1" });
+  await Promise.all([server.connect(b), client.connect(a)]);
+  const m = await client.callTool({ name: "homemove_mortgage_repayments", arguments: { price: 300000, deposit: 30000, rate: 4.5, term: 25 } });
+  assert.match((m.content as Array<{ text: string }>)[0]!.text, /about £1,500.75 a month.*not advice/);
+  const bad = await client.callTool({ name: "homemove_mortgage_repayments", arguments: { price: 300000, deposit: 300000, rate: 4.5, term: 25 } });
+  assert.equal(bad.isError, true, "a deposit as big as the price is not a mortgage");
+  const ct = await client.callTool({ name: "homemove_council_tax", arguments: { postcode: "SW1A 2AA", address: "10 Downing Street" } });
+  assert.equal((ct.structuredContent as { council_tax_band?: string }).council_tax_band, "B");
+  assert.match((ct.content as Array<{ text: string }>)[0]!.text, /paid to the council, not Homemove/);
 });

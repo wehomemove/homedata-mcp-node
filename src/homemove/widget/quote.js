@@ -343,6 +343,10 @@
         h("h1", {}, `Let's price your ${d.product.name.toLowerCase()}`),
         h("p", {}, d.product.type === "cleaning" && d.questions.length === 1 && d.questions[0].name === "beds" ? "Pick the address and we'll fill in the bedrooms from the property record." : d.questions.length === 1 ? "One quick question and you'll have your price." : `${d.questions.length} quick questions and you'll have your price.`),
         h("div", { class: "inline-actions" }, h("button", { class: "cta", onclick: () => openTakeover() }, "Get my price"), h("button", { class: "link", onclick: () => book(d) }, "homemove.com →")));
+    } else if (d.status === "front_door") {
+      // A service homemove.com runs with a regulated partner: no price or recommendation here, just the way in.
+      copy.append(h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, d.name), h("p", {}, d.line),
+        h("button", { class: "cta", onclick: () => book({ continue_url: d.url }) }, "Continue on homemove.com"));
     } else if (d.status === "quoted_by_hand") {
       copy.append(h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, "This one's priced by hand"), h("p", {}, `A ${d.product.name.toLowerCase()} for this home needs a specialist's quote.`), h("button", { class: "cta", onclick: () => book(d) }, "Get a quote on homemove.com"));
     } else {
