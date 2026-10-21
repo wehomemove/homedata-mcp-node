@@ -5,7 +5,10 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 
 import { HomedataClient } from "../client.js";
 import { isMain } from "../entry.js";
-import { acceptJsonClients, checkAppsChallenge, checkCallsPerMinute, noStoreOnErrors } from "../http.js";
+import { acceptJsonClients, checkAppsChallenge, checkCallsPerMinute, checkSlack, noStoreOnErrors } from "../http.js";
+import { SlackActivity, type ActivitySink } from "../activity.js";
+import { HomeVisitors } from "../home/activity.js";
+import { shownToolName } from "./activity.js";
 import { callerKey } from "../home/http.js";
 import { VERSION } from "../index.js";
 import { MinuteLimiter } from "../limiter.js";
@@ -31,6 +34,10 @@ export interface HomemoveHttpOptions {
   callsPerMinute?: number;
   clientIpHeader?: string;
   appsChallenge?: string;
+  /** Told about every tool call (src/activity.ts); off when absent. */
+  activity?: ActivitySink;
+  /** Counts distinct ChatGPT users for the activity lines. */
+  visitors?: HomeVisitors;
   /** Public origin this endpoint is served from; the widget loads its art from here. */
   assetOrigin?: string;
   now?: () => number;
@@ -66,6 +73,10 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
     return true;
   };
   const assetOrigin = options.assetOrigin ?? DEFAULT_HOMEMOVE_ORIGIN;
+  const visitors = options.visitors ?? new HomeVisitors(undefined, now);
+  const report = (subject: unknown, call: { tool: string; outcome: string; ms: number; detail?: string }) => {
+    if (options.activity) options.activity({ organisation: `Homemove · ${visitors.label(subject)}`, ...call });
+  };
 
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     noStoreOnErrors(res);
@@ -103,14 +114,20 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
     let body: unknown;
     try { body = await read(req); } catch { return void send(res, 400, { jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null }); }
     const calls = (Array.isArray(body) ? body : [body]).filter((m) => (m as { method?: unknown })?.method === "tools/call").length;
-    if (calls && !take(callerKey(body, callerAddress(req, options.clientIpHeader)), calls)) {
+    const caller = callerKey(body, callerAddress(req, options.clientIpHeader));
+    if (calls && !take(caller, calls)) {
+      const subject = caller.startsWith("subject:") ? caller.slice("subject:".length) : undefined;
+      for (const m of (Array.isArray(body) ? body : [body]).filter((x) => (x as { method?: unknown })?.method === "tools/call")) {
+        report(subject, { tool: shownToolName((m as { params?: { name?: unknown } }).params?.name), outcome: "rate limited", ms: 0 });
+      }
       // A single call gets a tool answer the model can relay; ChatGPT's desktop client hangs on a 429.
       const single = !Array.isArray(body);
       return void (single
         ? send(res, 200, { jsonrpc: "2.0", id: (body as { id?: unknown }).id ?? null, result: { content: [{ type: "text", text: CALL_LIMIT_TEXT }], structuredContent: { available: false, limit_reached: true, reason: CALL_LIMIT_TEXT }, isError: true } })
         : send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" }));
     }
-    const server = buildHomemoveServer({ motus: options.motus, property: options.property, assetOrigin, homedata: options.homedata, handoffBase: options.handoffBase, broadband: options.broadband });
+    const server = buildHomemoveServer({ motus: options.motus, property: options.property, assetOrigin, homedata: options.homedata, handoffBase: options.handoffBase, broadband: options.broadband,
+      onToolCall: options.activity ? ({ subject, ...call }) => report(subject, call) : undefined });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });
     await server.connect(transport);
@@ -128,6 +145,7 @@ async function main(): Promise<void> {
   });
   const homedata = new HomedataClient({ apiKey, baseUrl: (process.env["HOMEDATA_BASE_URL"] ?? "").trim() || undefined, version: VERSION });
   const property = new PropertyLookup(homedata);
+  const slack = checkSlack(process.env);
   const handler = createHomemoveHttpHandler({
     motus,
     property,
@@ -139,10 +157,15 @@ async function main(): Promise<void> {
     clientIpHeader: (process.env["HOMEMOVE_CLIENT_IP_HEADER"] ?? "").trim() || undefined,
     appsChallenge: checkAppsChallenge(process.env["OPENAI_APPS_CHALLENGE"]),
     assetOrigin: (process.env["HOMEMOVE_MCP_ORIGIN"] ?? "").trim() || DEFAULT_HOMEMOVE_ORIGIN,
+    activity: slack ? new SlackActivity(slack, fetch, Date.now, (m) => console.error(m.replace("homedata-mcp-http", "homemove-mcp-http"))).report : undefined,
+    visitors: new HomeVisitors((process.env["HOMEMOVE_ACTIVITY_STATE"] ?? "").trim() || undefined),
   });
   const port = Number(process.env["PORT"] || 4178); const host = process.env["HOST"] || "127.0.0.1";
   createServer((req, res) => void handler(req, res).catch((error) => { console.error("[homemove-mcp-http] request failed:", error); if (!res.headersSent) send(res, 500, { error: "internal_error" }); }))
-    .listen(port, host, () => console.error(`homemove-mcp-http ${VERSION} listening on http://${host}:${port}`));
+    .listen(port, host, () => {
+      console.error(`homemove-mcp-http ${VERSION} listening on http://${host}:${port}`);
+      console.error(slack ? `Slack activity: on, to ${slack.channel}` : "Slack activity: off (SLACK_API_TOKEN not set)");
+    });
 }
 
 if (isMain(import.meta.url)) void main().catch((error) => { console.error(`homemove-mcp-http: ${error instanceof Error ? error.message : String(error)}`); process.exit(1); });

@@ -71,7 +71,7 @@ export class BroadbandClient {
     const res = await this.fetch(`${this.base}/click`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ product_id: productId, source: "chatgpt", ...(postcode ? { postcode: postcode.slice(0, 10) } : {}), utm_source: "chatgpt", utm_medium: "app" }),
+      body: JSON.stringify({ product_id: productId, source: "chatgpt-plugin", ...(postcode ? { postcode: postcode.slice(0, 10) } : {}), utm_source: "chatgpt-plugin", utm_medium: "referral", utm_campaign: "homemove-chatgpt-app" }),
       signal: AbortSignal.timeout(8000),
     });
     const body = (await res.json().catch(() => ({}))) as { outlink?: unknown };
