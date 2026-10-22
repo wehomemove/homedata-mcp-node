@@ -347,11 +347,24 @@ export class MapboxRoutes {
     const ends = query.split(",").map((part) => words(part).at(-1));
     const inferred = kind ?? (ends.some((word) => word === "station") ? "station" : ends.some((word) => word === "school") ? "school" : undefined);
     const attempts: Array<Record<string, string>> = [];
+    /** Attempts answered by their own rule instead of namesPlace, keyed by the attempt. */
+    const own = new Map<Record<string, string>, (name: string) => boolean>();
+    const flat = (value: string) => words(value).join(" ");
     if (postcode?.full) attempts.push({ ...base, q: postcode.full, types: "postcode" });
     else {
       // "Manchester city centre" is the town itself, not a business with "city centre" in its name.
       const centre = /^(.+?)\s+(?:city|town)\s+centre$/i.exec(query.replace(/,.*$/, "").trim())?.[1];
-      if (centre && !inferred) attempts.push({ ...base, q: centre, types: "place,locality" });
+      if (centre && !inferred) {
+        const attempt = { ...base, q: centre, types: "place,locality" };
+        attempts.push(attempt); own.set(attempt, (name) => flat(name) === flat(centre));
+      }
+      // Mapbox files a university as its buildings ("University of Leeds Driving Simulator"),
+      // never one point: take a building whose name carries the whole name asked, in order.
+      const campus = query.replace(/,.*$/, "").trim();
+      if (!inferred && /\b(university|college)\b/i.test(campus)) {
+        const attempt = { ...base, q: campus, types: "poi", poi_category: "university,college" };
+        attempts.push(attempt); own.set(attempt, (name) => ` ${flat(name)} `.includes(` ${flat(campus)} `));
+      }
       const category = inferred ? CATEGORIES[inferred] : undefined;
       if (category) {
         attempts.push({ ...base, q: query, types: "poi", poi_category: category });
@@ -369,7 +382,8 @@ export class MapboxRoutes {
         const properties = object(feature["properties"]);
         const name = String(properties["name"] ?? "");
         // An unknown postcode comes back as a different one ("BA1 9ZZ" as "GU2 9ZZ").
-        const matches = attempt["types"] === "postcode"
+        const rule = own.get(attempt);
+        const matches = rule ? rule(name) : attempt["types"] === "postcode"
           ? name.replace(/\s+/g, "").toUpperCase() === postcode!.full!.replace(/\s+/g, "")
           : namesPlace(query, { name, where: surroundings(properties), categories: Array.isArray(properties["poi_category_ids"]) ? properties["poi_category_ids"].map(String) : [] }, inferred);
         return matches ? [{ properties, point: point as Position, extra: attempt["types"] === "postcode" ? 0 : extraWords(query, name) }] : [];
