@@ -128,10 +128,9 @@ function listingIds(value: unknown, min: number, max: number, name: string): str
   return ids;
 }
 
-function placeKind(value: unknown, name: string): PlaceKind | undefined {
-  if (value === undefined) return undefined;
-  if (!(PLACE_KINDS as readonly unknown[]).includes(value)) throw new HomeError(`${name} must be one of ${PLACE_KINDS.join(", ")}`);
-  return value as PlaceKind;
+/** The kind of place, when it is one we search by; any other word ("university", "landmark") is a hint we do without. */
+function placeKind(value: unknown): PlaceKind | undefined {
+  return (PLACE_KINDS as readonly unknown[]).includes(value) ? value as PlaceKind : undefined;
 }
 
 /** Ray casting on longitude and latitude, which is exact enough at town scale. */
@@ -199,7 +198,7 @@ export class MapboxRoutes {
   async commute(client: HomeClient, args: CommuteArgs): Promise<JsonObject> {
     const query = text(args.place);
     if (!query) throw new HomeError("place is required: a station, office, school, address or full UK postcode");
-    const kind = placeKind(args.place_kind, "place_kind");
+    const kind = placeKind(args.place_kind);
     const mode = args.mode;
     if (!(TRAVEL_MODES as readonly unknown[]).includes(mode)) throw new HomeError("mode must be walk, cycle or drive");
     const limit = args.minutes;
@@ -250,7 +249,7 @@ export class MapboxRoutes {
     const ids = listingIds(args.listing_ids, 2, 6, "listing_ids");
     const startQuery = args.start === undefined ? null : text(args.start);
     if (args.start !== undefined && !startQuery) throw new HomeError("start must be a place, such as an address, station or full UK postcode, or left out");
-    const startKind = placeKind(args.start_kind, "start_kind");
+    const startKind = placeKind(args.start_kind);
     const homes = await Promise.all(ids.map((id) => client.locate(id)));
     const unplaced = homes.find((home) => home.coordinates === null);
     if (unplaced) throw new HomeError(`Home ${unplaced.listing_id} publishes no map position, so it cannot be put on a route; plan without it`);
@@ -331,7 +330,8 @@ export class MapboxRoutes {
    */
   async place(query: string, kind: PlaceKind | undefined, near: Array<{ latitude: number; longitude: number }> = []): Promise<Place> {
     const postcode = parsePostcode(query);
-    if (kind === "postcode" && !postcode?.full) throw new HomeError(`${query} is not a full UK postcode, such as BA1 1SU`);
+    // "postcode" with only a district ("M1") is still a place to search for, not a refusal.
+    if (kind === "postcode" && !postcode?.full) kind = undefined;
     if (!postcode?.full && words(query).every((word) => GENERIC_WORDS.has(word))) {
       throw new HomeError(`"${query}" does not say which place; name it with its town, such as "Bath Spa station" or "King Edward's School, Bath"`);
     }
@@ -349,6 +349,9 @@ export class MapboxRoutes {
     const attempts: Array<Record<string, string>> = [];
     if (postcode?.full) attempts.push({ ...base, q: postcode.full, types: "postcode" });
     else {
+      // "Manchester city centre" is the town itself, not a business with "city centre" in its name.
+      const centre = /^(.+?)\s+(?:city|town)\s+centre$/i.exec(query.replace(/,.*$/, "").trim())?.[1];
+      if (centre && !inferred) attempts.push({ ...base, q: centre, types: "place,locality" });
       const category = inferred ? CATEGORIES[inferred] : undefined;
       if (category) {
         attempts.push({ ...base, q: query, types: "poi", poi_category: category });

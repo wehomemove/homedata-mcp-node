@@ -19,7 +19,7 @@ import { TtlCache } from "../home/cache.js";
 import { HOME_PHOTO_LIMIT, orderedPhotos, cleanListingDescription, HomeClient, HomeUpstreamError, type HomeClientOptions } from "../home/client.js";
 import { ACCOUNT_TOOLS, SAVED_SEARCH_TYPES, type AccountSettings } from "../home/account.js";
 import { accountFromEnv, createHomeHttpHandler, mapboxTokenFromEnv } from "../home/http.js";
-import { coarsePlace, HomeVisitors } from "../home/activity.js";
+import { coarsePlace, HomeVisitors, outcomeOf } from "../home/activity.js";
 import { formatLine, type ActivitySink, type ToolCallEvent } from "../activity.js";
 import { HOME_RULES } from "../home/plugin.js";
 import { MAPBOX_GL_ASSET_PREFIX } from "../home/mapbox-assets.js";
@@ -2251,8 +2251,6 @@ test("commute and viewing arguments are checked before any request, with errors 
       ["commute_filter", { place: "Bath Spa station", minutes: 15, mode: "run" }, /mode must be walk, cycle or drive/],
       ["commute_filter", { place: "Bath Spa station", minutes: 61, mode: "walk" }, /minutes must be a whole number from 1 to 60/],
       ["commute_filter", { place: "Bath Spa station", minutes: 7.5, mode: "walk" }, /whole number/],
-      ["commute_filter", { place: "Bath Spa station", place_kind: "pub", minutes: 15, mode: "walk" }, /place_kind must be one of station, school, office, postcode, address/],
-      ["commute_filter", { place: "BA1", place_kind: "postcode", minutes: 15, mode: "walk" }, /BA1 is not a full UK postcode/],
       ["commute_filter", { place: "Bath Spa station", minutes: 15, mode: "walk", listing_ids: ["12"] }, /12 is not a listing UUID/],
       ["commute_filter", { place: "Bath Spa station", minutes: 15, mode: "walk", listing_ids: [...ids, ...ids, ...ids] }, /up to|1 to 20/],
       ["plan_viewings", { listing_ids: [ids[0]] }, /two|2 to 6/],
@@ -2268,6 +2266,17 @@ test("commute and viewing arguments are checked before any request, with errors 
       assert.match(body["detail"], message, JSON.stringify(args));
     }
     assert.equal(app.mapbox("/").length, 0, "nothing reached Mapbox");
+  } finally { await app.stop(); }
+});
+
+test("a place kind we don't search by, or a district given as a postcode, is searched for rather than refused", async () => {
+  const app = await routeApp();
+  try {
+    for (const args of [{ place: "Bath Spa station", place_kind: "pub" }, { place: "BA1", place_kind: "postcode" }]) {
+      const { body } = await app.call("commute_filter", { ...args, minutes: 15, mode: "walk" });
+      assert.notEqual(body["error"], "invalid_request", JSON.stringify(args));
+    }
+    assert.ok(app.mapbox("/search/").length >= 2, "both went to Mapbox's search");
   } finally { await app.stop(); }
 });
 
@@ -2457,4 +2466,12 @@ test("activity: places shown at area level", () => {
   assert.equal(coarsePlace("Flat 2, 10 High St"), "an address");
   assert.equal(coarsePlace("10 Downing Street London"), "an address");
   assert.equal(coarsePlace(""), undefined);
+});
+
+test("activity: a refusal says why as a fixed label, never the place the user typed", () => {
+  const refused = (detail: string) => outcomeOf({ isError: true, structuredContent: { error: "invalid_request", detail } });
+  assert.equal(refused('Mapbox found no place in the UK matching "12 Acacia Avenue, Leeds"; add the town'), "invalid request: place not found");
+  assert.equal(refused("12 is not a listing UUID returned by search_homes"), "invalid request: listing ids");
+  assert.equal(refused('"the station" does not say which place; name it with its town'), "invalid request: place too vague");
+  assert.equal(refused("something new"), "invalid request");
 });
