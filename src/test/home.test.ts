@@ -2369,6 +2369,26 @@ test("a place answer counts only when it names the place asked for, and a postco
   assert.equal(namesPlace("Bath Spa station", { name: "Green Park Station", where: "Bristol" }), false, "a shared kind word is not a match");
 });
 
+test("'X city centre' is the town, and a university is the campus building carrying its whole name (Mapbox, 22 Oct 2026)", async () => {
+  const feature = (name: string, full_address: string, feature_type = "poi") => ({ type: "Feature", geometry: { type: "Point", coordinates: [-1.55, 53.80] }, properties: { name, full_address, feature_type } });
+  const fc = (...features: unknown[]) => ({ status: 200, body: { type: "FeatureCollection", features } });
+  const isochrone = Object.entries(ROUTE_FIXTURE.responses).find(([key]) => key.includes("/isochrone/"))![1] as { status: number; body: unknown };
+  const app = await routeApp([
+    [(u) => u.pathname.includes("/isochrone/"), isochrone],
+    [(u) => u.searchParams.get("q") === "Manchester" && u.searchParams.get("types") === "place,locality", fc(feature("Manchester", "Greater Manchester, England", "place"))],
+    [(u) => u.searchParams.get("q") === "Manchester city centre", fc(feature("easyHotel Manchester City Centre", "33 Dale St, Manchester, M1 2HE"))],
+    [(u) => u.searchParams.get("q") === "University of Leeds" && u.searchParams.get("poi_category") === "university,college",
+      fc(feature("Geography East building", "Leeds, LS2 9LA"), feature("Leeds Arts University", "Leeds, LS2 8PH"), feature("University of Leeds Driving Simulator", "Leeds, LS2 3AR"))],
+    [(u) => u.searchParams.get("q") === "University of Leeds", fc(feature("Geography East building", "Leeds, LS2 9LA"), feature("Macaulay Hall", "Leeds, LS6 3QS"))],
+  ]);
+  try {
+    let answer = await app.call("commute_filter", { place: "Manchester city centre", minutes: 40, mode: "cycle" });
+    assert.equal((answer.body["place"] as { name: string }).name, "Manchester", "not the easyHotel");
+    answer = await app.call("commute_filter", { place: "University of Leeds", place_kind: "university", minutes: 40, mode: "cycle" });
+    assert.equal((answer.body["place"] as { name: string }).name, "University of Leeds Driving Simulator", "on campus, not Leeds Arts University or a nameless building");
+  } finally { await app.stop(); }
+});
+
 test("a place in the right town and category but with another name is never taken for the one asked", async () => {
   const at = (name: string, place: string, categories: string[], lng: number, street?: string) => ({
     type: "Feature", geometry: { type: "Point", coordinates: [lng, 51.38] },
