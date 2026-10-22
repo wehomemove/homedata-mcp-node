@@ -31,12 +31,30 @@ const TOWN = /^[A-Za-z][A-Za-z .,'&-]{0,39}$/;
 /** One call, as the Home server saw it. */
 export interface HomeCall { tool: string; outcome: string; ms: number; detail?: string; subject?: unknown }
 
+/** Why a request was refused, as a fixed label: never the text the user or model sent. */
+const REFUSALS: Array<[RegExp, string]> = [
+  [/listing UUID|listing_ids|same home twice/i, "listing ids"],
+  [/does not say which place/i, "place too vague"],
+  [/no place in the UK matching|does not know the postcode/i, "place not found"],
+  [/not a full UK postcode/i, "partial postcode"],
+  [/no (road|road or path) near/i, "no road near place"],
+  [/place is required|start must be/i, "no place given"],
+  [/mode must be/i, "travel mode"],
+  [/minutes must be/i, "minutes"],
+  [/publishes no map position|no driving route/i, "home not on the map"],
+  [/price|deposit|rate|term/i, "calculator inputs"],
+];
+function refusalReason(detail: unknown): string {
+  const hit = typeof detail === "string" ? REFUSALS.find(([re]) => re.test(detail)) : undefined;
+  return hit ? `: ${hit[1]}` : "";
+}
+
 /** A call's outcome from its result: ok, or which kind of refusal. */
 export function outcomeOf(result: { isError?: boolean; structuredContent?: Record<string, unknown>; _meta?: Record<string, unknown> }): string {
   if (!result.isError) return "ok";
   if (result._meta?.["mcp/www_authenticate"]) return "sign-in required";
   const body = result.structuredContent ?? {};
-  if (body["error"] === "invalid_request") return "invalid request";
+  if (body["error"] === "invalid_request") return `invalid request${refusalReason(body["detail"])}`;
   if (body["error"] === "unknown_tool") return "unknown tool";
   if (body["available"] === false) return "upstream unavailable";
   return "error";
