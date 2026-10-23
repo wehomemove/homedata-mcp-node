@@ -16,7 +16,7 @@ import { BroadbandClient } from "../homemove/broadband.js";
 import { tagged } from "../homemove/utm.js";
 import { HomeVisitors } from "../home/activity.js";
 import { planMove } from "../homemove/plan.js";
-import { continueUrlForPlan, continueUrlForQuote } from "../homemove/handoff.js";
+import { continueUrlForPlan, continueUrlForQuote, displayAddress, formatPostcode } from "../homemove/handoff.js";
 import { HOMEMOVE_ASSET_PREFIX, HOMEMOVE_WIDGET_URI } from "../homemove/widget.js";
 
 const BANDS = [["1", "Up to £100,000"], ["5", "£300,001 - £400,000"], ["6", "£400,001 - £500,000"]].map(([value, label]) => ({ value: value!, label: label! }));
@@ -86,7 +86,7 @@ function fakeHomedata(charged: string[] = []) {
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
     if (url.pathname === "/address/match/") {
       if (/nowhere/i.test(url.searchParams.get("address") ?? "")) return json({ reason: "no_match" }, 422);
-      return json({ uprn: 100023336956, full_address: "10 DOWNING STREET, LONDON, SW1A 2AA", postcode: "SW1A 2AA" });
+      return json({ uprn: 100023336956, full_address: "10 Downing Street, London", postcode: "SW1A 2AA" });
     }
     if (url.pathname === "/address/postcode/NR46LL/") return json({ postcode: "NR4 6LL", count: 2, addresses: [
       { uprn: 100090887383, address: "75 BARNESDALE ROAD, NORWICH, NR4 6LL", building_name: "", building_number: "75", sub_building: "", street: "Barnesdale Road", town: "Norwich" },
@@ -319,7 +319,7 @@ test("every outcome links to homemove.com, carrying property and service details
   assert.match(data.ref, /^[A-Za-z0-9_-]{12}$/, "an opaque random handoff id");
   delete data.ref;
   assert.deepEqual(data, { source: "chatgpt", created_at: "2026-10-16T12:00:00.000Z",
-    property: { postcode: "SW1A 2AA", address: "10 DOWNING STREET, LONDON, SW1A 2AA", uprn: "100023336956" },
+    property: { postcode: "SW1A 2AA", address: "10 Downing Street, London", uprn: "100023336956" },
     services: [{ product_id: 2, slug: "rics-level-2", name: "Level 2 Survey", quoted_gbp: 499 }] });
   const clean = await quote({ service: "end of tenancy clean", postcode: "SW1A 2AA", bedrooms: 3 }, deps);
   const cleanData = JSON.parse(Buffer.from(new URL(continueUrlForQuote(clean, "https://homemove.com/continue/")).searchParams.get("d")!, "base64url").toString());
@@ -567,4 +567,17 @@ test("activity: one line per Homemove call with the service and price at area le
   assert.equal(events[2]!.outcome, "rate limited");
   for (const e of events) assert.doesNotMatch(JSON.stringify(e), /Barnesdale|6LL|user-a|100090887383/);
   } finally { http.closeAllConnections(); await new Promise((resolve) => http.close(resolve)); }
+});
+
+test("the handoff carries a stated home value for a value-priced survey, never an estimate, and tidy postcodes", async () => {
+  const deps = { motus: fakeMotus(), property: fakeHomedata() };
+  const decode = (url: string) => JSON.parse(Buffer.from(new URL(url).searchParams.get("d")!, "base64url").toString("utf8"));
+  const stated = await quote({ service: "Level 2 survey", postcode: "sw1a2aa", property_price: 350000 }, deps);
+  const s = decode(continueUrlForQuote(stated, "https://homemove.com/continue/"));
+  assert.equal(s.services[0].property_price, 350000);
+  assert.equal(s.property.postcode, "SW1A 2AA");
+  const estimated = await quote({ service: "Level 2 survey", postcode: "SW1A 2AA", address: "10 Downing Street" }, deps);
+  assert.equal(decode(continueUrlForQuote(estimated, "https://homemove.com/continue/")).services[0].property_price, undefined, "an estimate is never sent as their price");
+  assert.equal(displayAddress("FLAT 2, 79 BARNESDALE ROAD, NORWICH, NR4 6LL", "NR46LL"), "Flat 2, 79 Barnesdale Road, Norwich");
+  assert.equal(formatPostcode("m11ae"), "M1 1AE");
 });

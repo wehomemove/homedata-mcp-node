@@ -78,14 +78,31 @@ function serviceOf(answer: QuoteAnswer): HandoffService | undefined {
     return { kind: "cleaning", name: p.name, clean_type: p.id === 1097 ? "end_of_tenancy" : "deep", ...(Number.isFinite(beds) ? { bedrooms: beds } : {}), ...(priced ? { quoted_gbp: priced } : {}) };
   }
   const slug = SURVEY_SLUGS[p.id];
-  return { product_id: p.id, ...(slug ? { slug } : {}), name: p.name, ...(Object.keys(given).length ? { answers: given } : {}), ...(priced ? { quoted_gbp: priced } : {}) };
+  // A value the user stated travels, so homemove.com prices the survey without asking again; an estimate never does.
+  const stated = answer.status === "priced" ? answer.stated_price : undefined;
+  return { product_id: p.id, ...(slug ? { slug } : {}), name: p.name, ...(Object.keys(given).length ? { answers: given } : {}), ...(stated ? { property_price: stated } : {}), ...(priced ? { quoted_gbp: priced } : {}) };
+}
+
+/** "M11AE" and "m1 1ae" as "M1 1AE". */
+export function formatPostcode(postcode: string): string {
+  const m = /^\s*([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\s*$/i.exec(postcode);
+  return m ? `${m[1]} ${m[2]}`.toUpperCase() : postcode.trim().toUpperCase();
+}
+
+/** "75 BARNESDALE ROAD, NORWICH, NR4 6LL" as "75 Barnesdale Road, Norwich": the page shows the postcode itself. */
+export function displayAddress(address: string, postcode: string): string {
+  const pc = formatPostcode(postcode).replace(/\s+/g, "");
+  const parts = address.split(",").map((part) => part.trim()).filter((part) => part && part.replace(/\s+/g, "").toUpperCase() !== pc);
+  const line = parts.join(", ");
+  return line === line.toUpperCase() ? line.toLowerCase().replace(/(^|[\s\-'(/,])([a-z])/g, (_, a, b) => a + b.toUpperCase()) : line;
 }
 
 function propertyOf(answer: QuoteAnswer): HandoffProperty | undefined {
   if (!("postcode" in answer)) return undefined;
   const prop = "property" in answer ? answer.property : undefined;
   if (!prop && !answer.postcode) return undefined;
-  return { postcode: prop?.postcode ?? answer.postcode, ...(prop?.address ? { address: prop.address } : {}), ...(prop?.uprn ? { uprn: prop.uprn } : {}) };
+  const postcode = formatPostcode(prop?.postcode ?? answer.postcode);
+  return { postcode, ...(prop?.address ? { address: displayAddress(prop.address, postcode) } : {}), ...(prop?.uprn ? { uprn: prop.uprn } : {}) };
 }
 
 /** The link for one quote: the handoff page when configured, else the service's own wizard. */
@@ -111,11 +128,16 @@ export function continueUrlForPlan(plan: MovePlan, request: { to_postcode?: stri
   const services = plan.lines
     .flatMap((l): HandoffService[] => { const s = serviceOf(l.answer); return s ? [{ ...s, for: forOf(l) }] : []; })
     .slice(0, MAX_SERVICES);
+  // The home at a postcode, preferring a line that knows its address.
+  const homeAt = (postcode: string): HandoffProperty => {
+    const at = plan.lines.map((l) => propertyOf(l.answer)).filter((p): p is HandoffProperty => !!p && p.postcode.replace(/\s/g, "") === formatPostcode(postcode).replace(/\s/g, ""));
+    return at.find((p) => p.address) ?? at[0] ?? { postcode: formatPostcode(postcode) };
+  };
   const first = plan.lines.map((l) => propertyOf(l.answer)).find(Boolean);
   const page = handoffUrl(base, {
     source: "chatgpt", created_at: now.toISOString(), situation: plan.situation,
-    ...(request.from_postcode ? { property: plan.lines.map((l) => propertyOf(l.answer)).find((p) => p?.postcode?.replace(/\s/g, "") === request.from_postcode!.replace(/\s/g, "")) ?? { postcode: request.from_postcode } } : first ? { property: first } : {}),
-    ...(request.to_postcode ? { to_property: plan.lines.map((l) => propertyOf(l.answer)).find((p) => p?.postcode?.replace(/\s/g, "") === request.to_postcode!.replace(/\s/g, "")) ?? { postcode: request.to_postcode } } : {}),
+    ...(request.from_postcode ? { property: homeAt(request.from_postcode) } : first ? { property: first } : {}),
+    ...(request.to_postcode ? { to_property: homeAt(request.to_postcode) } : {}),
     services,
   });
   return page ?? "https://homemove.com/";
