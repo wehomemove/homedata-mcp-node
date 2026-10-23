@@ -311,7 +311,7 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
     const version = request.params.uri.match(/^ui:\/\/homemove\/quote-v([1-9]\d*)\.html$/)?.[1];
     if (!version || Number(version) > HOMEMOVE_WIDGET_VERSION) throw new Error("Unknown Homemove UI resource");
     // Broadband provider logos come from homemove.com's CDN.
-    const csp = { connectDomains: [] as string[], resourceDomains: [deps.assetOrigin, "https://cdn.homemove.com"] };
+    const csp = { connectDomains: [deps.assetOrigin], resourceDomains: [deps.assetOrigin, "https://cdn.homemove.com"] };
     return { contents: [{
       uri: request.params.uri,
       mimeType: "text/html;profile=mcp-app",

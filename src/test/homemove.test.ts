@@ -581,3 +581,26 @@ test("the handoff carries a stated home value for a value-priced survey, never a
   assert.equal(displayAddress("FLAT 2, 79 BARNESDALE ROAD, NORWICH, NR4 6LL", "NR46LL"), "Flat 2, 79 Barnesdale Road, Norwich");
   assert.equal(formatPostcode("m11ae"), "M1 1AE");
 });
+
+test("the card can search addresses straight from mcp.homemove.com, capped per visitor", async () => {
+  const handler = createHomemoveHttpHandler({ motus: fakeMotus(), property: fakeHomedata(), searchesPerMinute: 2 });
+  const http = (await import("node:http")).createServer((req, res) => void handler(req, res));
+  await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${(http.address() as { port: number }).port}/widget/addresses?q=`;
+  try {
+    const first = await fetch(base + "nr4%206ll");
+    assert.equal(first.status, 200);
+    assert.equal(first.headers.get("access-control-allow-origin"), "*");
+    assert.equal(((await first.json()) as { addresses: unknown[] }).addresses.length, 2);
+    assert.deepEqual(await (await fetch(base + "nr")).json(), { addresses: [] }, "too short is no search");
+    await fetch(base + "75%20colney");
+    assert.equal((await fetch(base + "75%20colney")).status, 429, "a third search in a minute is refused");
+    assert.equal((await fetch(base.replace("?q=", ""), { method: "POST" })).status, 405);
+  } finally { http.closeAllConnections(); await new Promise((resolve) => http.close(resolve)); }
+  const server = buildHomemoveServer({ motus: fakeMotus(), property: fakeHomedata(), assetOrigin: "https://mcp.homemove.com" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "t", version: "1" });
+  await Promise.all([server.connect(b), client.connect(a)]);
+  const res = await client.readResource({ uri: HOMEMOVE_WIDGET_URI });
+  assert.deepEqual((res.contents[0]!._meta as Record<string, any>)["openai/widgetCSP"].connect_domains, ["https://mcp.homemove.com"], "the card may call its own origin");
+});
