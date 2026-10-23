@@ -1,4 +1,5 @@
 import type { HomedataClient } from "../client.js";
+import { timed } from "./timing.js";
 
 /**
  * What an address tells a quote, from Homedata. Two lookups by default: the
@@ -41,7 +42,7 @@ export class PropertyLookup {
     const hit = this.cache.get(key);
     if (hit && this.now() - hit.at < 24 * 3600_000) return hit.facts;
 
-    const match = await this.homedata.send("GET", "/address/match/", { address, postcode });
+    const match = await timed("homedata address match", () => this.homedata.send("GET", "/address/match/", { address, postcode }));
     if (match.statusCode === 422 || match.statusCode === 404) {
       // Homedata answers 422 {"reason":"no_match"|"multiple_matches"}.
       const code = (match.body as { reason?: string } | null)?.reason ?? "no_match";
@@ -67,7 +68,7 @@ export class PropertyLookup {
     if (text.length < 3) return [];
     const pc = POSTCODE.exec(text);
     if (pc) {
-      const answer = await this.homedata.send("GET", `/address/postcode/${pc[1]!.toUpperCase()}${pc[2]!.toUpperCase()}/`);
+      const answer = await timed("homedata postcode lookup", () => this.homedata.send("GET", `/address/postcode/${pc[1]!.toUpperCase()}${pc[2]!.toUpperCase()}/`));
       if (answer.statusCode === 404 || answer.statusCode === 422) return [];
       if (answer.statusCode >= 400) throw new Error(`Homedata postcode lookup answered ${answer.statusCode}`);
       const body = answer.body as { postcode?: string; addresses?: Array<Record<string, unknown>> };
@@ -80,7 +81,7 @@ export class PropertyLookup {
         return [{ uprn, line, town: title(String(a["town"] ?? "")), postcode: String(body.postcode ?? `${pc[1]} ${pc[2]}`).toUpperCase() }];
       });
     }
-    const answer = await this.homedata.send("GET", "/address/find/", { q: text, limit: "8" });
+    const answer = await timed("homedata address find", () => this.homedata.send("GET", "/address/find/", { q: text, limit: "8" }));
     if (answer.statusCode >= 400) throw new Error(`Homedata address find answered ${answer.statusCode}`);
     const body = answer.body as { suggestions?: Array<Record<string, unknown>> };
     return (body.suggestions ?? []).flatMap((a) => {
@@ -102,7 +103,7 @@ export class PropertyLookup {
   }
 
   private async factsFor(uprn: string, address: string, postcode: string): Promise<PropertyFacts> {
-    const extra = await this.homedata.send("GET", `/property/${uprn}/`, { with: "rooms,lr_title" });
+    const extra = await timed("homedata rooms and title", () => this.homedata.send("GET", `/property/${uprn}/`, { with: "rooms,lr_title" }));
     if (extra.statusCode === 404) throw new AddressNotMatched("no_match");
     const extraBody = (extra.statusCode < 400 ? extra.body : undefined) as { rooms?: Record<string, unknown>; lr_title?: { title_class?: unknown } } | undefined;
     const rooms = extraBody?.rooms ?? {};
@@ -133,7 +134,7 @@ export class PropertyLookup {
   valueOf(uprn: string): Promise<number | null> {
     const hit = this.values.get(uprn);
     if (hit && this.now() - hit.at < 24 * 3600_000) return hit.value;
-    const value = this.homedata.send("GET", `/property/${uprn}/core/`).then((core) => {
+    const value = timed("homedata value estimate", () => this.homedata.send("GET", `/property/${uprn}/core/`)).then((core) => {
       if (core.statusCode >= 400) return null;
       const body = core.body as { valuation_estimate?: { estimate_gbp?: unknown }; last_sale?: { price?: unknown } } | null;
       return num(body?.valuation_estimate?.estimate_gbp) ?? num(body?.last_sale?.price);

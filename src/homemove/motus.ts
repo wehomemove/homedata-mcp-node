@@ -5,6 +5,7 @@
  * (agent:chatgpt-homemove) whose product scope, op allow-list, rate limit and
  * kill switch live in motus (hm_mcp_principals), and every call is audited there.
  */
+import { timed } from "./timing.js";
 
 export interface PricingOption { value: string; label: string }
 export interface PricingInput { key: number; name: string; options: PricingOption[] }
@@ -128,6 +129,10 @@ export class MotusClient {
   }
 
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    return timed(`motus ${path.replace("/api/mcp/bookings/", "")}`, () => this.send<T>(path, body));
+  }
+
+  private async send<T>(path: string, body: Record<string, unknown>): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 15_000);
     try {

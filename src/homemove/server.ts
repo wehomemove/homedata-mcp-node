@@ -17,6 +17,7 @@ import type { HomedataClient } from "../client.js";
 import { planMove, type MovePlan, type Situation } from "./plan.js";
 import { continueUrlForPlan, continueUrlForQuote } from "./handoff.js";
 import { tagged } from "./utm.js";
+import { timeCall } from "./timing.js";
 import { callDetail, shownToolName } from "./activity.js";
 import { outcomeOf, type HomeCall } from "../home/activity.js";
 import { pickDeals, type BroadbandClient, type BroadbandSort } from "./broadband.js";
@@ -340,7 +341,7 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
         if (postcode && !/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(postcode)) return result({ error: "invalid_request", detail: "postcode must be a full UK postcode" }, "Ask the user for the full postcode of the property, then try again.", true);
         if ((typeof service !== "string" || !service.trim()) && typeof service !== "number") return result({ error: "invalid_request", detail: "service is required" }, "Ask which service they want priced.", true);
         const answers = args["answers"] && typeof args["answers"] === "object" && !Array.isArray(args["answers"]) ? args["answers"] as Record<string, unknown> : undefined;
-        const answer = await quote({
+        const answer = await timeCall("homemove_quote", () => quote({
           service: service as string,
           postcode,
           address: typeof args["address"] === "string" ? args["address"] : undefined,
@@ -352,7 +353,7 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
           home_size: typeof args["home_size"] === "string" ? args["home_size"] : undefined,
           items: Array.isArray(args["items"]) ? (args["items"] as Array<{ item?: unknown; quantity?: unknown }>).filter((i) => typeof i?.item === "string").map((i) => ({ item: String(i.item), quantity: typeof i.quantity === "number" ? i.quantity : undefined })) : undefined,
           inventory: args["inventory"] && typeof args["inventory"] === "object" && !Array.isArray(args["inventory"]) ? Object.fromEntries(Object.entries(args["inventory"] as Record<string, unknown>).filter(([, v]) => typeof v === "number").map(([k, v]) => [k, v as number])) : undefined,
-        }, deps);
+        }, deps));
         const what = "product" in answer && answer.product ? answer.product.name : answer.status === "front_door" ? answer.door : answer.status;
         const continue_url = tagged(continueUrlForQuote(answer, deps.handoffBase), what);
         const withLink = { ...answer, ...("booking_url" in answer && answer.booking_url ? { booking_url: tagged(answer.booking_url, what) } : {}), continue_url };
