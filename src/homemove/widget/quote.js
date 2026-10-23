@@ -5,6 +5,9 @@
 (() => {
   "use strict";
   const A = (document.getElementById("app")?.dataset.base ?? "") + "assets/";
+  const ORIGIN = (() => { try { return new URL(A, location.href).origin; } catch { return ""; } })();
+  /** A tool call that does not answer in time is an error the card can say and retry, never a hang. */
+  const withTimeout = (promise, ms) => Promise.race([promise, new Promise((_, no) => setTimeout(() => no(new Error("timeout")), ms))]);
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const $ = (sel, root = document) => root.querySelector(sel);
   const h = (tag, attrs = {}, ...kids) => {
@@ -228,7 +231,7 @@
     const args = { service: String(d.product.id), ...(d.postcode ? { postcode: d.postcode } : {}), ...(d.to_postcode ? { to_postcode: d.to_postcode } : {}), ...(d.property?.address ? { address: state.args.address ?? d.property.address.split(",")[0] } : {}), ...state.args, ...extra };
     const oa = window.openai;
     if (oa && typeof oa.callTool === "function") {
-      const res = await oa.callTool("homemove_quote", args);
+      const res = await withTimeout(oa.callTool("homemove_quote", args), 20000);
       return res?.structuredContent ?? res;
     }
     await wait(800); // preview only
@@ -258,7 +261,12 @@
   async function findAddresses(query) {
     const oa = window.openai;
     if (oa && typeof oa.callTool === "function") {
-      const res = await oa.callTool("homemove_find_address", { query });
+      // Straight to our server first: the tool path goes through ChatGPT and back, and is the slow part.
+      try {
+        const res = await fetch(`${ORIGIN}/widget/addresses?q=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(4000) });
+        if (res.ok) return (await res.json()).addresses ?? [];
+      } catch { /* fall back to the tool */ }
+      const res = await withTimeout(oa.callTool("homemove_find_address", { query }), 10000);
       return (res?.structuredContent ?? res)?.addresses ?? [];
     }
     await wait(350); // preview only
@@ -603,7 +611,11 @@
         if (next?.status === "needs_answers") { state.data = next; state.step = 0; return renderStep(); }
         if (next?.status === "quoted_by_hand") { state.data = next; say("That one needs a specialist."); return; }
         throw new Error("no price");
-      } catch { say("Hmm, I couldn't look that up. Try again in a moment?"); }
+      } catch {
+        // Back to the list they were looking at, so a slow answer never strands them.
+        addressStep();
+        say("That took too long. Pick the home again?");
+      }
     });
     body.append(
       h("div", { class: "eyebrow" }, from ? `${d.product.name} · from ${gbp(from)}` : d.product.name),
@@ -941,7 +953,7 @@
           open.disabled = true; open.textContent = "Opening…";
           try {
             const oa = window.openai;
-            const res = oa?.callTool ? await oa.callTool("homemove_broadband_link", { deal_id: d.id, postcode: b.postcode }) : null;
+            const res = oa?.callTool ? await withTimeout(oa.callTool("homemove_broadband_link", { deal_id: d.id, postcode: b.postcode }), 10000) : null;
             const url = (res?.structuredContent ?? res)?.url;
             if (url) { if (oa?.openExternal) await oa.openExternal({ href: url }); else window.open(url, "_blank", "noopener"); }
             else if (!oa) window.open(b.continue_url, "_blank", "noopener");

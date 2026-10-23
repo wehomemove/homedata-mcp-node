@@ -309,6 +309,8 @@ export async function quote(request: QuoteRequest, deps: { motus: MotusClient; p
 
   let facts: PropertyFacts | undefined;
   let postcode = request.postcode;
+  // A home picked in the card: its value estimate starts now, alongside the rooms lookup.
+  if (request.uprn && !request.property_price && product.inputs.some((i) => i.key === PROPERTY_PRICE_KEY)) void deps.property.valueOf(request.uprn).catch(() => null);
   {
     try {
       facts = await factsFor(request, deps.property);

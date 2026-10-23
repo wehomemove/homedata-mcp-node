@@ -36,6 +36,8 @@ export interface HomemoveHttpOptions {
   appsChallenge?: string;
   /** Told about every tool call (src/activity.ts); off when absent. */
   activity?: ActivitySink;
+  /** Address searches a browser may make a minute through /widget/addresses. */
+  searchesPerMinute?: number;
   /** Counts distinct ChatGPT users for the activity lines. */
   visitors?: HomeVisitors;
   /** Public origin this endpoint is served from; the widget loads its art from here. */
@@ -74,6 +76,12 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
   };
   const assetOrigin = options.assetOrigin ?? DEFAULT_HOMEMOVE_ORIGIN;
   const visitors = options.visitors ?? new HomeVisitors(undefined, now);
+  const searchLimits = new Map<string, MinuteLimiter>();
+  const searches = (who: string) => {
+    let limiter = searchLimits.get(who);
+    if (!limiter) { if (searchLimits.size >= 10_000) searchLimits.clear(); limiter = new MinuteLimiter(options.searchesPerMinute ?? 40, now); searchLimits.set(who, limiter); }
+    return limiter.take();
+  };
   const report = (subject: unknown, call: { tool: string; outcome: string; ms: number; detail?: string }) => {
     if (options.activity) options.activity({ organisation: `Homemove · ${visitors.label(subject)}`, ...call });
   };
@@ -103,6 +111,18 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
       if (req.method !== "GET" && req.method !== "HEAD") { res.setHeader("Allow", "GET, HEAD"); return void send(res, 405, { error: "method_not_allowed" }); }
       res.writeHead(200, { "Content-Type": demo.contentType, "Content-Length": String(demo.body.length), "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" });
       return void res.end(req.method === "HEAD" ? undefined : demo.body);
+    }
+    // The card's address search, straight from the browser: a tool call goes card → ChatGPT → here and
+    // back, which is what made picking a home slow. Read-only, per-visitor capped (each search spends
+    // Homedata tokens), and the card falls back to the tool when this is unreachable.
+    if (requestPath === "/widget/addresses") {
+      const cors = { "Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff" };
+      if (req.method !== "GET") { res.setHeader("Allow", "GET"); return void send(res, 405, { error: "method_not_allowed" }, cors); }
+      const query = (new URL(req.url ?? "/", "http://localhost").searchParams.get("q") ?? "").slice(0, 120);
+      if (query.trim().length < 3) return void send(res, 200, { addresses: [] }, cors);
+      if (!searches(callerAddress(req, options.clientIpHeader))) return void send(res, 429, { error: "slow_down" }, { ...cors, "Retry-After": "60" });
+      try { return void send(res, 200, { addresses: await options.property.search(query) }, cors); }
+      catch { return void send(res, 502, { error: "unavailable" }, cors); }
     }
     if (requestPath === "/healthz") return void send(res, 200, { ok: true, service: "homemove", version: VERSION }, { "Cache-Control": "no-store" });
     if (requestPath === "/.well-known/openai-apps-challenge") {

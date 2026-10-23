@@ -117,13 +117,30 @@ export class PropertyLookup {
     };
   }
 
+  private readonly values = new Map<string, { at: number; value: Promise<number | null> }>();
+
   /** The core record's value estimate (25 tokens), cached on the facts once fetched. */
   async estimatedValue(facts: PropertyFacts): Promise<number | null> {
     if (facts.estimated_value) return facts.estimated_value;
-    const core = await this.homedata.send("GET", `/property/${facts.uprn}/core/`);
-    if (core.statusCode >= 400) return null;
-    const body = core.body as { valuation_estimate?: { estimate_gbp?: unknown }; last_sale?: { price?: unknown } } | null;
-    facts.estimated_value = num(body?.valuation_estimate?.estimate_gbp) ?? num(body?.last_sale?.price);
+    facts.estimated_value = await this.valueOf(facts.uprn);
     return facts.estimated_value;
+  }
+
+  /**
+   * The value estimate by UPRN, shared by concurrent callers and kept a day: a home picked in the
+   * card starts this alongside its rooms lookup instead of after it.
+   */
+  valueOf(uprn: string): Promise<number | null> {
+    const hit = this.values.get(uprn);
+    if (hit && this.now() - hit.at < 24 * 3600_000) return hit.value;
+    const value = this.homedata.send("GET", `/property/${uprn}/core/`).then((core) => {
+      if (core.statusCode >= 400) return null;
+      const body = core.body as { valuation_estimate?: { estimate_gbp?: unknown }; last_sale?: { price?: unknown } } | null;
+      return num(body?.valuation_estimate?.estimate_gbp) ?? num(body?.last_sale?.price);
+    });
+    value.catch(() => this.values.delete(uprn));
+    if (this.values.size > 5000) this.values.clear();
+    this.values.set(uprn, { at: this.now(), value });
+    return value;
   }
 }
