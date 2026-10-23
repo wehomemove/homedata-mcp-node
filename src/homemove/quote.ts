@@ -140,7 +140,7 @@ export interface MoveView {
 }
 
 export type QuoteAnswer =
-  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; bands?: BandView[]; beds_options?: string[]; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }>; move?: MoveView; unmatched?: string[]; indicative?: string; legal?: LegalView }
+  | { status: "priced"; product: ProductView; price_gbp: number; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; band?: { min: number; max: number }; bands?: BandView[]; beds_options?: string[]; /** The value the user stated, never an estimate. */ stated_price?: number; booking_url: string; breakdown?: Array<{ label: string; amount_gbp: number }>; extras?: Array<{ label: string; amount_gbp: number }>; move?: MoveView; unmatched?: string[]; indicative?: string; legal?: LegalView }
   | { status: "needs_answers"; product: ProductView; postcode: string; property?: PropertyView; assumed: Assumption[]; answers: AnswerView[]; questions: QuestionView[]; bands?: BandView[]; from_gbp?: number; picker?: PickerRoom[]; unmatched?: string[]; legal?: LegalView; to_postcode?: string }
   | { status: "quoted_by_hand"; product: ProductView; postcode: string; property?: PropertyView; answers: AnswerView[]; legal?: LegalView }
   | { status: "choose_service"; options: ProductView[] }
@@ -365,7 +365,7 @@ export async function quote(request: QuoteRequest, deps: { motus: MotusClient; p
     if (result.price_gbp && !result.from && result.needs.length === 0) {
       // The bedroom choices travel with a price assumed from the record, so the card can offer a correction.
       const beds = product.inputs.find((i) => i.name === "beds");
-      return { status: "priced", product: view(product), price_gbp: result.price_gbp, postcode: shownPostcode, property, assumed, answers: shown, band, ...(bands ? { bands } : {}), ...(beds && assumed.some((a) => a.name === "beds") ? { beds_options: beds.options.map((o) => o.label) } : {}), booking_url: bookingUrl(view(product), shownPostcode) };
+      return { status: "priced", product: view(product), price_gbp: result.price_gbp, postcode: shownPostcode, property, assumed, answers: shown, band, ...(bands ? { bands } : {}), ...(beds && assumed.some((a) => a.name === "beds") ? { beds_options: beds.options.map((o) => o.label) } : {}), ...(needsValue && request.property_price ? { stated_price: Math.round(request.property_price) } : {}), booking_url: bookingUrl(view(product), shownPostcode) };
     }
     const questions = (result.needs.length ? result.needs : product.inputs.filter((i) => i.key === PROPERTY_PRICE_KEY))
       .map((input) => ({ name: input.name, question: questionFor(input), options: input.key === PROPERTY_PRICE_KEY ? [] : input.options.map((o) => o.label) }));
