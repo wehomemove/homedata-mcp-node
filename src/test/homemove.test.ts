@@ -14,6 +14,7 @@ import { matchOption, quote, resolveProduct } from "../homemove/quote.js";
 import { buildHomemoveServer, planNarration, quoteNarration } from "../homemove/server.js";
 import { BroadbandClient } from "../homemove/broadband.js";
 import { tagged } from "../homemove/utm.js";
+import { timeCall } from "../homemove/timing.js";
 import { HomeVisitors } from "../home/activity.js";
 import { planMove } from "../homemove/plan.js";
 import { continueUrlForPlan, continueUrlForQuote, displayAddress, formatPostcode } from "../homemove/handoff.js";
@@ -603,4 +604,17 @@ test("the card can search addresses straight from mcp.homemove.com, capped per v
   await Promise.all([server.connect(b), client.connect(a)]);
   const res = await client.readResource({ uri: HOMEMOVE_WIDGET_URI });
   assert.deepEqual((res.contents[0]!._meta as Record<string, any>)["openai/widgetCSP"].connect_domains, ["https://mcp.homemove.com"], "the card may call its own origin");
+});
+
+test("a slow quote logs which upstream step it waited on, by stage name only", async () => {
+  const lines: string[] = [];
+  const deps = { motus: fakeMotus(), property: fakeHomedata() };
+  await timeCall("homemove_quote", () => quote({ service: "conveyancing buying", postcode: "NR4 6LL", address: "75 Barnesdale Road", uprn: "100090887383", answers: { funding_type: "Mortgage" } }, deps), -1, (l) => lines.push(l));
+  assert.equal(lines.length, 1);
+  assert.match(lines[0]!, /^\[homemove-mcp\] slow homemove_quote: \d+ ms \(/);
+  for (const stage of ["homedata rooms and title", "homedata value estimate", "motus legal-quote"]) assert.ok(lines[0]!.includes(`${stage} `), stage);
+  assert.doesNotMatch(lines[0]!, /Barnesdale|100090887383|NR4/);
+  const quiet: string[] = [];
+  await timeCall("homemove_quote", () => quote({ service: "EPC", postcode: "SW1A 2AA" }, deps), 60_000, (l) => quiet.push(l));
+  assert.deepEqual(quiet, [], "a quick call logs nothing");
 });

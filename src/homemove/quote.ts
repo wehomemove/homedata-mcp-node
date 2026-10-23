@@ -238,6 +238,8 @@ async function conveyancing(request: QuoteRequest, deps: { motus: MotusClient; p
   const transaction = pick(given["transaction"] ?? (/\bsell/i.test(String(request.service)) ? "selling" : /\bbuy|purchas/i.test(String(request.service)) ? "buying" : undefined), { purchase: /buy|purchas/i, sale: /sell|sale/i }) as "purchase" | "sale" | undefined;
   const product: ProductView = transaction === "sale" ? { id: 1063, name: "Conveyancing (selling)", type: "legal" } : { id: 1062, name: transaction ? "Conveyancing (buying)" : "Conveyancing", type: "legal" };
   let facts: PropertyFacts | undefined;
+  // A home picked in the card: its value estimate starts now, alongside the rooms and title lookup.
+  if (request.uprn && !request.property_price) void deps.property.valueOf(request.uprn).catch(() => null);
   {
     try { facts = await factsFor(request, deps.property); } catch (error) {
       if (error instanceof AddressNotMatched) return { status: "address_not_found", reason: error.reason, postcode: request.postcode, product, said: request.address?.trim() };
