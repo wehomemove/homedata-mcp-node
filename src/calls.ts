@@ -31,12 +31,18 @@ export interface ApiRequest {
 export const asQueryValue = (value: unknown): string =>
   typeof value === "number" && Number.isInteger(value) ? String(value) : String(value);
 
+const acceptsDigitInteger = (param: ToolParam): boolean =>
+  param.type === "string" && param.pattern === "^\\d+$";
+
 function typeProblem(param: ToolParam, value: unknown): string | null {
   if (typeof value === "boolean") return `${param.name} must be a ${param.type}`;
   if (param.type === "number") {
     if (typeof value !== "number") return `${param.name} must be a number`;
     // NaN and Infinity serialise as "NaN"/"Infinity" and would be sent in the URL.
     return Number.isFinite(value) ? null : `${param.name} must be a finite number`;
+  }
+  if (acceptsDigitInteger(param) && typeof value === "number") {
+    return Number.isInteger(value) && value >= 0 ? null : `${param.name} must be digits only`;
   }
   return typeof value === "string" ? null : `${param.name} must be a string`;
 }
@@ -51,7 +57,10 @@ export function validateArguments(spec: ToolSpec, args: Record<string, unknown>)
 
   const supplied: Record<string, unknown> = {};
   for (const [name, param] of params) {
-    const value = args[name];
+    const raw = args[name];
+    // BigInt renders even large whole numbers as digits, without exponent notation.
+    const value = acceptsDigitInteger(param) && typeof raw === "number" && Number.isInteger(raw) && raw >= 0
+      ? BigInt(raw).toString() : raw;
     if (value === undefined || value === null || value === "") {
       if (param.required) problems.push(`${name} is required`);
       continue;
@@ -142,7 +151,8 @@ export function inputSchema(spec: ToolSpec, paramText: Record<string, string>): 
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
   for (const param of spec.params) {
-    const property: Record<string, unknown> = { type: param.type };
+    const property: Record<string, unknown> = { type: acceptsDigitInteger(param) ? ["string", "integer"] : param.type };
+    if (acceptsDigitInteger(param)) property["minimum"] = 0;
     if (param.enum) property["enum"] = [...param.enum];
     if (param.pattern) property["pattern"] = param.pattern;
     if (paramText[param.name]) property["description"] = paramText[param.name];

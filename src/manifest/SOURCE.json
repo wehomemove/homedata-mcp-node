@@ -1,7 +1,7 @@
 {
   "repository": "wehomemove/homedata-mcp",
-  "ref": "705c5f1f016692af0515f0c6f65f4e7290a7b405",
-  "fetched_from": "https://raw.githubusercontent.com/wehomemove/homedata-mcp/705c5f1f016692af0515f0c6f65f4e7290a7b405/homedata_mcp/manifest/<file>",
+  "ref": "37399d6a1c96b2eabea8b261192974297d97ea35",
+  "fetched_from": "https://raw.githubusercontent.com/wehomemove/homedata-mcp/37399d6a1c96b2eabea8b261192974297d97ea35/homedata_mcp/manifest/<file>",
   "files": {
     "tools.json": "ae1127c172bc6824503f88b93bff08e294abeba9926bdb003b7ba237206b80a2",
     "descriptions.json": "aa5b49d6c82dd651560cf71df43d84d74bc086295f7f699e9b839007a7ca4e03",

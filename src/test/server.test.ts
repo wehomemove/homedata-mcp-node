@@ -64,7 +64,7 @@ test("without a key only the helpers are offered", async () => {
 
 test("invalid arguments never reach the API", async () => {
   const { client, sent } = await connect();
-  for (const args of [{ uprn: "not-digits" }, {}, { uprn: "1", nope: "x" }]) {
+  for (const args of [{ uprn: "not-digits" }, { uprn: -1 }, { uprn: 1.5 }, { uprn: true }, { uprn: false }, {}, { uprn: "1", nope: "x" }]) {
     const result = await client.callTool({ name: "property_core", arguments: args });
     assert.equal(result.isError, true, JSON.stringify(args));
   }
@@ -238,4 +238,30 @@ test("in ChatGPT, property_core never carries a valuation; everywhere else it do
   const full = await stdio.client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
   assert.deepEqual((full.structuredContent as Record<string, unknown>)["valuation_estimate"], { estimate_gbp: 84087000 });
   await stdio.client.close();
+});
+
+
+test("numeric address results pass straight into every UPRN tool", async () => {
+  const uprn = 100023336956;
+  const { client, sent } = await connect({ response: () => new Response(JSON.stringify({ uprn }), {
+    headers: { "Content-Type": "application/json" },
+  }) });
+  try {
+    for (const name of ["address_match", "address_postcode"]) {
+      const result = await client.callTool({ name, arguments: name === "address_match" ? { address: "10 Downing Street", postcode: "SW1A 2AA" } : { postcode: "SW1A 2AA" } });
+      assert.notEqual(result.isError, true);
+      const returned = (result.structuredContent as { uprn: number }).uprn;
+      assert.equal(returned, uprn);
+      for (const spec of tools().filter((t) => t.params.some((p) => p.name === "uprn"))) {
+        const args: Record<string, unknown> = { uprn: returned };
+        for (const p of spec.params) {
+          if (p.name !== "uprn" && p.required) args[p.name] = p.enum?.[0] ?? "epc";
+        }
+        const answer = await client.callTool({ name: spec.name, arguments: args });
+        assert.notEqual(answer.isError, true, spec.name);
+        const request = sent.at(-1)!;
+        assert.ok(request.path.includes(String(uprn)) || request.query["uprn"] === String(uprn), spec.name);
+      }
+    }
+  } finally { await client.close(); }
 });
