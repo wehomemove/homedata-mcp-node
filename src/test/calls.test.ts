@@ -39,7 +39,6 @@ test("property_custom sends with", () => {
 const INVALID: Array<[string, Record<string, unknown>, string]> = [
   ["property_core", {}, "uprn is required"],
   ["property_core", { uprn: "12a" }, "uprn must be digits only"],
-
   ["property_core", { uprn: "1", extra: "x" }, "unknown argument extra"],
   ["risks", { risk_type: "volcano", uprn: "1" }, "risk_type must be one of"],
   ["calc_mortgage", { price: "lots", deposit: 1, rate: 1, term: 1 }, "price must be a number"],
@@ -114,7 +113,6 @@ test("listing address sends JSON with a fresh idempotency key per request", () =
   assert.match(first.headers?.["Idempotency-Key"] ?? "", /^[0-9a-f-]{36}$/);
   assert.notEqual(first.headers?.["Idempotency-Key"], second.headers?.["Idempotency-Key"]);
 });
-
 
 test("digit-only strings also accept whole non-negative numbers", () => {
   for (const uprn of [0, 100023336956, 1e21, "000123"]) {

@@ -240,7 +240,6 @@ test("in ChatGPT, property_core never carries a valuation; everywhere else it do
   await stdio.client.close();
 });
 
-
 test("numeric address results pass straight into every UPRN tool", async () => {
   const uprn = 100023336956;
   const { client, sent } = await connect({ response: () => new Response(JSON.stringify({ uprn }), {
