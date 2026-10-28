@@ -114,6 +114,12 @@ test("listing address sends JSON with a fresh idempotency key per request", () =
   assert.notEqual(first.headers?.["Idempotency-Key"], second.headers?.["Idempotency-Key"]);
 });
 
+test("body values are sent as text, as the Python server sends them", () => {
+  const request = buildRequest(spec("rental_appraisal"), { uprn: 100023336956, beds: 2, type: "flat", limit: 0 });
+  assert.deepEqual(request.body, { uprn: "100023336956", beds: "2", type: "flat", limit: "0" });
+  assert.equal(request.headers, undefined, "the manifest asks for no idempotency key here");
+});
+
 test("digit-only strings also accept whole non-negative numbers", () => {
   for (const uprn of [0, 100023336956, 1e21, "000123"]) {
     const expected = typeof uprn === "number" ? BigInt(uprn).toString() : uprn;

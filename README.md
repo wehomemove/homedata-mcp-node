@@ -103,6 +103,7 @@ instead of guessing a UPRN.
 | `attr_epc` | 1 | Energy Performance Certificate headline for a property: current and potential efficiency rating, EPC floor area and the date of the last assessment. |
 | `attr_epc_renovations` | 1 | Improvements recommended by a property's EPC assessment, each with estimated minimum and maximum cost. |
 | `attr_garden` | 1 | Whether a property has a garden, and of what kind. |
+| `attr_ground_stability` | 1 | Ground stability for one property: trees within root reach (canopy height measured, reach inferred), measured ground movement in millimetres per year from nearby satellite readings, and clay shrink-swell. Includes sources and caveats. |
 | `attr_land` | 1 | Plot size in square metres for a property. Houses only: flats and maisonettes have no plot, and those return an error with nothing charged. |
 | `attr_parking` | 1 | Whether a property has parking, and of what kind: driveway, off-street, garage and so on. |
 | `attr_roof` | 1 | A property's roof: material, shape, and whether solar panels are fitted. |
@@ -139,6 +140,7 @@ instead of guessing a UPRN.
 | `property_discovery` | 1 | The cheap first call for a property: which data is available for it, what each add-on costs, and the shortcuts to each tier. Also the quickest way to check whether a UPRN is one we hold. |
 | `property_lr_titles` | 10 | Land Registry title records for a property: tenure, title number and registered owner where held. |
 | `property_sale_events` | 20 | Return the event timeline for a sale ID or listing UUID, optionally filtered and ordered. |
+| `rental_appraisal` | 1000 | Estimate monthly market rent for one home, with a likely range, a confidence tier and comparable rentals with distance, rent and weight. Identify the home by UPRN, address line plus postcode, or latitude and longitude. |
 | `risks` | 1; 5 when `risk_type` is all | Environmental risk screening for a property: flood, radon, noise, landfill, coal and other mining, invasive plants and air quality. Ask for one hazard, or for all of them in a single response. |
 | `schools` | 1 | Schools near a postcode, with Ofsted rating, phase, pupil numbers and distance, from the Department for Education register. England only. |
 | `solar` | 5 | Solar potential for a property: usable roof area, estimated yearly generation, savings, payback period and carbon saved. |

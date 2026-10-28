@@ -122,13 +122,13 @@ export function buildRequest(spec: ToolSpec, args: Record<string, unknown>): Api
   const supplied = validateArguments(spec, args);
   let path = spec.path;
   const query: Record<string, string> = {};
-  const body: Record<string, unknown> = {};
+  const body: Record<string, string> = {};
 
   for (const param of spec.params) {
     if (!(param.name in supplied)) continue;
     const text = asQueryValue(supplied[param.name]);
     if (param.in === "path") path = path.replace(`{${param.name}}`, encodeURIComponent(text));
-    else if (param.in === "body") body[param.name] = supplied[param.name];
+    else if (param.in === "body") body[param.name] = text;
     else query[param.name] = text;
   }
 

@@ -150,9 +150,9 @@ test("every tool sends one request to its manifest endpoint", async () => {
     );
     assert.deepEqual(sent[0]!.query, expectedQuery, spec.name);
     if (spec.params.some((p) => p.in === "body")) {
-      assert.deepEqual(sent[0]!.body, Object.fromEntries(spec.params.filter((p) => p.in === "body").map((p) => [p.name, args[p.name]])));
+      assert.deepEqual(sent[0]!.body, Object.fromEntries(spec.params.filter((p) => p.in === "body").map((p) => [p.name, String(args[p.name])])));
       assert.equal(sent[0]!.headers?.["content-type"], "application/json");
-      assert.match(sent[0]!.headers?.["idempotency-key"] ?? "", /^[0-9a-f-]{36}$/);
+      if (spec.idempotency_key) assert.match(sent[0]!.headers?.["idempotency-key"] ?? "", /^[0-9a-f-]{36}$/);
     }
   }
   await client.close();
@@ -259,7 +259,8 @@ test("numeric address results pass straight into every UPRN tool", async () => {
         const answer = await client.callTool({ name: spec.name, arguments: args });
         assert.notEqual(answer.isError, true, spec.name);
         const request = sent.at(-1)!;
-        assert.ok(request.path.includes(String(uprn)) || request.query["uprn"] === String(uprn), spec.name);
+        const carried = [request.path.includes(String(uprn)), request.query["uprn"] === String(uprn), (request.body as Record<string, unknown> | undefined)?.["uprn"] === String(uprn)];
+        assert.ok(carried.some(Boolean), spec.name);
       }
     }
   } finally { await client.close(); }
