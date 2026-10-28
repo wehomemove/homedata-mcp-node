@@ -2,10 +2,10 @@
   "schema_version": 1,
   "source": {
     "repository": "wehomemove/thor",
-    "commit": "c321119b67043f58ac25a22ecd771164a2e0a37f",
+    "commit": "2be7d89015c6c8bc2d8170e99f3dabf575d478a4",
     "catalogue": "resources/js/Pages/Developer/Playground/Index.vue",
-    "catalogue_sha256": "d62c4997295bf3ac5130ffa6f8abc75fafa4f9430d0cd5a2d68281c1819f2c39",
-    "llms_full_api_surface_source_hash": "8e660fc7ae3a7ea28cb6adee5b5277ca7ed87f2170cf4e787ecc5f4f865501b9"
+    "catalogue_sha256": "9576788c49d43cbca53232aca6069bc8e8378790fd841a2d626e92fd1b21eae3",
+    "llms_full_api_surface_source_hash": "a6eb8f4f95ec0a3bba8ae326220d8a2f909dc051e0fcdb7578e45a3cf8906c06"
   },
   "rules": {
     "offered": "Playground ENDPOINTS entries with a path, not enterprise:true, not adminOnly:true",
@@ -179,6 +179,7 @@
           "garden": 1,
           "parking": 1,
           "epc_renovations": 1,
+          "ground_stability": 1,
           "dimensions": 1,
           "land": 1,
           "construction": 1
@@ -335,6 +336,26 @@
       "label": "EPC Renovations",
       "method": "GET",
       "path": "/properties/{uprn}/epc_renovations/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "attr_ground_stability",
+      "playground_id": "attr-ground-stability",
+      "label": "Ground stability",
+      "method": "GET",
+      "path": "/properties/{uprn}/ground_stability/",
       "params": [
         {
           "name": "uprn",
@@ -1591,6 +1612,95 @@
       ],
       "tokens": {
         "default": 0
+      }
+    },
+    {
+      "name": "rental_appraisal",
+      "playground_id": "rental-appraisal",
+      "label": "Rental Appraisal",
+      "method": "POST",
+      "path": "/rental-appraisal/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "body",
+          "type": "string",
+          "required": false,
+          "pattern": "^\\d+$",
+          "playground_hint": "The home's UPRN. Our record fills in bedrooms and type when it has them."
+        },
+        {
+          "name": "address_line_1",
+          "in": "body",
+          "type": "string",
+          "required": false,
+          "alternative_to_previous": true,
+          "playground_hint": "With the postcode below, matched to one home."
+        },
+        {
+          "name": "postcode",
+          "in": "body",
+          "type": "string",
+          "required": false,
+          "alternative_to_previous": true,
+          "paired_with": "address_line_1",
+          "playground_hint": "The postcode for that address. A postcode alone is not enough."
+        },
+        {
+          "name": "lat",
+          "in": "body",
+          "type": "string",
+          "required": false,
+          "alternative_to_previous": true,
+          "playground_hint": "A point, when there is no address. Send bedrooms and type with it."
+        },
+        {
+          "name": "lng",
+          "in": "body",
+          "type": "string",
+          "required": false,
+          "alternative_to_previous": true,
+          "paired_with": "lat",
+          "playground_hint": "Paired with latitude."
+        },
+        {
+          "name": "beds",
+          "in": "body",
+          "type": "number",
+          "required": false,
+          "playground_hint": "0 is a studio. Needed when our record has none (always with a point); not needed for a room."
+        },
+        {
+          "name": "type",
+          "in": "body",
+          "type": "string",
+          "required": false,
+          "enum": [
+            "flat",
+            "house",
+            "room"
+          ],
+          "playground_hint": "Needed when our record has none (always with a point). Overrides our record."
+        },
+        {
+          "name": "as_of",
+          "in": "body",
+          "type": "string",
+          "required": false,
+          "advanced": true,
+          "playground_hint": "The appraisal date, from 2025-01-01 to today. Default today."
+        },
+        {
+          "name": "limit",
+          "in": "body",
+          "type": "number",
+          "required": false,
+          "advanced": true,
+          "playground_hint": "How many comparables to return, 0 to 100 (default 100). 0 returns the estimate only; it always uses up to 100."
+        }
+      ],
+      "tokens": {
+        "default": 1000
       }
     }
   ],

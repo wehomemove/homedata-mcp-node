@@ -43,6 +43,14 @@
     "property_sale_events.sale": "Sale ID you already hold from a separately obtained property listings API result. This MCP does not provide listing search or sale IDs.",
     "property_sale_events.listing": "Listing UUID you already hold from a separately obtained property listings API result. This MCP does not provide listing search or IDs; a self-serve key alone does not provide access to the source listing endpoints.",
     "property_sale_events.event_type": "Filter by event type.",
-    "property_sale_events.ordering": "Order sale events by date, price or event type."
+    "property_sale_events.ordering": "Order sale events by date, price or event type.",
+    "rental_appraisal.address_line_1": "Street address of the home. Send with postcode instead of UPRN or coordinates.",
+    "rental_appraisal.postcode": "Postcode for address_line_1. A postcode alone is not enough.",
+    "rental_appraisal.lat": "Latitude (WGS84). Send with lng, type and beds (beds optional for a room).",
+    "rental_appraisal.lng": "Longitude (WGS84). Send with lat.",
+    "rental_appraisal.beds": "Bedroom count; 0 means studio. Required if the property record has none, including coordinates; optional for a room.",
+    "rental_appraisal.type": "flat, house or room. Overrides the property record; required if the record has none, including coordinates.",
+    "rental_appraisal.as_of": "Appraisal date as YYYY-MM-DD, from 2025-01-01 to today. Defaults to today.",
+    "rental_appraisal.limit": "Number of comparables to return, 0 to 100; default 100. Use 0 for the estimate only. The estimate always uses up to 100 comparables."
   }
 }

@@ -39,7 +39,6 @@ test("property_custom sends with", () => {
 const INVALID: Array<[string, Record<string, unknown>, string]> = [
   ["property_core", {}, "uprn is required"],
   ["property_core", { uprn: "12a" }, "uprn must be digits only"],
-  ["property_core", { uprn: 100023336956 }, "uprn must be a string"],
   ["property_core", { uprn: "1", extra: "x" }, "unknown argument extra"],
   ["risks", { risk_type: "volcano", uprn: "1" }, "risk_type must be one of"],
   ["calc_mortgage", { price: "lots", deposit: 1, rate: 1, term: 1 }, "price must be a number"],
@@ -113,4 +112,35 @@ test("listing address sends JSON with a fresh idempotency key per request", () =
   assert.deepEqual(first.body, { listing_id: "listing-uuid" });
   assert.match(first.headers?.["Idempotency-Key"] ?? "", /^[0-9a-f-]{36}$/);
   assert.notEqual(first.headers?.["Idempotency-Key"], second.headers?.["Idempotency-Key"]);
+});
+
+test("body values are sent as text, as the Python server sends them", () => {
+  const request = buildRequest(spec("rental_appraisal"), { uprn: 100023336956, beds: 2, type: "flat", limit: 0 });
+  assert.deepEqual(request.body, { uprn: "100023336956", beds: "2", type: "flat", limit: "0" });
+  assert.equal(request.headers, undefined, "the manifest asks for no idempotency key here");
+});
+
+test("digit-only strings also accept whole non-negative numbers", () => {
+  for (const uprn of [0, 100023336956, 1e21, "000123"]) {
+    const expected = typeof uprn === "number" ? BigInt(uprn).toString() : uprn;
+    assert.equal(buildRequest(spec("property_core"), { uprn }).path, `/property/${expected}/core/`);
+    assert.deepEqual(buildRequest(spec("risks"), { uprn, risk_type: "all" }).query, { uprn: expected });
+  }
+  for (const uprn of [-1, 1.5, true, false, "-1", "1.5", "1e3", "abc", " 123", NaN, Infinity]) {
+    assert.throws(() => buildRequest(spec("property_core"), { uprn }), InvalidArguments, String(uprn));
+  }
+  assert.throws(() => buildRequest(spec("address_postcode"), { postcode: 123 }), InvalidArguments);
+});
+
+test("every digit-only parameter advertises string or non-negative integer", () => {
+  for (const tool of tools()) {
+    const properties = inputSchema(tool, {}).properties as Record<string, Record<string, unknown>>;
+    for (const param of tool.params) {
+      if (param.type === "string" && param.pattern === "^\\d+$") {
+        assert.deepEqual(properties[param.name]!.type, ["string", "integer"], tool.name);
+        assert.equal(properties[param.name]!.minimum, 0);
+        assert.equal(properties[param.name]!.pattern, "^\\d+$");
+      } else assert.equal(properties[param.name]!.type, param.type);
+    }
+  }
 });

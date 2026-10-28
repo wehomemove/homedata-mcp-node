@@ -5,6 +5,20 @@ All notable changes to `homedata-mcp` (Node) will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `attr_ground_stability` and `rental_appraisal`, vendored from the Python package's
+  manifest. `rental_appraisal` costs 1000 tokens (£10 + VAT); its description asks
+  for approval before spending and states the refund terms.
+
+### Changed
+- UPRN and other digit-only string parameters also accept non-negative JSON
+  integers and send them as digits. Their tool schemas now advertise string or
+  integer input. Negative numbers, decimals, booleans and non-digit text remain
+  invalid.
+- Request body values are sent as text, as the Python package sends them.
+
 ## [1.0.1] - 2026-10-14
 
 ### Changed
