@@ -21,7 +21,7 @@ import { buildRequest, InvalidArguments, inputSchema } from "./calls.js";
 import { HomedataClient, HomedataError } from "./client.js";
 import { VERSION } from "./index.js";
 import { descriptionFor, paramTextFor, staticTools, tools, type ToolSpec } from "./manifest.js";
-import { PROFILES, withoutPrice, type Profile } from "./profile.js";
+import { PROFILES, withoutPrice, chatgptResult, CHATGPT_CORE_FIELDS, type Profile } from "./profile.js";
 import { checkApiKey, startSignup } from "./signup.js";
 import { isMain } from "./entry.js";
 import type { ToolCallEvent } from "./activity.js";
@@ -198,12 +198,13 @@ export function buildServer(
     if (response.statusCode === 402 && profile.lowBalanceAnswer) {
       return { result: jsonResult({ ...profile.lowBalanceAnswer }, true), outcome };
     }
-    const omit = response.statusCode < 400 ? profile.omitResultFields?.[name] : undefined;
-    const body = omit && response.body && typeof response.body === "object" && !Array.isArray(response.body)
-      ? Object.fromEntries(Object.entries(response.body as Record<string, unknown>).filter(([key]) => !omit.includes(key)))
+    const overview = profile.name === "chatgpt" && name === "property_core" && response.statusCode < 400
+      && response.body && typeof response.body === "object" && !Array.isArray(response.body)
+      ? Object.fromEntries(Object.entries(response.body).filter(([key]) => CHATGPT_CORE_FIELDS.has(key)))
       : response.body;
+    const body = profile.name === "chatgpt" ? chatgptResult(overview, name) : overview;
     return {
-      result: jsonResult(body, response.statusCode >= 400, spendMeta(response.headers)),
+      result: jsonResult(body, response.statusCode >= 400, profile.name === "chatgpt" ? undefined : spendMeta(response.headers)),
       outcome,
     };
   }

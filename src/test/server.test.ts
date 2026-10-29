@@ -227,11 +227,11 @@ for (const reason of [null, "no_match", "multiple_matches"] as const) {
 test("in ChatGPT, property_core never carries a valuation; everywhere else it does", async () => {
   // The ChatGPT listing and review cases say Homedata does not value homes. The API
   // added valuation_estimate to property_core in October 2026 (measured 16 Oct).
-  const body = { uprn: 100023336956, address: { full_address: "10 DOWNING STREET" }, valuation_estimate: { estimate_gbp: 84087000 }, council_tax: { band: "H" } };
+  const body = { uprn: 100023336956, address: { address_line_1: "10 DOWNING STREET", full_address: "10 DOWNING STREET" }, valuation_estimate: { estimate_gbp: 84087000 }, council_tax: { band: "H" } };
   const respond = () => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
   const chatgpt = await connect({ response: respond, profile: PROFILES.chatgpt });
   const answer = await chatgpt.client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
-  assert.deepEqual(answer.structuredContent, { uprn: 100023336956, address: { full_address: "10 DOWNING STREET" }, council_tax: { band: "H" } });
+  assert.deepEqual(answer.structuredContent, { uprn: 100023336956, address: { address_line_1: "10 DOWNING STREET", full_address: "10 DOWNING STREET" }, council_tax: { band: "H" } });
   assert.doesNotMatch(JSON.stringify(answer.content), /valuation|84087000/, "nor in the text the model reads");
   await chatgpt.client.close();
   const stdio = await connect({ response: respond });
@@ -265,3 +265,112 @@ test("numeric address results pass straight into every UPRN tool", async () => {
     }
   } finally { await client.close(); }
 });
+
+// Synthetic fixtures use the field shapes measured on 29 October, with fake
+// names. These prove filtering and transport behaviour, not live API coverage.
+const deniedFields = ["applicant_name", "agent_name", "agent_address", "case_officer", "head_teacher", "title_no", "address_resolution", "uprn_token", "tokens_charged", "tokens_balance"];
+const privateFixture = Object.fromEntries(deniedFields.map((key) => [key, "PRIVATE_SENTINEL"]));
+function assertNoPrivate(value: unknown): void {
+  if (!value || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    assert.ok(!deniedFields.includes(key), `denied key ${key}`);
+    assertNoPrivate(child);
+  }
+}
+
+for (const status of [200, 422]) {
+  for (const [name, args] of Object.entries({
+    address_match: { address: "10 Downing Street", postcode: "SW1A 2AA" },
+    address_postcode: { postcode: "SW1A 2AA" },
+    property_core: { uprn: "100023336956" }, attr_epc: { uprn: "100023336956" },
+    council_tax: { uprn: "100023336956" }, risks: { uprn: "100023336956", risk_type: "all" },
+    planning: { postcode: "SW1A 2AA" }, schools: { postcode: "SW1A 2AA" },
+    broadband: { postcode: "SW1A 2AA" }, crime: { postcode: "SW1A 2AA" },
+    price_trends: { outcode: "SW1A" }, price_growth: { outcode: "SW1A" },
+    deprivation: { postcode: "SW1A 2AA" }, amenities_all: { uprn: "100023336956" },
+  })) {
+    test(`ChatGPT ${name} filters private fields at every depth on HTTP ${status}`, async () => {
+      const school = { name: "Example Primary", contact: { ...privateFixture, telephone: "public switchboard" } };
+      const body = {
+        uprn: 100023336956, ...privateFixture,
+        full_address: name === "address_match" ? "PRIVATE_SENTINEL" : "Public site address", address_line_1: "10 DOWNING STREET", post_town: "LONDON", postcode: "SW1A 2AA",
+        address: { full_address: name === "property_core" ? "PRIVATE_SENTINEL" : "10 DOWNING STREET, LONDON, SW1A 2AA", address_line_1: "10 DOWNING STREET", post_town: "LONDON", postcode: "SW1A 2AA" },
+        addresses: [{ ...privateFixture, address: name === "address_postcode" ? "PRIVATE_SENTINEL" : "10 DOWNING STREET", building_number: "10", street: "DOWNING STREET", town: "LONDON" }],
+        schools: { query: "PRIVATE_QUERY", schools: [school], deep: [{ ...privateFixture, children: [privateFixture] }] },
+        query: "PRIVATE_QUERY", results: [{ ...privateFixture, description: "Extension" }],
+        lr_title: { title_no: "PRIVATE_SENTINEL", estate_interest: "Freehold" },
+        title_boundary: { title_no: "PRIVATE_SENTINEL", geometry: { type: "Polygon", coordinates: [] } },
+        council_tax: { band: "H", deeper: [privateFixture] },
+        future_section: { owner: "PRIVATE_SENTINEL" }, valuation_estimate: { estimate_gbp: 1 },
+      };
+      // Unknown sections are tested separately; they are legitimate pass-through
+      // for tools other than the overview, so don't inject new personal categories.
+      if (name !== "property_core" || status !== 200) delete (body as Partial<typeof body>).future_section;
+      const response = () => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "X-Tokens-Charged": "25", "X-Tokens-Balance": "100" } });
+      const { client, sent } = await connect({ response, profile: PROFILES.chatgpt });
+      try {
+        const answer = await client.callTool({ name, arguments: args });
+        assert.equal(sent.length, 1, "must reach the API, not fail argument validation");
+        assertNoPrivate(answer);
+        assert.equal(answer._meta, undefined);
+        assert.equal(answer.isError ?? false, status >= 400);
+        const envelope = answer.structuredContent as Record<string, unknown>;
+        const data = (status >= 400 ? envelope.detail : envelope) as Record<string, unknown>;
+        if (status === 200 && name === "property_core") assert.equal(data.future_section, undefined);
+        if (name === "schools" || name === "property_core") assert.doesNotMatch(JSON.stringify(answer), /PRIVATE_QUERY/);
+        assert.equal((data.address as Record<string, unknown>).full_address, "10 DOWNING STREET, LONDON, SW1A 2AA");
+        assert.equal((data.council_tax as Record<string, unknown>).band, "H");
+        assert.doesNotMatch(JSON.stringify(answer.content), /PRIVATE_SENTINEL/);
+      } finally { await client.close(); }
+    });
+  }
+}
+
+test("ChatGPT preserves advertised overview sections and drops future additions; stdio is unchanged", async () => {
+  const sections = ["address", "property_type", "rooms", "epc", "last_sold", "construction", "dimensions", "garden", "parking", "lr_title", "title_boundary", "council_tax", "flood", "schools", "broadband", "crime", "demographics", "solar", "lr_sales", "listed_buildings", "conservation", "planning_designations"];
+  const body = { uprn: 100023336956, ...Object.fromEntries(sections.map((key) => [key, { public_fact: key, ...privateFixture }])), future_private_section: { owner: "PRIVATE_SENTINEL" } };
+  for (const profile of [PROFILES.chatgpt, PROFILES.stdio]) {
+    const { client } = await connect({ profile, response: () => new Response(JSON.stringify(body), { headers: { "X-Tokens-Balance": "100" } }) });
+    try {
+      const answer = await client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
+      if (profile.name === "stdio") {
+        assert.deepEqual(answer.structuredContent, body);
+        assert.deepEqual(answer._meta, { homedata: { tokens_balance: "100" } });
+      } else {
+        assert.deepEqual(answer.structuredContent, { uprn: body.uprn, ...Object.fromEntries(sections.map((key) => [key, { public_fact: key }])) });
+      }
+    } finally { await client.close(); }
+  }
+});
+
+test("ChatGPT postcode labels use property parts, and never fall back to an occupant label", async () => {
+  const addresses = [
+    { uprn: 1, address: "PRIVATE_SENTINEL", sub_building: "FLAT 2", building_number: "10", street: "EXAMPLE ROAD", town: "LONDON" },
+    { uprn: 2, full_address: "PRIVATE_SENTINEL", postcode: "SW1A 2AA" },
+  ];
+  const { client } = await connect({ profile: PROFILES.chatgpt, response: () => new Response(JSON.stringify({ addresses })) });
+  try {
+    const answer = await client.callTool({ name: "address_postcode", arguments: { postcode: "SW1A 2AA" } });
+    const records = (answer.structuredContent as { addresses: Record<string, unknown>[] }).addresses;
+    assert.equal(records[0].address, "FLAT 2, 10 EXAMPLE ROAD, LONDON");
+    assert.equal(records[1].full_address, undefined);
+    assert.doesNotMatch(JSON.stringify(answer), /PRIVATE_SENTINEL/);
+  } finally { await client.close(); }
+});
+
+for (const [name, args, body] of [
+  ["planning", { postcode: "SW1A 2AA" }, { results: [{ address: "12 Example Road, London SW1A 1AA", description: "Rear extension", applicant_name: "PRIVATE_SENTINEL" }] }],
+  ["schools", { postcode: "SW1A 2AA" }, { schools: [{ name: "Example School", full_address: "School Lane, London", contact: { head_teacher: "PRIVATE_SENTINEL" } }] }],
+  ["amenities_all", { uprn: "100023336956" }, { healthcare: { gps: [{ name: "Example Surgery", address: "1 High St, London" }] } }],
+] as const) {
+  test(`ChatGPT ${name} preserves public site addresses`, async () => {
+    const { client } = await connect({ profile: PROFILES.chatgpt, response: () => new Response(JSON.stringify(body)) });
+    try {
+      const answer = await client.callTool({ name, arguments: args });
+      const expected = JSON.parse(JSON.stringify(body), (key, value) => deniedFields.includes(key) ? undefined : value);
+      assert.deepEqual(answer.structuredContent, expected);
+      assert.deepEqual(JSON.parse((answer.content as { text: string }[])[0].text), expected);
+      assertNoPrivate(answer);
+    } finally { await client.close(); }
+  });
+}

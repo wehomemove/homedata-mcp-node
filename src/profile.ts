@@ -9,8 +9,8 @@
  * - `chatgpt`: OpenAI's plugin guidelines forbid advertising pricing and selling
  *   credits inside ChatGPT, and require a title and explicit read-only,
  *   destructive and open-world annotations on every tool. So: no prices in any
- *   model-readable text (spend still reaches `_meta`, which the model never
- *   sees), no signup helpers, and a curated set of tools chosen from user goals
+ *   model-readable text or account spend metadata, no signup helpers, and a
+ *   curated set of tools chosen from user goals
  *   rather than a mirror of every endpoint.
  *   See docs/chatgpt-app/RESEARCH.md.
  */
@@ -35,12 +35,6 @@ export interface Profile {
    * in place of the API's own body. Absent: the API's body is passed through.
    */
   lowBalanceAnswer?: Readonly<Record<string, string>>;
-  /**
-   * Top-level fields dropped from a tool's successful answer in this profile,
-   * by tool name. The API keeps adding to property_core; what the profile's
-   * listing says it never does must not arrive through it.
-   */
-  omitResultFields?: Readonly<Record<string, readonly string[]>>;
   instructions: string;
 }
 
@@ -112,7 +106,7 @@ export const CHATGPT_TOOLS = [
 export const CHATGPT_DESCRIPTIONS: Readonly<Record<string, string>> = {
   address_match:
     "Match a submitted UK street address and postcode to one UPRN. Both arguments are required; ask for " +
-    "missing details before calling. Returns the address-level record and address_resolution metadata. " +
+    "missing details before calling. Returns the property address and UPRN. " +
     "If the API returns no_match or multiple_matches (HTTP 422), ask the user to clarify; never guess a UPRN. " +
     "Use this when someone names a specific home and you need its UPRN before calling property tools. For only a postcode, use address_postcode. United Kingdom only.",
   address_postcode:
@@ -215,10 +209,6 @@ export const PROFILES: Record<Profile["name"], Profile> = {
     chatgptMetadata: true,
     descriptions: CHATGPT_DESCRIPTIONS,
     lowBalanceAnswer: CHATGPT_LOW_BALANCE_ANSWER,
-    // The ChatGPT listing and review cases say Homedata does not value homes. Since
-    // October 2026 property_core also returns valuation_estimate (measured 16 Oct:
-    // £84,087,000 for 10 Downing Street), so the ChatGPT profile leaves it out.
-    omitResultFields: { property_core: ["valuation_estimate"] },
     instructions: CHATGPT_INSTRUCTIONS,
   },
 };
@@ -241,4 +231,61 @@ export function withoutPrice(description: string): string {
     .filter((sentence) => !PRICE_SENTENCE.test(sentence))
     .join(" ")
     .trim();
+}
+
+/** Only sections advertised by the ChatGPT property overview may pass through.
+ * New API sections require an explicit review before exposing them here.
+ */
+export const CHATGPT_CORE_FIELDS = new Set([
+  "uprn", "address", "property_type", "rooms", "epc", "last_sold", "construction",
+  "dimensions", "garden", "parking", "lr_title", "title_boundary", "council_tax",
+  "flood", "schools", "broadband", "crime", "demographics", "solar",
+  "lr_sales", "listed_buildings", "conservation", "planning_designations",
+]);
+
+const PRIVATE_FIELDS = new Set([
+  "applicant_name", "agent_name", "agent_address", "case_officer", "head_teacher",
+  "title_no", "address_resolution", "uprn_token", "tokens_charged", "tokens_balance",
+  "valuation_estimate",
+]);
+
+/** Rebuild labels from property parts; never fall back to the occupant-bearing label. */
+function addressLabel(record: Record<string, unknown>): string | undefined {
+  const text = (key: string): string => typeof record[key] === "string" ? (record[key] as string).trim() : "";
+  const lines = ["address_line_1", "address_line_2", "address_line_3"].map(text).filter(Boolean);
+  const street = text("street") || text("street_name");
+  const parts = lines.length ? lines : [text("sub_building"), text("building_name"), [text("building_number"), street].filter(Boolean).join(" ")].filter(Boolean);
+  // A postcode alone cannot replace a missing property label.
+  if (!parts.length) return undefined;
+  parts.push(...[text("locality"), text("post_town") || text("town_name") || text("town"), text("postcode")].filter(Boolean));
+  return parts.length ? [...new Set(parts)].join(", ") : undefined;
+}
+
+/** Apply to errors too: nested API diagnostics must not bypass the privacy boundary. */
+export function chatgptResult(value: unknown, tool: string): unknown {
+  function scrub(node: unknown, path: string[] = []): unknown {
+    if (Array.isArray(node)) return node.map((child) => scrub(child, [...path, "[]"]));
+    if (!node || typeof node !== "object") return node;
+    const record = node as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(record)) {
+      if (PRIVATE_FIELDS.has(key) || key === "_meta" || (key === "query" && (tool === "schools" || tool === "property_core"))) continue;
+      // Only measured property labels can contain an occupant line. Public
+      // planning, school and amenity site addresses must pass through.
+      const propertyLabel =
+        (tool === "address_match" && path.length === 0 && key === "full_address") ||
+        (tool === "address_postcode" && path.join(".") === "addresses.[]" && (key === "address" || key === "full_address")) ||
+        (tool === "property_core" && path.join(".") === "address" && key === "full_address");
+      if (propertyLabel) {
+        const label = addressLabel(record);
+        if (label) result[key] = label;
+      } else {
+        // HomedataClient wraps non-2xx API bodies in an api_error detail.
+        const apiBody = path.length === 0 && record.error === "api_error" && key === "detail";
+        result[key] = scrub(child, apiBody ? [] : [...path, key]);
+      }
+    }
+    return result;
+  }
+  return scrub(value);
 }
