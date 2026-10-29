@@ -1,9 +1,13 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "homedata",
-  "version": "1.0.5",
-  "description": "Look up UK homes and neighbourhoods in ChatGPT with your Homedata account: EPC rating, council tax band, flood risk, schools, broadband, crime, planning and house price trends. Lookups consume paid credits from your Homedata account.",
-  "author": { "name": "Homedata", "email": "hello@homedata.co.uk", "url": "https://homedata.co.uk" },
+  "version": "1.0.6",
+  "description": "Research UK homes and neighbourhoods by address or postcode: EPC ratings, council tax bands, environmental risks, planning, schools, broadband, crime and area price trends. Lookups consume paid credits from your Homedata account.",
+  "author": {
+    "name": "Homedata",
+    "email": "hello@homedata.co.uk",
+    "url": "https://homedata.co.uk"
+  },
   "homepage": "https://homedata.co.uk/mcp",
   "repository": "https://github.com/wehomemove/homedata-mcp-node",
   "license": "MIT",
@@ -41,9 +45,9 @@
   "extensions": {
     "com.openai": {
       "interface": {
-        "displayName": "Homedata",
-        "shortDescription": "UK property and area data",
-        "longDescription": "Homedata answers questions about UK homes and the neighbourhoods around them. Give it an address or a postcode and ask about a house, flat or area in your own words: how energy efficient a home is and its EPC rating, which council tax band it is in, whether it is at risk of flooding, radon or other environmental hazards, what planning applications have been made nearby, which schools are close and how Ofsted rated them, how fast the broadband is and whether full fibre is available, how much crime is recorded in the area, how deprived or well-off the neighbourhood is, what shops, parks and other amenities are nearby, and how house prices in the area have moved and grown over the years. For a whole-property question it gives the full picture of one home in a single answer.\n\nIt is for anyone researching a home or a neighbourhood: people buying, renting or moving home, property professionals, and anyone comparing places to live.\n\nConnect your Homedata account to use it. Lookups consume paid credits from your Homedata account.\n\nLimitations: coverage is the United Kingdom only, and some data (schools, deprivation) covers England only. House price figures are area averages and growth, not the value of any one home. It does not value properties, search homes for sale, or give details about owners or occupants.",
+        "displayName": "Homedata Property Research",
+        "shortDescription": "Research UK homes and areas",
+        "longDescription": "Research a UK home or neighbourhood from an address or postcode. Check EPC ratings, council tax bands, flood and other environmental risks, nearby planning applications, schools and Ofsted ratings, broadband coverage, recorded crime and local amenities. Compare area house price trends and deprivation scores, or request a property overview in one call.\n\nConnect a Homedata account to run lookups. Lookups consume paid credits from your Homedata account. Availability varies by property and dataset; schools and deprivation cover England only. Broadband figures describe postcode coverage, and nearby schools do not establish admission catchments. Area price trends do not value an individual home. Homedata does not provide property valuations, homes for sale, or details about owners or occupants.",
         "developerName": "Homedata",
         "category": "Productivity",
         "capabilities": [
