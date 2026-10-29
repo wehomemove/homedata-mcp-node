@@ -263,17 +263,27 @@ function addressLabel(record: Record<string, unknown>): string | undefined {
 
 /** Apply to errors too: nested API diagnostics must not bypass the privacy boundary. */
 export function chatgptResult(value: unknown, tool: string): unknown {
-  function scrub(node: unknown): unknown {
-    if (Array.isArray(node)) return node.map(scrub);
+  function scrub(node: unknown, path: string[] = []): unknown {
+    if (Array.isArray(node)) return node.map((child) => scrub(child, [...path, "[]"]));
     if (!node || typeof node !== "object") return node;
     const record = node as Record<string, unknown>;
     const result: Record<string, unknown> = {};
     for (const [key, child] of Object.entries(record)) {
       if (PRIVATE_FIELDS.has(key) || key === "_meta" || (key === "query" && (tool === "schools" || tool === "property_core"))) continue;
-      if (key === "full_address" || (key === "address" && typeof child === "string")) {
+      // Only measured property labels can contain an occupant line. Public
+      // planning, school and amenity site addresses must pass through.
+      const propertyLabel =
+        (tool === "address_match" && path.length === 0 && key === "full_address") ||
+        (tool === "address_postcode" && path.join(".") === "addresses.[]" && (key === "address" || key === "full_address")) ||
+        (tool === "property_core" && path.join(".") === "address" && key === "full_address");
+      if (propertyLabel) {
         const label = addressLabel(record);
         if (label) result[key] = label;
-      } else result[key] = scrub(child);
+      } else {
+        // HomedataClient wraps non-2xx API bodies in an api_error detail.
+        const apiBody = path.length === 0 && record.error === "api_error" && key === "detail";
+        result[key] = scrub(child, apiBody ? [] : [...path, key]);
+      }
     }
     return result;
   }

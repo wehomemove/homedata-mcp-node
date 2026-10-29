@@ -293,8 +293,9 @@ for (const status of [200, 422]) {
       const school = { name: "Example Primary", contact: { ...privateFixture, telephone: "public switchboard" } };
       const body = {
         uprn: 100023336956, ...privateFixture,
-        address: { full_address: "PRIVATE_SENTINEL, 10 DOWNING STREET", address_line_1: "10 DOWNING STREET", post_town: "LONDON", postcode: "SW1A 2AA" },
-        addresses: [{ ...privateFixture, address: "PRIVATE_SENTINEL", building_number: "10", street: "DOWNING STREET", town: "LONDON" }],
+        full_address: name === "address_match" ? "PRIVATE_SENTINEL" : "Public site address", address_line_1: "10 DOWNING STREET", post_town: "LONDON", postcode: "SW1A 2AA",
+        address: { full_address: name === "property_core" ? "PRIVATE_SENTINEL" : "10 DOWNING STREET, LONDON, SW1A 2AA", address_line_1: "10 DOWNING STREET", post_town: "LONDON", postcode: "SW1A 2AA" },
+        addresses: [{ ...privateFixture, address: name === "address_postcode" ? "PRIVATE_SENTINEL" : "10 DOWNING STREET", building_number: "10", street: "DOWNING STREET", town: "LONDON" }],
         schools: { query: "PRIVATE_QUERY", schools: [school], deep: [{ ...privateFixture, children: [privateFixture] }] },
         query: "PRIVATE_QUERY", results: [{ ...privateFixture, description: "Extension" }],
         lr_title: { title_no: "PRIVATE_SENTINEL", estate_interest: "Freehold" },
@@ -356,3 +357,20 @@ test("ChatGPT postcode labels use property parts, and never fall back to an occu
     assert.doesNotMatch(JSON.stringify(answer), /PRIVATE_SENTINEL/);
   } finally { await client.close(); }
 });
+
+for (const [name, args, body] of [
+  ["planning", { postcode: "SW1A 2AA" }, { results: [{ address: "12 Example Road, London SW1A 1AA", description: "Rear extension", applicant_name: "PRIVATE_SENTINEL" }] }],
+  ["schools", { postcode: "SW1A 2AA" }, { schools: [{ name: "Example School", full_address: "School Lane, London", contact: { head_teacher: "PRIVATE_SENTINEL" } }] }],
+  ["amenities_all", { uprn: "100023336956" }, { healthcare: { gps: [{ name: "Example Surgery", address: "1 High St, London" }] } }],
+] as const) {
+  test(`ChatGPT ${name} preserves public site addresses`, async () => {
+    const { client } = await connect({ profile: PROFILES.chatgpt, response: () => new Response(JSON.stringify(body)) });
+    try {
+      const answer = await client.callTool({ name, arguments: args });
+      const expected = JSON.parse(JSON.stringify(body), (key, value) => deniedFields.includes(key) ? undefined : value);
+      assert.deepEqual(answer.structuredContent, expected);
+      assert.deepEqual(JSON.parse((answer.content as { text: string }[])[0].text), expected);
+      assertNoPrivate(answer);
+    } finally { await client.close(); }
+  });
+}

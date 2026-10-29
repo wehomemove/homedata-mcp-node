@@ -1,9 +1,14 @@
 # Rejection fix validation
 
-- `npm test`: 293 tests passed, zero failures, including 47 server tests.
+- `npm test`: 296 tests passed, zero failures, including 50 server tests.
 - The privacy matrix exercises 14 tools on HTTP 200 and 422: 28 transport cases.
 - Additional cases verify every allowed overview section, unknown-section exclusion,
   public fact retention, property-part labels, missing-part omission and unchanged stdio.
+- Public planning, school and GP addresses survive in both structured and text output.
+  Rebuilding is limited to the measured property label paths, including API error bodies.
+- Review regression mutation: restoring the broad address rewrite fails all three
+  public site address tests; generated output was restored afterwards.
+- Merge-queue legs command exited 0; the project selected no legs for this diff.
 - Mutation check: disabling the recursive denied-field check in generated output
   makes both selected address_match regression cases fail on a denied key. Generated
   output was restored before packaging; no mutation is committed.
