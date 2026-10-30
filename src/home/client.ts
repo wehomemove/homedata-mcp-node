@@ -925,10 +925,18 @@ export class HomeClient {
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const headers: Record<string, string> = { Accept: "application/json", "User-Agent": "home-chatgpt-app/1.0" };
+      // home.co.uk trusts this server by its shared secret: for listing views and, since its visitor check
+      // went to enforce (29 Oct), for every API page. It never follows a redirect, so the secret never leaves.
       const secret = this.options.listingViewSecret?.trim();
-      const trustedListingRequest = Boolean(secret) && url.pathname.startsWith("/api/property-details/");
-      if (trustedListingRequest) headers["X-Home-Listing-Secret"] = secret!;
-      const response = await this.fetchImpl(url, { headers, signal: controller.signal, ...(trustedListingRequest ? { redirect: "error" } : {}) });
+      const trusted = Boolean(secret) && url.pathname.startsWith("/api/");
+      if (trusted) headers["X-Home-Listing-Secret"] = secret!;
+      let response = await this.fetchImpl(url, { headers, signal: controller.signal, ...(trusted ? { redirect: "manual" } : {}) });
+      if (trusted && response.status >= 300 && response.status < 400) {
+        // One hop, and only within home.co.uk: a redirect anywhere else is an error, never a leaked secret.
+        const next = new URL(response.headers.get("location") ?? "", url);
+        if (next.origin !== url.origin) throw new HomeUpstreamError(`home.co.uk redirected ${url.pathname} off-site`);
+        response = await this.fetchImpl(next, { headers, signal: controller.signal, redirect: "error" });
+      }
       const raw = await response.text().catch(() => "");
       let value: unknown;
       try { value = raw === "" ? null : JSON.parse(raw); }
