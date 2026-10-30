@@ -926,9 +926,10 @@ export class HomeClient {
     try {
       const headers: Record<string, string> = { Accept: "application/json", "User-Agent": "home-chatgpt-app/1.0" };
       // home.co.uk trusts this server by its shared secret: for listing views and, since its visitor check
-      // went to enforce (29 Oct), for every API page. It never follows a redirect, so the secret never leaves.
+      // went to enforce (29 Oct), for every page it gates (/api/for-sale, /sold-properties, ...). Every request
+      // here goes to home.co.uk, and a redirect is followed only within it, so the secret never leaves.
       const secret = this.options.listingViewSecret?.trim();
-      const trusted = Boolean(secret) && url.pathname.startsWith("/api/");
+      const trusted = Boolean(secret);
       if (trusted) headers["X-Home-Listing-Secret"] = secret!;
       let response = await this.fetchImpl(url, { headers, signal: controller.signal, ...(trusted ? { redirect: "manual" } : {}) });
       if (trusted && response.status >= 300 && response.status < 400) {
