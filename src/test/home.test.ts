@@ -1034,7 +1034,7 @@ test("search_homes offers every wish as an enum the golden set is checked agains
   assert.match(checkGoldenSet(set, HOME_TOOLS as never).join("\n"), /search_homes\.wishes item sea_view is not allowed/);
 });
 
-test("only property-detail requests carry the trusted listing header and cannot redirect", async () => {
+test("every home.co.uk API request carries the trusted header and cannot redirect; Homedata never sees it", async () => {
   const received: Array<{ url: URL; init?: RequestInit }> = [];
   const fetchImpl = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = new URL(String(input)); received.push({ url, init });
@@ -1047,12 +1047,33 @@ test("only property-detail requests carry the trusted listing header and cannot 
   const client = new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, listingViewSecret: "trusted-secret" });
   await client.search({ location: "Bath", listing_type: "sale" });
   await client.home(ID);
-  const details = received.find((request) => request.url.pathname.startsWith("/api/property-details/"))!;
-  assert.equal(new Headers(details.init?.headers).get("X-Home-Listing-Secret"), "trusted-secret");
-  assert.equal(details.init?.redirect, "error");
-  for (const request of received.filter((item) => item !== details)) {
+  const home = received.filter((request) => request.url.hostname === "home.test");
+  assert.ok(home.some((r) => r.url.pathname.startsWith("/api/for-sale/")), "search went to home.co.uk");
+  for (const request of home) {
+    // home.co.uk's visitor check (enforce since 29 Oct) lets this server through by the same secret.
+    assert.equal(new Headers(request.init?.headers).get("X-Home-Listing-Secret"), "trusted-secret", request.url.toString());
+    assert.notEqual(request.init?.redirect ?? "follow", "follow", request.url.toString());
+  }
+  for (const request of received.filter((item) => item.url.hostname !== "home.test")) {
     assert.equal(new Headers(request.init?.headers).has("X-Home-Listing-Secret"), false, request.url.toString());
   }
+});
+
+test("a home.co.uk redirect is followed once within home.co.uk, and one off-site never gets the secret", async () => {
+  const seen: Array<{ url: string; secret: string | null }> = [];
+  const make = (target: string) => (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const url = new URL(String(input)); seen.push({ url: url.toString(), secret: new Headers(init?.headers).get("X-Home-Listing-Secret") });
+    if (url.pathname === "/api/for-sale/bath/") return new Response(null, { status: 301, headers: { Location: target } });
+    return new Response(JSON.stringify({ total: 0, properties: [] }), { headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  const homedata = new HomedataClient({ apiKey: "test", baseUrl: "https://data.test", fetchImpl: make("/") });
+  const inside = new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl: make("/api/for-sale/Bath/"), listingViewSecret: "s" });
+  await inside.search({ location: "bath", listing_type: "sale" });
+  assert.ok(seen.some((r) => r.url === "https://home.test/api/for-sale/Bath/" && r.secret === "s"), JSON.stringify(seen));
+  seen.length = 0;
+  const outside = new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl: make("https://evil.example/steal"), listingViewSecret: "s", logger: () => {} });
+  await assert.rejects(outside.search({ location: "bath", listing_type: "sale" }));
+  assert.ok(!seen.some((r) => r.url.startsWith("https://evil.example")), "never requested off-site");
 });
 
 test("get_home uses the property-details UPRN before address matching", async () => {
