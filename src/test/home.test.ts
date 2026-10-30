@@ -1047,8 +1047,10 @@ test("every home.co.uk API request carries the trusted header and cannot redirec
   const client = new HomeClient({ homeBaseUrl: "https://home.test", homedata, fetchImpl, listingViewSecret: "trusted-secret" });
   await client.search({ location: "Bath", listing_type: "sale" });
   await client.home(ID);
+  await client.soldPrices({ postcode: "BA1 1LN" } as never).catch(() => undefined);
   const home = received.filter((request) => request.url.hostname === "home.test");
   assert.ok(home.some((r) => r.url.pathname.startsWith("/api/for-sale/")), "search went to home.co.uk");
+  assert.ok(home.some((r) => r.url.pathname.startsWith("/sold-properties/")), "sold prices are not under /api/ and must carry it too (29 Oct outage)");
   for (const request of home) {
     // home.co.uk's visitor check (enforce since 29 Oct) lets this server through by the same secret.
     assert.equal(new Headers(request.init?.headers).get("X-Home-Listing-Secret"), "trusted-secret", request.url.toString());
