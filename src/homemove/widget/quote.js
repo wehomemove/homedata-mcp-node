@@ -226,6 +226,8 @@
       { step: "Book removals", why: "Priced from what you're moving and how far.", answer: { status: "needs_home", product: { id: 0, name: "Book removals", type: "removals" }, postcode: "", home: "from" } },
       { step: "End of tenancy clean", why: "A professional clean of the place you're leaving, before you hand back the keys.", answer: { status: "needs_home", product: { id: 0, name: "End of tenancy clean", type: "cleaning" }, postcode: "", home: "from" } },
     ] };
+  DEMO.choose = { status: "choose_service", sample: true, options: [{ id: 2, name: "Level 2 Survey", type: "surveys" }, { id: 4, name: "Level 3 Survey", type: "surveys" }, { id: 1039, name: "Snagging Survey", type: "surveys" }, { id: 1045, name: "Building Survey", type: "surveys" }] };
+  DEMO.bb_empty = { view: "broadband", postcode: "ZE2 9AA", sort: "price", total: 0, deals: [], all_deals: [], sample: true, continue_url: "https://homemove.com/broadband/compare/ZE29AA" };
   const DEMO_PRICES = { "1039": { "1 Bedroom|Pre-inspection": 499, "2 Bedrooms|Post-Completion": 449 }, "1097": { "1 Bedroom": 209, "2 Bedrooms": 267, "3 Bedrooms": 376, "4 Bedrooms": 484 } };
 
   const app = $("#app");
@@ -360,6 +362,24 @@
       // A service homemove.com runs with a regulated partner: no price or recommendation here, just the way in.
       copy.append(h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, d.name), h("p", {}, d.line),
         h("button", { class: "cta", onclick: () => book({ continue_url: d.url }) }, "Continue on homemove.com"));
+    } else if (d.status === "choose_service") {
+      // More than one service fits what they asked: let them tap one, as the homemove.com form's first step.
+      const pick = async (o, tile) => {
+        tile.classList.add("sel");
+        try {
+          const oa = window.openai;
+          const res = oa?.callTool ? await withTimeout(oa.callTool("homemove_quote", { service: String(o.id) }), 20000) : null;
+          const next = res ? (res.structuredContent ?? res) : null;
+          if (next?.status) { state.data = next; renderInline(); }
+        } catch { tile.classList.remove("sel"); }
+      };
+      const tiles = h("div", { class: "tiles" }, d.options.map((o) => {
+        const tile = h("button", { class: "tile", onclick: () => pick(o, tile) }, h("img", { src: `${A}icons/${o.type === "surveys" ? "home" : "checklist"}.webp`, alt: "" }), h("span", {}, h("b", {}, o.name)), h("span", { class: "tick" }, svgTick()));
+        return tile;
+      }));
+      copy.append(h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, /survey/i.test(d.options.map((o) => o.name).join(" ")) ? "Which survey do you need?" : "Which one do you mean?"), tiles);
+    } else if (d.status === "unknown_service") {
+      copy.append(h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, "We don't price that here"), h("p", {}, "Homemove prices surveys, valuations, EPCs and safety certificates, conveyancing, removals and moving cleans."), h("button", { class: "link", onclick: () => book(d) }, "See everything on homemove.com →"));
     } else if (d.status === "quoted_by_hand") {
       copy.append(h("div", { class: "eyebrow" }, "Homemove"), h("h1", {}, "This one's priced by hand"), h("p", {}, `A ${d.product.name.toLowerCase()} for this home needs a specialist's quote.`), h("button", { class: "cta", onclick: () => book(d) }, "Get a quote on homemove.com"));
     } else {
@@ -1009,6 +1029,14 @@
 
   function renderBroadbandInline() {
     const b = state.bb, list = b.deals.length ? b.deals : b.all_deals;
+    if (!b.all_deals.length) {
+      app.replaceChildren(h("div", { class: "inline" }, sky(),
+        h("div", { class: "copy" }, h("div", { class: "eyebrow" }, `Broadband at ${b.postcode}`), h("h1", {}, "No deals listed here"),
+          h("p", {}, "homemove.com's comparison has no deals for this postcode yet. Providers can still check what reaches the address."),
+          h("button", { class: "link", onclick: () => book(b) }, "Check on homemove.com →")),
+        h("div", { class: "stage-mini" }, livingHomie("welcome"))));
+      return;
+    }
     const cheapest = Math.min(...b.all_deals.map((d) => d.monthly_gbp)), fastest = Math.max(...b.all_deals.map((d) => d.download_mbps));
     const price = h("div", { class: "price inline-price", "aria-label": `from ${money2(cheapest)} a month` });
     app.replaceChildren(h("div", { class: "inline" }, sky(),

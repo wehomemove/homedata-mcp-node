@@ -80,7 +80,14 @@ export function resolveProduct(products: MotusProduct[], service: string | numbe
     .map((p) => ({ p, score: words.filter((w) => norm(p.name).includes(w)).length + (norm(p.name) === norm(text) ? 10 : 0) }))
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score);
-  if (!scored.length) return { candidates: [] };
+  if (!scored.length) {
+    // "a survey" names no particular one: offer the survey choices the homemove.com form leads with.
+    if (/\bsurvey\b/i.test(text) && !words.length) {
+      const first = [2, 4, 1039, 1045].map((id) => live.find((p) => p.id === id)).filter((p): p is MotusProduct => Boolean(p));
+      return { candidates: first };
+    }
+    return { candidates: [] };
+  }
   const best = scored.filter((x) => x.score === scored[0]!.score).map((x) => x.p);
   return best.length === 1 ? { product: best[0], candidates: best } : { candidates: best.slice(0, 6) };
 }

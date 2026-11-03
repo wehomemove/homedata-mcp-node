@@ -236,6 +236,12 @@ export const HOMEMOVE_TOOL_LIST = [QUOTE_TOOL, PLAN_TOOL, STAMP_TOOL, SERVICES_T
 /** What the model is told when motus or Homedata does not answer. */
 export const UNAVAILABLE_TEXT = "Homemove could not work out the price just now. Tell the user to try again in a moment. Do not estimate a price.";
 
+/** "a Level 2 Survey", "an EPC Assessment", but "removals" and "conveyancing", which take no article. */
+function aService(name: string): string {
+  if (/^(removals|conveyancing|man & van)\b/i.test(name.trim())) return name.trim().toLowerCase();
+  return `${/^[aeiou]/i.test(name) ? "an" : "a"} ${name}`;
+}
+
 /** The model-facing summary that goes with a quote, so it says what the card shows and no more. */
 export function quoteNarration(answer: QuoteAnswer & { continue_url?: string }): string {
   const link = answer.continue_url ? ` They can carry on at homemove.com: ${answer.continue_url}` : "";
@@ -268,7 +274,7 @@ function quoteNarrationCore(answer: QuoteAnswer): string {
         return `${/^[aeiou]/i.test(answer.product.name) ? "An" : "A"} ${answer.product.name} with Homemove is from £${answer.from_gbp.toLocaleString("en-GB")}, depending on the home's value (£${top.price_gbp.toLocaleString("en-GB")} for ${top.label}). ` +
           "Say that in a sentence. The card shows it and lets them pick their address, or a value range, for their exact price; do not ask for the postcode or price yourself. If they give the address or value in the chat, call homemove_quote again with it.";
       }
-      return `To price ${/^[aeiou]/i.test(answer.product.name) ? "an" : "a"} ${answer.product.name}, ask: ` + answer.questions.map((q) => q.options.length ? `${q.question} (${q.options.join(" / ")})` : q.question).join(" ") +
+      return `To price ${aService(answer.product.name)}, ask: ` + answer.questions.map((q) => q.options.length ? `${q.question} (${q.options.join(" / ")})` : q.question).join(" ") +
         (answer.questions.some((q) => q.name === "home_size" || q.name === "to_postcode")
           ? " Then call homemove_quote again with to_postcode and home_size for an indicative price, or items (each thing they named, with a quantity) for their own list. Never make up a list of their things; the card also lets them pick room by room."
           : " Then call homemove_quote again with the answers (property_price in pounds for the value).") +

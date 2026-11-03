@@ -638,3 +638,12 @@ test("a plan with no homes yet lists every step as waiting for its home, and nev
   assert.equal(half["lines"].find((l: any) => l.step === "End of tenancy clean").answer.status, "priced", "the clean only needs the home being left");
   assert.equal(half["lines"].find((l: any) => l.step === "Book removals").answer.home, "to");
 });
+
+test("'a survey' offers the surveys to choose from, and removals reads as removals", async () => {
+  const deps = { motus: fakeMotus(), property: fakeHomedata() };
+  const survey = await quote({ service: "survey", postcode: "" }, deps);
+  assert.equal(survey.status, "choose_service", "seen live 3 Nov: 'survey' answered 'no instant price'");
+  assert.ok((survey as { options: Array<{ name: string }> }).options.some((o) => o.name === "Level 2 Survey"));
+  const removals = await quote({ service: "removals", postcode: "" }, deps);
+  assert.match(quoteNarration({ ...removals, continue_url: "x" } as never), /^To price removals, ask:/);
+});
