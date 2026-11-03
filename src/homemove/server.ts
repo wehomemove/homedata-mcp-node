@@ -279,6 +279,8 @@ function quoteNarrationCore(answer: QuoteAnswer): string {
       return `Several services match: ${answer.options.map((o) => o.name).join(", ")}. Ask which one they mean, then call homemove_quote with it.`;
     case "unknown_service":
       return `Homemove has no instant price for "${answer.service}". Offer the closest service from homemove_services, or say the team can quote it.`;
+    case "needs_home":
+      return `${answer.product.name} is priced once Homemove knows ${answer.home === "from" ? "the home they are leaving" : "the home they are moving to"}.`;
     case "front_door":
       return `${answer.line} The card opens it on homemove.com. ` +
         (answer.door === "home_insurance" ? "Do not quote, compare or recommend insurance or give insurance advice in this chat; say Homemove's partner quotes it on homemove.com." :
@@ -294,9 +296,16 @@ function result(body: Record<string, unknown>, text: string, isError = false): C
   return { content: [{ type: "text", text }], structuredContent: body, ...(isError ? { isError: true } : {}) };
 }
 
+const HOME_WORDS = { from: "the home they are leaving", to: "the home they are moving to" } as const;
+
 export function planNarration(plan: MovePlan): string {
-  const lines = plan.lines.map((l) => l.answer.status === "priced" ? `${l.step}: £${l.answer.price_gbp.toLocaleString("en-GB")}` : `${l.step}: needs details`).join("; ");
-  return `Homemove priced ${plan.priced} of ${plan.lines.length} steps, £${plan.total_gbp.toLocaleString("en-GB")} together (${lines}).` +
+  const lines = plan.lines.map((l) => l.answer.status === "priced" ? `${l.step}: £${l.answer.price_gbp.toLocaleString("en-GB")}` : l.answer.status === "needs_home" ? `${l.step}: needs ${HOME_WORDS[l.answer.home]}` : `${l.step}: needs details`).join("; ");
+  const homes = plan.homes_needed.map((h) => HOME_WORDS[h]).join(" and ");
+  if (homes && !plan.priced) {
+    return `Their move has ${plan.lines.length} steps (${plan.lines.map((l) => l.step).join(", ")}); Homemove prices them once it knows ${homes}. ` +
+      "The card asks for the address of each, or ask them for the postcodes and call homemove_move_plan again with to_postcode and from_postcode. Do not give any total yet; nothing is priced.";
+  }
+  return (homes ? `Still needs ${homes} (the card asks for it, or call homemove_move_plan again with the postcode). ` : "") + `Homemove priced ${plan.priced} of ${plan.lines.length} steps, £${plan.total_gbp.toLocaleString("en-GB")} together (${lines}).` +
     (plan.unpriced.length ? ` Not in that total: ${plan.unpriced.join(", ")}; offer to price them (the card lets them tap through).` : "") +
     (plan.stamp_duty ? ` Stamp duty would be £${plan.stamp_duty.total_tax.toLocaleString("en-GB")} (${plan.stamp_duty.jurisdiction}, rates from ${plan.stamp_duty.thresholds_from}); it is paid to HMRC, not Homemove, and is not in the total.` : "") +
     " Prices are confirmed when they book. The card shows the plan; keep your reply short.";
@@ -372,10 +381,13 @@ export function buildHomemoveServer(deps: { motus: MotusClient; property: Proper
           mortgage: typeof args["mortgage"] === "boolean" ? args["mortgage"] : undefined,
           items: Array.isArray(args["items"]) ? (args["items"] as Array<{ item?: unknown; quantity?: unknown }>).filter((i) => typeof i?.item === "string").map((i) => ({ item: String(i.item), quantity: typeof i.quantity === "number" ? i.quantity : undefined })) : undefined,
         }, { motus: deps.motus, property: deps.property, homedata: deps.homedata });
-        if (!plan.lines.length) return result({ view: "plan", ...plan } as unknown as Record<string, unknown>, "Ask for the postcode of the home they are moving to (and from, if they are selling or renting), then try again.");
         const continue_url = tagged(continueUrlForPlan(plan, { to_postcode: pc("to_postcode"), from_postcode: pc("from_postcode") }, deps.handoffBase), `move-plan-${situation}`);
         const lines = plan.lines.map((l) => ({ ...l, answer: { ...l.answer, continue_url: tagged(continueUrlForQuote(l.answer, deps.handoffBase), "product" in l.answer && l.answer.product ? l.answer.product.name : "move-plan") } }));
-        return result({ view: "plan", ...plan, lines, continue_url } as unknown as Record<string, unknown>, planNarration({ ...plan, lines }) + ` To carry on with everything on homemove.com: ${continue_url}`);
+        // What the plan was asked with, so the card can ask for the missing homes and run it again.
+        const request = Object.fromEntries(Object.entries({ situation, property_price: num("property_price"), sale_price: num("sale_price"), bedrooms: num("bedrooms"),
+          mortgage: typeof args["mortgage"] === "boolean" ? args["mortgage"] : undefined, first_time_buyer: args["first_time_buyer"] === true || undefined, additional_property: args["additional_property"] === true || undefined,
+          from_postcode: pc("from_postcode"), to_postcode: pc("to_postcode"), from_address: str("from_address"), to_address: str("to_address") }).filter(([, v]) => v !== undefined));
+        return result({ view: "plan", ...plan, lines, continue_url, request } as unknown as Record<string, unknown>, planNarration({ ...plan, lines }) + ` To carry on with everything on homemove.com: ${continue_url}`);
       }
       if (request.params.name === "homemove_stamp_duty" && deps.homedata) {
         const price = typeof args["price"] === "number" && args["price"] > 0 ? Math.round(args["price"]) : 0;

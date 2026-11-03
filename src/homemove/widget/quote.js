@@ -221,6 +221,11 @@
     all_deals: [["NOW", "Brilliant Broadband", 10, 20, 12], ["NOW", "Fab Fibre", 36, 24, 12], ["Vodafone", "Full Fibre 150", 150, 26, 24], ["Sky", "Full Fibre 500", 500, 35, 18], ["BT", "Full Fibre 900", 900, 49.99, 24], ["Hyperoptic", "1Gb", 1000, 45, 24]]
       .map(([provider, name, down, monthly, months], i) => ({ id: i + 1, provider, logo: null, name, download_mbps: down, upload_mbps: Math.round(down / 5), monthly_gbp: monthly, setup_gbp: 0, contract_months: months, offer: null, landline: false, tv: false, features: ["Unlimited usage"] })) };
   DEMO.broadband.deals = DEMO.broadband.all_deals;
+  DEMO.plan_empty = { view: "plan", situation: "renting", total_gbp: 0, priced: 0, unpriced: ["Book removals", "End of tenancy clean"], homes_needed: ["from", "to"], sample: true, request: { situation: "renting" },
+    lines: [
+      { step: "Book removals", why: "Priced from what you're moving and how far.", answer: { status: "needs_home", product: { id: 0, name: "Book removals", type: "removals" }, postcode: "", home: "from" } },
+      { step: "End of tenancy clean", why: "A professional clean of the place you're leaving, before you hand back the keys.", answer: { status: "needs_home", product: { id: 0, name: "End of tenancy clean", type: "cleaning" }, postcode: "", home: "from" } },
+    ] };
   const DEMO_PRICES = { "1039": { "1 Bedroom|Pre-inspection": 499, "2 Bedrooms|Post-Completion": 449 }, "1097": { "1 Bedroom": 209, "2 Bedrooms": 267, "3 Bedrooms": 376, "4 Bedrooms": 484 } };
 
   const app = $("#app");
@@ -864,18 +869,96 @@
   }
   const SITUATION = { buying: "Your purchase", selling: "Your sale", buying_and_selling: "Your sale and purchase", renting: "Your move", landlord: "Your let" };
 
+  /** What each end of the move is called for this situation. */
+  const HOME_LABEL = {
+    from: { renting: "The home you're leaving", selling: "The home you're selling", buying_and_selling: "The home you're selling", buying: "Where you're moving from" },
+    to: { renting: "Where you're moving to", buying: "The home you're buying", buying_and_selling: "The home you're buying", selling: "Where you're moving to", landlord: "The home you're letting" },
+  };
+  const homeLabel = (p, home) => HOME_LABEL[home][p.situation] ?? (home === "from" ? "The home you're leaving" : "The home you're moving to");
+  /** ["removals", "End of tenancy clean"] as "Removals and end of tenancy clean". */
+  const sentence = (items) => {
+    const list = items.map((x, i) => (i ? x.charAt(0).toLowerCase() + x.slice(1) : x.charAt(0).toUpperCase() + x.slice(1)));
+    return list.length > 1 ? `${list.slice(0, -1).join(", ")} and ${list.at(-1)}` : list[0] ?? "";
+  };
+  const homesNeeded = (p) => Array.isArray(p.homes_needed) ? p.homes_needed : [];
+
   function renderPlanInline() {
     const p = state.plan;
-    const total = h("div", { class: "price inline-price", "aria-label": gbp(p.total_gbp) });
-    app.replaceChildren(h("div", { class: "inline" }, sky(),
-      h("div", { class: "copy" },
-        h("div", { class: "eyebrow" }, SITUATION[p.situation] ?? "Your move"),
+    const waiting = homesNeeded(p);
+    const copy = h("div", { class: "copy" }, h("div", { class: "eyebrow" }, SITUATION[p.situation] ?? "Your move"));
+    if (waiting.length && !p.priced) {
+      // Nothing can be priced yet: say what the move needs, never "0 priced, £0, everything priced".
+      copy.append(
+        h("h1", {}, `${p.lines.length} steps to price`),
+        h("p", {}, `${sentence(p.lines.map((l) => l.step.replace(/^(Book|Get|Instruct)\s+(an?\s+)?/i, "")))}. Add ${waiting.map((w) => homeLabel(p, w).toLowerCase()).join(" and ")}, and we'll price each one.`),
+        h("div", { class: "inline-actions" }, h("button", { class: "cta", onclick: () => openPlanHomes() }, waiting.length > 1 ? "Add your homes" : "Add the home"), h("button", { class: "link", onclick: () => book(p) }, "homemove.com →")));
+    } else {
+      const total = h("div", { class: "price inline-price", "aria-label": gbp(p.total_gbp) });
+      const extra = [p.unpriced.length ? `Plus ${p.unpriced.length} to price` : null, p.stamp_duty ? `stamp duty ${gbp(p.stamp_duty.total_tax)} to HMRC, not included` : null].filter(Boolean).join(" · ");
+      copy.append(
         h("h1", {}, `${p.lines.length} steps, ${p.priced} priced`),
         total,
-        h("p", {}, p.unpriced.length ? `Plus ${p.unpriced.length} to price${p.stamp_duty ? ` · stamp duty ${gbp(p.stamp_duty.total_tax)} to HMRC` : ""}` : (p.stamp_duty ? `Stamp duty ${gbp(p.stamp_duty.total_tax)} to HMRC, not included` : "Everything priced")),
-        h("div", { class: "inline-actions" }, h("button", { class: "cta", onclick: () => openPlan() }, "See my move"), h("button", { class: "link", onclick: () => book(p) }, "homemove.com →"))),
-      h("div", { class: "stage-mini" }, livingHomie("welcome"))));
-    rollingPrice(total, p.total_gbp);
+        h("p", {}, extra || "Every step priced"),
+        h("div", { class: "inline-actions" }, h("button", { class: "cta", onclick: () => (waiting.length ? openPlanHomes() : openPlan()) }, waiting.length ? "Add your homes" : "See my move"), h("button", { class: "link", onclick: () => book(p) }, "homemove.com →")));
+      rollingPrice(total, p.total_gbp);
+    }
+    app.replaceChildren(h("div", { class: "inline" }, sky(), copy, h("div", { class: "stage-mini" }, livingHomie("welcome"))));
+  }
+
+  /**
+   * The homes the plan is waiting for, one address step each (the same picker as a single quote),
+   * then the plan is run again with them and opens priced.
+   */
+  async function openPlanHomes() {
+    try { await window.openai?.requestDisplayMode?.({ mode: "fullscreen" }); } catch { /* inline is fine */ }
+    const p = state.plan, waiting = homesNeeded(p);
+    const picked = {};
+    app.replaceChildren();
+    document.querySelectorAll(".dim,.sheet,.confetti").forEach((el) => el.remove());
+    const card = h("div", { class: "card" });
+    const stage = h("div", { class: "stage" }, h("div", { class: "bubble on" }, "Where's the move?"), h("div", { class: "homie-slot" }, livingHomie("welcome")));
+    app.append(h("div", { class: "takeover" }, sky(),
+      h("div", { class: "topbar" }, h("img", { src: `${A}logo-red.png`, alt: "homemove" }), h("button", { class: "close", "aria-label": "Close", onclick: () => { try { window.openai?.requestDisplayMode?.({ mode: "inline" }); } catch {} renderPlanInline(); } }, "✕")),
+      h("div", { class: "main" }, card, stage)));
+    state.ui = { stage, bubble: stage.querySelector(".bubble"), slot: stage.querySelector(".homie-slot"), card };
+    const ask = (i) => {
+      const home = waiting[i];
+      state.addrQuery = "";
+      const progress = h("div", { class: "progress" }, waiting.map((_, n) => h("i", { class: n < i ? "done" : "" })));
+      const body = h("div", { class: "step" },
+        h("div", { class: "eyebrow" }, `${SITUATION[p.situation] ?? "Your move"} · ${i + 1} of ${waiting.length}`),
+        h("h2", {}, home === "from" ? "Where are you moving from?" : "And where are you moving to?"),
+        h("p", { class: "sub" }, "Type the postcode and pick the address."),
+        addressPicker((a) => { picked[home] = a; return i + 1 < waiting.length ? ask(i + 1) : run(); }, false),
+        h("button", { class: "link skip", onclick: () => {
+          const m = /^([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})$/i.exec((state.addrQuery ?? "").trim());
+          if (!m) return say("Type the postcode first.");
+          picked[home] = { postcode: `${m[1]} ${m[2]}`.toUpperCase() };
+          return i + 1 < waiting.length ? ask(i + 1) : run();
+        } }, "Just use the postcode →"));
+      card.replaceChildren(progress, body);
+      say(home === "from" ? "Where's the move from?" : "And where to?");
+    };
+    const run = async () => {
+      card.replaceChildren(h("div", { class: "step" }, h("div", { class: "eyebrow" }, SITUATION[p.situation] ?? "Your move"), h("h2", {}, "Pricing your move…")));
+      say("Working it all out…");
+      hop(state.ui.slot.firstElementChild, 14);
+      const args = { ...(p.request ?? { situation: p.situation }) };
+      for (const home of ["from", "to"]) {
+        if (!picked[home]) continue;
+        args[`${home}_postcode`] = picked[home].postcode;
+        if (picked[home].line) args[`${home}_address`] = picked[home].line;
+      }
+      try {
+        const oa = window.openai;
+        const res = oa?.callTool ? await withTimeout(oa.callTool("homemove_move_plan", args), 30000) : null;
+        const next = res ? (res.structuredContent ?? res) : { ...p, homes_needed: [], sample: true };
+        if (!next?.lines) throw new Error("no plan");
+        state.plan = next;
+        openPlan();
+      } catch { say("That took too long. Try again?"); ask(0); }
+    };
+    ask(0);
   }
 
   async function openPlan() {
@@ -894,6 +977,7 @@
         h("span", { class: "dot" }, h("img", { src: `${A}icons/${STEP_ICON(line)}.webp`, alt: "" })),
         h("div", { class: "tl-body" }, h("b", {}, line.step), h("small", {}, line.why)),
         priced ? h("span", { class: "tl-price" }, gbp(a.price_gbp))
+          : a.status === "needs_home" ? h("button", { class: "chip", onclick: () => openPlanHomes() }, a.home === "from" ? "Add the home you're leaving →" : "Add the home you're moving to →")
           : a.status === "needs_answers" ? h("button", { class: "chip", onclick: () => { state.planLine = i; state.data = a; state.args = {}; openTakeover(); } }, "Price it →")
           : h("span", { class: "tl-note" }, "Quoted by the team"));
       if (!reduced) li.animate([{ opacity: 0, transform: "translateX(-12px)" }, { opacity: 1, transform: "none" }], { duration: 450, delay: 150 + Math.min(i, 8) * 70, easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" });
@@ -901,19 +985,20 @@
     });
     const card = h("div", { class: "card plan" },
       h("div", { class: "eyebrow" }, SITUATION[p.situation] ?? "Your move"),
-      h("h2", {}, "Your move, priced"),
-      h("div", { class: "plan-head" }, total, h("span", {}, `${p.priced} of ${p.lines.length} steps priced`)),
+      h("h2", {}, homesNeeded(p).length ? "Your move" : "Your move, priced"),
+      p.priced ? h("div", { class: "plan-head" }, total, h("span", {}, `${p.priced} of ${p.lines.length} steps priced`)) : null,
+      homesNeeded(p).length ? h("button", { class: "cta wide", onclick: () => openPlanHomes() }, `Add ${homesNeeded(p).map((w) => homeLabel(p, w).toLowerCase()).join(" and ")}`) : null,
       list,
       p.stamp_duty ? h("div", { class: "tl hmrc" }, h("span", { class: "dot" }, h("img", { src: `${A}icons/money.webp`, alt: "" })),
         h("div", { class: "tl-body" }, h("b", {}, "Stamp duty"), h("small", {}, `Paid to HMRC, not Homemove. ${p.stamp_duty.note}`)), h("span", { class: "tl-price" }, gbp(p.stamp_duty.total_tax))) : null,
       h("p", { class: "note" }, "Homemove prices are confirmed when you book."),
       h("button", { class: "cta wide", onclick: () => book(p) }, "Continue on homemove.com"));
-    const stage = h("div", { class: "stage" }, h("div", { class: "bubble on" }, p.unpriced.length ? `${p.unpriced.length} more to price. Tap “Price it”.` : "That's your whole move!"), h("div", { class: "homie-slot" }, livingHomie("welcome")));
+    const stage = h("div", { class: "stage" }, h("div", { class: "bubble on" }, homesNeeded(p).length ? "Add the homes and I'll price it all." : p.unpriced.length ? `${p.unpriced.length} more to price. Tap “Price it”.` : "That's your whole move!"), h("div", { class: "homie-slot" }, livingHomie("welcome")));
     root.append(h("div", { class: "main" }, card, stage));
     app.append(root);
     state.ui = { stage, bubble: stage.querySelector(".bubble"), slot: stage.querySelector(".homie-slot"), card };
     await rollingPrice(total, p.total_gbp);
-    if (!p.unpriced.length && !reduced) { const conf = h("canvas", { class: "confetti" }); document.body.append(conf); confetti(conf); setTimeout(() => conf.remove(), 2600); }
+    if (p.priced && !p.unpriced.length && !reduced) { const conf = h("canvas", { class: "confetti" }); document.body.append(conf); confetti(conf); setTimeout(() => conf.remove(), 2600); }
   }
 
   // ---------------------------------------------------------------- broadband

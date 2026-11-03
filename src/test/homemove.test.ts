@@ -618,3 +618,23 @@ test("a slow quote logs which upstream step it waited on, by stage name only", a
   await timeCall("homemove_quote", () => quote({ service: "EPC", postcode: "SW1A 2AA" }, deps), 60_000, (l) => quiet.push(l));
   assert.deepEqual(quiet, [], "a quick call logs nothing");
 });
+
+test("a plan with no homes yet lists every step as waiting for its home, and never says nothing is left to price", async () => {
+  const server = buildHomemoveServer({ motus: fakeMotus(), property: fakeHomedata(), assetOrigin: "https://mcp.homemove.com", homedata: fakeHomedataClient() });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "t", version: "1" });
+  await Promise.all([server.connect(b), client.connect(a)]);
+  const res = await client.callTool({ name: "homemove_move_plan", arguments: { situation: "renting" } });
+  const plan = res.structuredContent as Record<string, any>;
+  assert.deepEqual(plan["lines"].map((l: any) => [l.step, l.answer.status, l.answer.home]), [["Book removals", "needs_home", "from"], ["End of tenancy clean", "needs_home", "from"]], "seen live 3 Nov: a renter with no postcodes got 0 steps");
+  assert.deepEqual(plan["homes_needed"], ["from", "to"]);
+  assert.equal(plan["priced"], 0);
+  assert.deepEqual(plan["request"], { situation: "renting" }, "the card can run it again with the homes");
+  const text = (res.content as Array<{ text: string }>)[0]!.text;
+  assert.match(text, /2 steps .*once it knows the home they are leaving and the home they are moving to/);
+  assert.match(text, /Do not give any total yet/);
+  const half = (await client.callTool({ name: "homemove_move_plan", arguments: { situation: "renting", from_postcode: "SW1A 2AA", bedrooms: 2 } })).structuredContent as Record<string, any>;
+  assert.deepEqual(half["homes_needed"], ["to"]);
+  assert.equal(half["lines"].find((l: any) => l.step === "End of tenancy clean").answer.status, "priced", "the clean only needs the home being left");
+  assert.equal(half["lines"].find((l: any) => l.step === "Book removals").answer.home, "to");
+});
