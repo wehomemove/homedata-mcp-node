@@ -43,6 +43,12 @@ export interface PlanLine {
 export interface MovePlan {
   situation: Situation;
   lines: PlanLine[];
+  /**
+   * The homes the plan still needs before every step can be priced: "from" is the home being sold
+   * or left, "to" the home being bought, moved into or let. The card asks for them with its address
+   * picker; ChatGPT can ask in words. Empty when both are known.
+   */
+  homes_needed: Array<"from" | "to">;
   /** Homemove's priced lines only. */
   total_gbp: number;
   priced: number;
@@ -50,7 +56,8 @@ export interface MovePlan {
   stamp_duty?: { total_tax: number; note: string; jurisdiction: string; thresholds_from: string };
 }
 
-type Need = { step: string; why: string; request: QuoteRequest };
+/** One step of the plan; needs says which homes it is priced on, so a missing one is asked for, never dropped. */
+type Need = { step: string; why: string; request: QuoteRequest; needs: Array<"from" | "to">; kind: string };
 
 export function linesFor(plan: PlanRequest): Need[] {
   const buyAt = plan.to_postcode ?? "", sellAt = plan.from_postcode ?? "";
@@ -58,36 +65,41 @@ export function linesFor(plan: PlanRequest): Need[] {
   const selling = plan.situation === "selling" || plan.situation === "buying_and_selling";
   const funding = plan.mortgage === undefined ? undefined : plan.mortgage ? "Mortgage" : "Cash";
   const needs: Need[] = [];
-  if (selling && sellAt) {
-    needs.push({ step: "Get an EPC", why: "You need a valid Energy Performance Certificate to market a home.", request: { service: "EPC", postcode: sellAt, address: plan.from_address } });
-    needs.push({ step: "Instruct a conveyancer for the sale", why: "Handles the contract, title and redemption of any mortgage.", request: { service: "conveyancing selling", postcode: sellAt, address: plan.from_address, property_price: plan.sale_price, answers: { transaction: "Selling", ...(plan.mortgage !== undefined ? { funding_type: plan.mortgage ? "Yes, a mortgage" : "No mortgage" } : {}) } } });
+  // Every step for the situation is listed whether or not its home is known yet: a step waiting for
+  // a postcode says so and is asked for, never dropped (a renter with no postcodes saw "0 steps").
+  if (selling) {
+    needs.push({ kind: "surveys", needs: ["from"], step: "Get an EPC", why: "You need a valid Energy Performance Certificate to market a home.", request: { service: "EPC", postcode: sellAt, address: plan.from_address } });
+    needs.push({ kind: "legal", needs: ["from"], step: "Instruct a conveyancer for the sale", why: "Handles the contract, title and redemption of any mortgage.", request: { service: "conveyancing selling", postcode: sellAt, address: plan.from_address, property_price: plan.sale_price, answers: { transaction: "Selling", ...(plan.mortgage !== undefined ? { funding_type: plan.mortgage ? "Yes, a mortgage" : "No mortgage" } : {}) } } });
   }
-  if (buying && buyAt) {
-    needs.push({ step: "Instruct a conveyancer for the purchase", why: "Searches, contracts, the transfer and the SDLT return.", request: { service: "conveyancing buying", postcode: buyAt, address: plan.to_address, property_price: plan.property_price, answers: { transaction: "Buying", ...(funding ? { funding_type: funding } : {}) } } });
-    needs.push({ step: "Book a survey", why: "A Level 2 survey suits most homes in normal condition; older or altered homes may need a Level 3.", request: { service: "level 2 survey", postcode: buyAt, address: plan.to_address, property_price: plan.property_price } });
+  if (buying) {
+    needs.push({ kind: "legal", needs: ["to"], step: "Instruct a conveyancer for the purchase", why: "Searches, contracts, the transfer and the SDLT return.", request: { service: "conveyancing buying", postcode: buyAt, address: plan.to_address, property_price: plan.property_price, answers: { transaction: "Buying", ...(funding ? { funding_type: funding } : {}) } } });
+    needs.push({ kind: "surveys", needs: ["to"], step: "Book a survey", why: "A Level 2 survey suits most homes in normal condition; older or altered homes may need a Level 3.", request: { service: "level 2 survey", postcode: buyAt, address: plan.to_address, property_price: plan.property_price } });
   }
-  if (plan.situation === "landlord" && buyAt) {
+  if (plan.situation === "landlord") {
     for (const [service, step, why] of [
       ["gas safety certificate", "Gas safety certificate (CP12)", "Landlords need one every year where there are gas appliances."],
       ["EICR", "Electrical safety report (EICR)", "Landlords in England need one at least every five years."],
       ["EPC", "EPC", "Needed before letting."],
-    ] as const) needs.push({ step, why, request: { service, postcode: buyAt, address: plan.to_address } });
+    ] as const) needs.push({ kind: "surveys", needs: ["to"], step, why, request: { service, postcode: buyAt, address: plan.to_address } });
   }
-  const from = sellAt || (plan.situation === "renting" ? sellAt : "");
-  if (from && buyAt && plan.situation !== "landlord") {
-    needs.push({ step: "Book removals", why: "Priced from what you're moving and how far.", request: { service: "removals", postcode: from, to_postcode: buyAt, items: plan.items, bedrooms: plan.bedrooms } as QuoteRequest });
+  if (plan.situation !== "landlord") {
+    // Every move has two ends, even when only one home is being bought or sold.
+    needs.push({ kind: "removals", needs: ["from", "to"], step: "Book removals", why: "Priced from what you're moving and how far.", request: { service: "removals", postcode: sellAt, to_postcode: buyAt || undefined, items: plan.items, bedrooms: plan.bedrooms } as QuoteRequest });
   }
-  if (plan.situation === "renting" && sellAt) {
-    needs.push({ step: "End of tenancy clean", why: "A professional clean of the place you're leaving, before you hand back the keys.", request: { service: "end of tenancy clean", postcode: sellAt, address: plan.from_address, bedrooms: plan.bedrooms } });
-  } else if (selling && sellAt) {
-    needs.push({ step: "Moving-out clean", why: "Leaves the home ready for the buyers.", request: { service: "end of tenancy clean", postcode: sellAt, address: plan.from_address, bedrooms: plan.bedrooms } });
+  if (plan.situation === "renting") {
+    needs.push({ kind: "cleaning", needs: ["from"], step: "End of tenancy clean", why: "A professional clean of the place you're leaving, before you hand back the keys.", request: { service: "end of tenancy clean", postcode: sellAt, address: plan.from_address, bedrooms: plan.bedrooms } });
+  } else if (selling) {
+    needs.push({ kind: "cleaning", needs: ["from"], step: "Moving-out clean", why: "Leaves the home ready for the buyers.", request: { service: "end of tenancy clean", postcode: sellAt, address: plan.from_address, bedrooms: plan.bedrooms } });
   }
   return needs;
 }
 
 export async function planMove(plan: PlanRequest, deps: { motus: MotusClient; property: PropertyLookup; homedata: HomedataClient }): Promise<MovePlan> {
   const needs = linesFor(plan);
+  const known = { from: Boolean(plan.from_postcode), to: Boolean(plan.to_postcode) };
   const answers = await Promise.all(needs.map(async (n) => {
+    const missing = n.needs.find((home) => !known[home]);
+    if (missing) return { status: "needs_home", product: { id: 0, name: n.step, type: n.kind }, postcode: "", home: missing } as QuoteAnswer;
     try { return await quote(n.request, deps); }
     catch { return { status: "quoted_by_hand", product: { id: 0, name: n.step, type: null }, postcode: n.request.postcode, answers: [] } as QuoteAnswer; }
   }));
@@ -108,6 +120,7 @@ export async function planMove(plan: PlanRequest, deps: { motus: MotusClient; pr
   return {
     situation: plan.situation,
     lines,
+    homes_needed: (["from", "to"] as const).filter((home) => !known[home] && needs.some((n) => n.needs.includes(home))),
     total_gbp: Math.round(total * 100) / 100,
     priced: priced.length,
     unpriced: lines.filter((l) => l.answer.status !== "priced").map((l) => l.step),

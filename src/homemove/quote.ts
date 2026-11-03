@@ -146,7 +146,9 @@ export type QuoteAnswer =
   | { status: "choose_service"; options: ProductView[] }
   | { status: "unknown_service"; service: string }
   | { status: "address_not_found"; reason: string; postcode: string; product?: ProductView; said?: string }
-  | { status: "front_door"; door: FrontDoor["kind"]; name: string; line: string; postcode: string; url: string };
+  | { status: "front_door"; door: FrontDoor["kind"]; name: string; line: string; postcode: string; url: string }
+  /** A move-plan step that cannot be priced until the user names the home it is for. */
+  | { status: "needs_home"; product: ProductView; postcode: string; home: "from" | "to" };
 
 export interface ProductView { id: number; name: string; type: string | null }
 /** A value band with its price, so the card can show "from £X" and let them pick. */

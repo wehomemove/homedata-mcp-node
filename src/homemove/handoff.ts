@@ -57,7 +57,7 @@ export function handoffUrl(base: string | undefined, payload: Omit<HandoffV1, "r
 }
 
 function serviceOf(answer: QuoteAnswer): HandoffService | undefined {
-  if (!("product" in answer) || !answer.product) return undefined;
+  if (!("product" in answer) || !answer.product || answer.status === "needs_home") return undefined;
   const p = answer.product;
   const given = Object.fromEntries(("answers" in answer ? answer.answers : []).map((a) => [a.name, a.label]));
   const priced = answer.status === "priced" ? answer.price_gbp : undefined;
