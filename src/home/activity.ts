@@ -104,6 +104,17 @@ export function callDetail(tool: string, args: Record<string, unknown>, body: Re
   return parts.length ? parts.join(", ") : undefined;
 }
 
+/**
+ * A crawler's name from its User-Agent ("reason-catalog-sync (+https://reasonmachines.com)" is
+ * "reason-catalog-sync"), so the feed can say so and keep it out of the visitor counts. ChatGPT
+ * ("openai-mcp/1.0.0 (Codex)") is not one. Only the agent's own first word is shown.
+ */
+export function crawlerName(userAgent: unknown): string | undefined {
+  if (typeof userAgent !== "string" || !userAgent.trim()) return undefined;
+  if (!/\(\+https?:\/\/|\b(bot|crawler|spider|scanner|catalog|indexer)\b/i.test(userAgent)) return undefined;
+  return userAgent.trim().split(/[\s/;(]/)[0]!.replace(/[^A-Za-z0-9._-]/g, "").slice(0, 40) || "unnamed";
+}
+
 type Saved = { day: string; today: string[]; seen: string[] };
 const londonDay = (ms: number) => new Date(ms).toLocaleDateString("en-CA", { timeZone: "Europe/London" });
 

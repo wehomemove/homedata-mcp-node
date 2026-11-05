@@ -15,7 +15,7 @@ import { buildHomemoveServer, planNarration, quoteNarration } from "../homemove/
 import { BroadbandClient } from "../homemove/broadband.js";
 import { tagged } from "../homemove/utm.js";
 import { timeCall } from "../homemove/timing.js";
-import { HomeVisitors } from "../home/activity.js";
+import { crawlerName, HomeVisitors } from "../home/activity.js";
 import { planMove } from "../homemove/plan.js";
 import { continueUrlForPlan, continueUrlForQuote, displayAddress, formatPostcode } from "../homemove/handoff.js";
 import { HOMEMOVE_ASSET_PREFIX, HOMEMOVE_WIDGET_URI } from "../homemove/widget.js";
@@ -646,4 +646,21 @@ test("'a survey' offers the surveys to choose from, and removals reads as remova
   assert.ok((survey as { options: Array<{ name: string }> }).options.some((o) => o.name === "Level 2 Survey"));
   const removals = await quote({ service: "removals", postcode: "" }, deps);
   assert.match(quoteNarration({ ...removals, continue_url: "x" } as never), /^To price removals, ask:/);
+});
+
+test("a crawler is named as one in the feed and never counted as a visitor; ChatGPT is not a crawler", async () => {
+  assert.equal(crawlerName("reason-catalog-sync (+https://reasonmachines.com)"), "reason-catalog-sync", "seen live 5 Nov");
+  assert.equal(crawlerName("openai-mcp/1.0.0 (Codex)"), undefined);
+  assert.equal(crawlerName("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"), "Mozilla");
+  const events: Array<{ organisation: string }> = [];
+  const visitors = new HomeVisitors(undefined, () => Date.parse("2026-11-05T07:00:00Z"));
+  const handler = createHomemoveHttpHandler({ motus: fakeMotus(), property: fakeHomedata(), activity: (e) => events.push(e), visitors });
+  const http = (await import("node:http")).createServer((req, res) => void handler(req, res));
+  await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+  try {
+    await fetch(`http://127.0.0.1:${(http.address() as { port: number }).port}/mcp`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "user-agent": "reason-catalog-sync (+https://reasonmachines.com)" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "homemove_services", arguments: {} } }) }).then((r) => r.text());
+    assert.deepEqual(events.map((e) => e.organisation), ["Homemove · crawler reason-catalog-sync"]);
+    assert.match(visitors.label("someone"), /\(new · 1 today · 1 ever\)/, "the crawler was never counted");
+  } finally { http.closeAllConnections(); await new Promise((resolve) => http.close(resolve)); }
 });
