@@ -8,7 +8,7 @@ import { HomedataClient } from "../client.js";
 import { isMain } from "../entry.js";
 import { SlackActivity, type ActivitySink } from "../activity.js";
 import { acceptJsonClients, checkAppsChallenge, checkCallsPerMinute, checkSlack, noStoreOnErrors } from "../http.js";
-import { HomeVisitors, shownToolName } from "./activity.js";
+import { crawlerName, HomeVisitors, shownToolName } from "./activity.js";
 import { VERSION } from "../index.js";
 import { MinuteLimiter } from "../limiter.js";
 import { AccountTools, DEFAULT_ACCOUNT_MCP_URL, DEFAULT_ISSUER, DEFAULT_RESOURCE, protectedResourceMetadata, type AccountSettings } from "./account.js";
@@ -159,8 +159,9 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
   const assetOrigin = options.assetOrigin ?? options.account?.resource ?? DEFAULT_RESOURCE;
   const routes = options.routes ?? (options.mapboxToken ? new MapboxRoutes({ token: options.mapboxToken, referer: `${assetOrigin}/` }) : undefined);
   const visitors = options.visitors ?? new HomeVisitors(undefined, now);
-  const report = (subject: unknown, call: { tool: string; outcome: string; ms: number; detail?: string }) => {
-    if (options.activity) options.activity({ organisation: `Home · ${visitors.label(subject)}`, ...call });
+  // A crawler is named as one and never counted as a visitor.
+  const report = (subject: unknown, call: { tool: string; outcome: string; ms: number; detail?: string }, crawler?: string) => {
+    if (options.activity) options.activity({ organisation: `Home · ${crawler ? `crawler ${crawler}` : visitors.label(subject)}`, ...call });
   };
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     noStoreOnErrors(res);
@@ -208,7 +209,8 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
       ? send(res, 200, { jsonrpc: "2.0", id: (body as { id?: unknown }).id ?? null, result: { content: [{ type: "text", text }], structuredContent: { available: false, limit_reached: true, reason: text }, isError: true } }, { "Cache-Control": "no-store" })
       : send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" });
     const subject = caller.startsWith("subject:") ? caller.slice("subject:".length) : undefined;
-    const reportLimited = () => { for (const call of calls) report(subject, { tool: shownToolName(call.name), outcome: "rate limited", ms: 0 }); };
+    const crawler = crawlerName(req.headers["user-agent"]);
+    const reportLimited = () => { for (const call of calls) report(subject, { tool: shownToolName(call.name), outcome: "rate limited", ms: 0 }, crawler); };
     if (calls.length && !callLimits.take(caller, calls.length)) { reportLimited(); return void limited(CALL_LIMIT_TEXT); }
     if (enrichmentCount && !enrichmentLimits.take(caller, enrichmentCount)) { reportLimited(); return void limited(ENRICHMENT_LIMIT_TEXT); }
     // When atlas refuses the caller's token, the tool result carries the challenge
@@ -220,7 +222,7 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
     const server = buildHomeServer(
       options.client,
       account ? { tools: account, token: bearerToken(req), onRefused: (challenge) => { refused ??= challenge; } } : undefined,
-      { mapboxToken: options.mapboxToken, assetOrigin, routes, widgetViewId: randomBytes(12).toString("hex"), onToolCall: options.activity ? ({ subject: said, ...call }) => report(said, call) : undefined },
+      { mapboxToken: options.mapboxToken, assetOrigin, routes, widgetViewId: randomBytes(12).toString("hex"), onToolCall: options.activity ? ({ subject: said, ...call }) => report(said, call, crawler) : undefined },
     );
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });

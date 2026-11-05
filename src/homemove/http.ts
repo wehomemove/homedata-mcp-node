@@ -7,7 +7,7 @@ import { HomedataClient } from "../client.js";
 import { isMain } from "../entry.js";
 import { acceptJsonClients, checkAppsChallenge, checkCallsPerMinute, checkSlack, noStoreOnErrors } from "../http.js";
 import { SlackActivity, type ActivitySink } from "../activity.js";
-import { HomeVisitors } from "../home/activity.js";
+import { crawlerName, HomeVisitors } from "../home/activity.js";
 import { shownToolName } from "./activity.js";
 import { callerKey } from "../home/http.js";
 import { VERSION } from "../index.js";
@@ -82,8 +82,9 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
     if (!limiter) { if (searchLimits.size >= 10_000) searchLimits.clear(); limiter = new MinuteLimiter(options.searchesPerMinute ?? 40, now); searchLimits.set(who, limiter); }
     return limiter.take();
   };
-  const report = (subject: unknown, call: { tool: string; outcome: string; ms: number; detail?: string }) => {
-    if (options.activity) options.activity({ organisation: `Homemove · ${visitors.label(subject)}`, ...call });
+  // A crawler is named as one and never counted as a visitor.
+  const report = (subject: unknown, call: { tool: string; outcome: string; ms: number; detail?: string }, crawler?: string) => {
+    if (options.activity) options.activity({ organisation: `Homemove · ${crawler ? `crawler ${crawler}` : visitors.label(subject)}`, ...call });
   };
 
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -138,7 +139,7 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
     if (calls && !take(caller, calls)) {
       const subject = caller.startsWith("subject:") ? caller.slice("subject:".length) : undefined;
       for (const m of (Array.isArray(body) ? body : [body]).filter((x) => (x as { method?: unknown })?.method === "tools/call")) {
-        report(subject, { tool: shownToolName((m as { params?: { name?: unknown } }).params?.name), outcome: "rate limited", ms: 0 });
+        report(subject, { tool: shownToolName((m as { params?: { name?: unknown } }).params?.name), outcome: "rate limited", ms: 0 }, crawlerName(req.headers["user-agent"]));
       }
       // A single call gets a tool answer the model can relay; ChatGPT's desktop client hangs on a 429.
       const single = !Array.isArray(body);
@@ -147,7 +148,7 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
         : send(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests. Try again in a minute." }, id: null }, { "Retry-After": "60" }));
     }
     const server = buildHomemoveServer({ motus: options.motus, property: options.property, assetOrigin, homedata: options.homedata, handoffBase: options.handoffBase, broadband: options.broadband,
-      onToolCall: options.activity ? ({ subject, ...call }) => report(subject, call) : undefined });
+      onToolCall: options.activity ? ({ subject, ...call }) => report(subject, call, crawlerName(req.headers["user-agent"])) : undefined });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => { void transport.close(); void server.close(); });
     await server.connect(transport);
