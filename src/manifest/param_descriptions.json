@@ -18,7 +18,7 @@
   },
   "tools": {
     "boundaries.q": "Area name to search for, for example 'Hackney', 'Camden' or 'Norwich'.",
-    "property_custom.with": "Comma-separated add-ons to include, or 'all' for every one. Each add-on adds its own price to the call.",
+    "property_custom.with": "Comma-separated add-ons to include, or 'all' for every one. Each add-on adds its own price to the call. epc_history is not part of 'all'; name it to get it.",
     "risks.risk_type": "Which hazard to screen for, or 'all' for every hazard in one response.",
     "risks.uprn": "Unique Property Reference Number, digits only. Find one with address_match or address_postcode.",
     "planning.radius_km": "Search radius in kilometres. Defaults to 0.5. Values above 5 are reduced to 5.",

@@ -101,6 +101,7 @@ instead of guessing a UPRN.
 | `attr_construction` | 1 | How a property was built: construction age band, main construction material, and whether it has a basement. |
 | `attr_dimensions` | 1 | Measurements for a property: footprint area in square metres, building height, estimated volume and predicted floor area. |
 | `attr_epc` | 1 | Energy Performance Certificate headline for a property: current and potential efficiency rating, EPC floor area and the date of the last assessment. |
+| `attr_epc_history` | 1 | Every EPC certificate held for a property, oldest first: certificate number, lodgement date, current and potential ratings, floor area, main fuel, fabric and heating descriptions, and a flag for withdrawn certificates. A property with no certificate returns 404 and the token is refunded. |
 | `attr_epc_renovations` | 1 | Improvements recommended by a property's EPC assessment, each with estimated minimum and maximum cost. |
 | `attr_garden` | 1 | Whether a property has a garden, and of what kind. |
 | `attr_ground_stability` | 1 | Ground stability for one property: trees within root reach (canopy height measured, reach inferred), measured ground movement in millimetres per year from nearby satellite readings, and clay shrink-swell. Includes sources and caveats. |

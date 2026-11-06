@@ -1,0 +1,89 @@
+EPC history verification
+
+Python source: wehomemove/homedata-mcp@df4a438163e8cf5b593bd1c2fd1b4742c42d892e
+
+$ npm test
+302 tests; 302 pass; 0 fail; 0 skipped
+
+$ node scripts/vendor-manifest.mjs --check
+vendored manifest matches wehomemove/homedata-mcp@df4a438163e8cf5b593bd1c2fd1b4742c42d892e
+
+$ node scripts/check-manifest-current.mjs
+in step: vendored at df4a438163e8cf5b593bd1c2fd1b4742c42d892e, which is the upstream head
+
+$ node scripts/parity-dump.mjs parity-out
+wrote 63 tools and 63 request sets
+
+$ .venv-parity/bin/python -m homedata_mcp.parity --tools-list parity-out/tools.json --requests parity-out/requests.json
+0 violation(s)
+
+$ PROJECT_ONYX_CODE_ROOT=/Users/homemove/project-onyx node /Users/homemove/project-onyx/scripts/merge-queue.cjs legs --run --project homedata-mcp-node --since origin/main --root <worktree>
+Exit 0; no legs selected.
+
+61 API tools + 2 setup helpers; matching names:
+address_match
+address_postcode
+amenities_all
+amenities_civic
+amenities_convenience
+amenities_culture
+amenities_education
+amenities_financial
+amenities_food
+amenities_green_spaces
+amenities_healthcare
+amenities_shops
+amenities_transport
+amenities_worship
+attr_construction
+attr_dimensions
+attr_epc
+attr_epc_history
+attr_epc_renovations
+attr_garden
+attr_ground_stability
+attr_land
+attr_parking
+attr_roof
+attr_rooms
+boundaries
+broadband
+calc_mortgage
+calc_stamp_duty
+check_homedata_api_key
+council_tax
+council_tax_full
+crime
+demographics
+deprivation
+fuel_stations_all
+fuel_stations_ev
+fuel_stations_petrol
+healthcare_all
+healthcare_dentists
+healthcare_gps
+healthcare_hospitals
+healthcare_pharmacies
+listed_buildings
+listing_address
+planning
+postcode_profile
+price_distributions
+price_growth
+price_trends
+property_address
+property_base
+property_complete
+property_core
+property_custom
+property_discovery
+property_lr_titles
+property_sale_events
+rental_appraisal
+risks
+schools
+solar
+start_homedata_signup
+
+ChatGPT: unchanged 14 curated tools (explicit server test).
+Product cost: 1 token/history call; monetary unit cost and margin unknown; maximum exposure 1 token per call, assuming one request, no live paid calls made.
