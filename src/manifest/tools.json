@@ -2,10 +2,10 @@
   "schema_version": 1,
   "source": {
     "repository": "wehomemove/thor",
-    "commit": "2be7d89015c6c8bc2d8170e99f3dabf575d478a4",
+    "commit": "de5f6c103e54ab2f85dbe61362c210e795c70132",
     "catalogue": "resources/js/Pages/Developer/Playground/Index.vue",
-    "catalogue_sha256": "9576788c49d43cbca53232aca6069bc8e8378790fd841a2d626e92fd1b21eae3",
-    "llms_full_api_surface_source_hash": "a6eb8f4f95ec0a3bba8ae326220d8a2f909dc051e0fcdb7578e45a3cf8906c06"
+    "catalogue_sha256": "ef6d61dc1c12bbc0aa2ab21fec81067b27d05510c0391f6d640966ac294c53c6",
+    "llms_full_api_surface_source_hash": "e14ab6ad7036ec2941af2fd517596cd653df6538d3c5621d94ed4d76aaddefaa"
   },
   "rules": {
     "offered": "Playground ENDPOINTS entries with a path, not enterprise:true, not adminOnly:true",
@@ -178,6 +178,7 @@
           "roof": 1,
           "garden": 1,
           "parking": 1,
+          "epc_history": 1,
           "epc_renovations": 1,
           "ground_stability": 1,
           "dimensions": 1,
@@ -436,6 +437,26 @@
       "label": "EPC Rating",
       "method": "GET",
       "path": "/properties/{uprn}/epc/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "attr_epc_history",
+      "playground_id": "attr-epc-history",
+      "label": "EPC History",
+      "method": "GET",
+      "path": "/properties/{uprn}/epc_history/",
       "params": [
         {
           "name": "uprn",

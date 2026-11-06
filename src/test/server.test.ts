@@ -52,7 +52,40 @@ test("the server offers exactly the manifest", async () => {
   const listed = (await client.listTools()).tools.map((t) => t.name).sort();
   const expected = [...tools().map((t) => t.name), ...staticTools().map((t) => t.name)].sort();
   assert.deepEqual(listed, expected);
+  assert.equal(tools().length, 61, "Python and Node expose 61 API tools plus two helpers");
   await client.close();
+});
+
+test("EPC history lists its price and returns all certificates from the history endpoint", async () => {
+  const certificates = { certificates: [{ assessment_date: "2025-01-01" }, { assessment_date: "2015-01-01" }] };
+  const { client, sent } = await connect({ response: () => new Response(JSON.stringify(certificates)) });
+  try {
+    const history = (await client.listTools()).tools.find((t) => t.name === "attr_epc_history");
+    assert.ok(history);
+    assert.match(history.description ?? "", /Costs 1 token/);
+    assert.deepEqual(history.inputSchema.required, ["uprn"]);
+    const result = await client.callTool({ name: "attr_epc_history", arguments: { uprn: "100023336956" } });
+    assert.deepEqual(result.content, [{ type: "text", text: JSON.stringify(certificates, null, 2) }]);
+    assert.deepEqual(sent, [{ method: "GET", path: "/properties/100023336956/epc_history/", query: {} }]);
+    for (const args of [{}, { uprn: "invalid" }]) {
+      assert.equal((await client.callTool({ name: "attr_epc_history", arguments: args })).isError, true);
+    }
+    assert.equal(sent.length, 1, "invalid history calls must not reach the API");
+  } finally {
+    await client.close();
+  }
+});
+
+test("the curated ChatGPT tool names remain unchanged after adding EPC history", async () => {
+  const { client } = await connect({ profile: PROFILES.chatgpt });
+  try {
+    assert.deepEqual((await client.listTools()).tools.map((t) => t.name).sort(), [
+      "address_match", "address_postcode", "amenities_all", "attr_epc", "broadband", "council_tax",
+      "crime", "deprivation", "planning", "price_growth", "price_trends", "property_core", "risks", "schools",
+    ]);
+  } finally {
+    await client.close();
+  }
 });
 
 test("without a key only the helpers are offered", async () => {
