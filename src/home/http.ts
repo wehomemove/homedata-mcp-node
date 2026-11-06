@@ -159,9 +159,9 @@ export function createHomeHttpHandler(options: HomeHttpOptions) {
   const assetOrigin = options.assetOrigin ?? options.account?.resource ?? DEFAULT_RESOURCE;
   const routes = options.routes ?? (options.mapboxToken ? new MapboxRoutes({ token: options.mapboxToken, referer: `${assetOrigin}/` }) : undefined);
   const visitors = options.visitors ?? new HomeVisitors(undefined, now);
-  // A crawler is named as one and never counted as a visitor.
+  // Crawlers (catalogue indexers such as reason-catalog-sync) are not posted at all, and never counted (Louis, 6 Nov).
   const report = (subject: unknown, call: { tool: string; outcome: string; ms: number; detail?: string }, crawler?: string) => {
-    if (options.activity) options.activity({ organisation: `Home · ${crawler ? `crawler ${crawler}` : visitors.label(subject)}`, ...call });
+    if (options.activity && !crawler) options.activity({ organisation: `Home · ${visitors.label(subject)}`, ...call });
   };
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     noStoreOnErrors(res);

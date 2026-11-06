@@ -82,9 +82,9 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
     if (!limiter) { if (searchLimits.size >= 10_000) searchLimits.clear(); limiter = new MinuteLimiter(options.searchesPerMinute ?? 40, now); searchLimits.set(who, limiter); }
     return limiter.take();
   };
-  // A crawler is named as one and never counted as a visitor.
+  // Crawlers (catalogue indexers such as reason-catalog-sync) are not posted at all, and never counted (Louis, 6 Nov).
   const report = (subject: unknown, call: { tool: string; outcome: string; ms: number; detail?: string }, crawler?: string) => {
-    if (options.activity) options.activity({ organisation: `Homemove · ${crawler ? `crawler ${crawler}` : visitors.label(subject)}`, ...call });
+    if (options.activity && !crawler) options.activity({ organisation: `Homemove · ${visitors.label(subject)}`, ...call });
   };
 
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {

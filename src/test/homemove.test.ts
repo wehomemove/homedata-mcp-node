@@ -648,7 +648,7 @@ test("'a survey' offers the surveys to choose from, and removals reads as remova
   assert.match(quoteNarration({ ...removals, continue_url: "x" } as never), /^To price removals, ask:/);
 });
 
-test("a crawler is named as one in the feed and never counted as a visitor; ChatGPT is not a crawler", async () => {
+test("crawler calls are left out of the feed and the visitor counts; ChatGPT is not a crawler", async () => {
   assert.equal(crawlerName("reason-catalog-sync (+https://reasonmachines.com)"), "reason-catalog-sync", "seen live 5 Nov");
   assert.equal(crawlerName("openai-mcp/1.0.0 (Codex)"), undefined);
   assert.equal(crawlerName("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"), "Mozilla");
@@ -660,7 +660,7 @@ test("a crawler is named as one in the feed and never counted as a visitor; Chat
   try {
     await fetch(`http://127.0.0.1:${(http.address() as { port: number }).port}/mcp`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "user-agent": "reason-catalog-sync (+https://reasonmachines.com)" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "homemove_services", arguments: {} } }) }).then((r) => r.text());
-    assert.deepEqual(events.map((e) => e.organisation), ["Homemove · crawler reason-catalog-sync"]);
+    assert.deepEqual(events, [], "crawler calls are not posted (Louis, 6 Nov)");
     assert.match(visitors.label("someone"), /\(new · 1 today · 1 ever\)/, "the crawler was never counted");
   } finally { http.closeAllConnections(); await new Promise((resolve) => http.close(resolve)); }
 });
