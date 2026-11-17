@@ -2492,6 +2492,10 @@ test("activity: one line per call naming an anonymous visitor, area-level detail
     assert.equal(second!.detail, "BA1", "a full postcode is cut to its district");
     assert.match(third!.organisation, /\(new · 2 today · 2 ever\)/);
     assert.equal(third!.detail, "an address");
+    assert.match(first!.visitor!, /^home:[0-9a-f]{6}$/, "calls carry the visitor's tag, so the Slack feed folds a burst");
+    assert.equal(second!.visitor, first!.visitor);
+    assert.notEqual(third!.visitor, first!.visitor);
+    assert.deepEqual(first!.facts, { place: "Bath", filters: ["to buy", "3+ beds", "up to £500k"], found: first!.facts!.found, unit: "home" });
     assert.equal(limited!.outcome, "rate limited", "a refused call is still activity");
     for (const event of events) assert.doesNotMatch(JSON.stringify(event), /Acacia|1LZ|user-a|user-b/);
     assert.match(formatLine(first!), /· `search_homes` · ok · .* · Bath, to buy/);
