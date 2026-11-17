@@ -106,6 +106,7 @@ instead of guessing a UPRN.
 | `attr_garden` | 1 | Whether a property has a garden, and of what kind. |
 | `attr_ground_stability` | 1 | Ground stability for one property: trees within root reach (canopy height measured, reach inferred), measured ground movement in millimetres per year from nearby satellite readings, and clay shrink-swell. Includes sources and caveats. |
 | `attr_land` | 1 | Plot size in square metres for a property. Houses only: flats and maisonettes have no plot, and those return an error with nothing charged. |
+| `attr_mobile_coverage` | 1 | Ofcom predicted mobile coverage for exactly one address: EE, Three, O2 and Vodafone, each rated 0 to 4 for combined 4G and 5G, with Ofcom's own descriptor and the data date. Never borrowed from a neighbouring address. Ofcom gives no separate 4G, 5G or indoor figures. A null operator means Ofcom holds no record, not zero coverage. Responses carry Ofcom attribution; keep it when you show the data. |
 | `attr_parking` | 1 | Whether a property has parking, and of what kind: driveway, off-street, garage and so on. |
 | `attr_roof` | 1 | A property's roof: material, shape, and whether solar panels are fitted. |
 | `attr_rooms` | 1 | Room counts for a property: bedrooms, bathrooms, habitable rooms and heated rooms. |
@@ -128,6 +129,7 @@ instead of guessing a UPRN.
 | `healthcare_pharmacies` | 1 | Pharmacies near a property, with name, address, phone and website where known. |
 | `listed_buildings` | 3 | Listed buildings within a radius of a postcode: Grade I, II* and II entries with name, location, listing date and a link to the official record. |
 | `listing_address` | 20 | Reveal a listing’s UPRN and full address using its listing UUID. |
+| `mobile_coverage` | 1 | Ofcom predicted mobile coverage for every address in a full UK postcode: EE, Three, O2 and Vodafone, each rated 0 to 4 for combined 4G and 5G, with Ofcom's own descriptor and the data date. Ofcom gives no separate 4G, 5G or indoor figures. A null operator means Ofcom holds no record, not zero coverage. Responses carry Ofcom attribution; keep it when you show the data. A full postcode is required; an outcode is rejected. |
 | `planning` | 5 | Planning applications near a postcode or coordinates: type, status, description and decision date, with filters for recency, type and status. |
 | `postcode_profile` | 1 | One-call summary of a postcode: deprivation, crime, average property price, nearby schools, transport and broadband. Cheaper than calling those tools separately. The first call for a postcode is slow, because the parts are gathered and combined when you ask for them; the result is then cached, so asking again for the same postcode is fast. Wait for the first call rather than retrying it — retrying abandons the work already in progress and starts it over. |
 | `price_distributions` | 1 | How property prices are spread across an outcode area: percentiles, median and transaction counts by property type. |
