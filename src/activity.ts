@@ -14,7 +14,9 @@
  * Calls that name a visitor (the Home and Homemove apps) are grouped: the first call
  * posts straight away, and later calls from the same visitor, each within 5 minutes
  * of the one before, update that same message (chat.update) into one rolling line,
- * so a scheduled ChatGPT task checking 14 villages reads as one line, not 28.
+ * so a scheduled ChatGPT task checking 14 villages reads as one line, not 28. Rewrites are
+ * coalesced (one per visitor every 10 s, 30 a minute in all), a 429 is retried after Slack's
+ * Retry-After with the latest text, and a run whose first post failed is posted afresh.
  */
 import { MinuteLimiter } from "./limiter.js";
 
@@ -104,22 +106,42 @@ export function formatBurst(calls: ToolCallEvent[], spanMs = 0): string {
 }
 
 interface Posted { ts: string; channel: string }
+interface Answer { posted?: Posted; retryAfterMs?: number }
 
 interface Burst {
   startedAt: number;
   lastAt: number;
   calls: ToolCallEvent[];
-  /** Where Slack put the first post: chat.update needs its channel id, not the #name. */
-  ts: Promise<Posted | undefined>;
   suffix: string;
-  updating: boolean;
-  dirty: boolean;
+  /** Where Slack put the message: chat.update needs its channel id, not the #name. */
+  posted?: Posted;
+  /** A failed first post: the next call posts the whole run afresh. */
+  failed: boolean;
+  /** How many calls the message on Slack already shows. */
+  shown: number;
+  lastSentAt: number;
+  notBefore: number;
+  retries: number;
+  timer: boolean;
+  sending: boolean;
 }
+
+/** A visitor's message is rewritten at most this often; calls in between are coalesced. */
+export const UPDATE_EVERY_MS = 10_000;
+/** All rolling updates together, well under Slack's chat.update allowance (Tier 3, about 50 a minute). */
+const UPDATES_PER_MINUTE = 30;
+const BUSY_RETRY_MS = 5_000;
+const DEFAULT_RETRY_AFTER_MS = 30_000;
+const MAX_UPDATE_RETRIES = 5;
+
+export type Later = (run: () => void, ms: number) => void;
+const unrefTimeout: Later = (run, ms) => { setTimeout(run, ms).unref?.(); };
 
 export class SlackActivity {
   private readonly bursts = new Map<string, Burst>();
   private readonly pending = new Set<Promise<unknown>>();
   private readonly limiter: MinuteLimiter;
+  private readonly updates: MinuteLimiter;
   private dropped = 0;
   private inFlight = 0;
   private readonly logged = new Set<string>();
@@ -129,8 +151,10 @@ export class SlackActivity {
     private readonly fetchImpl: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
     private readonly log: (message: string) => void = (m) => console.error(m),
+    private readonly later: Later = unrefTimeout,
   ) {
     this.limiter = new MinuteLimiter(POSTS_PER_MINUTE, now);
+    this.updates = new MinuteLimiter(UPDATES_PER_MINUTE, now);
   }
 
   /** Never throws and never waits: returns before Slack has answered. */
@@ -141,25 +165,12 @@ export class SlackActivity {
       if (open && at - open.lastAt <= BURST_GAP_MS && at - open.startedAt <= BURST_MAX_MS) {
         open.calls.push(event);
         open.lastAt = at;
-        this.update(open);
+        // A run whose first post failed is posted again whole, once Slack and the cap allow.
+        if (open.failed) this.start(event.visitor!, open.calls, open.startedAt, at, false);
+        else this.schedule(open);
         return;
       }
-      if (this.inFlight >= MAX_IN_FLIGHT || !this.limiter.take()) {
-        this.dropped++;
-        return;
-      }
-      let suffix = "";
-      if (this.dropped > 0) {
-        suffix = ` _(+${this.dropped} earlier ${this.dropped === 1 ? "call" : "calls"} not posted)_`;
-        this.dropped = 0;
-      }
-      this.inFlight++;
-      const ts = this.post(POST_URL, { text: formatLine(event) + suffix });
-      this.track(ts.finally(() => this.inFlight--));
-      if (event.visitor) {
-        if (this.bursts.size >= MAX_BURSTS) this.prune(at);
-        this.bursts.set(event.visitor, { startedAt: at, lastAt: at, calls: [event], ts, suffix, updating: false, dirty: false });
-      }
+      this.start(event.visitor, [event], at, at, true);
     } catch {
       // A reporting bug must never reach the tool call.
     }
@@ -170,27 +181,72 @@ export class SlackActivity {
     while (this.pending.size) await Promise.allSettled([...this.pending]);
   }
 
+  /** Posts a new message for these calls; a visitor's calls then fold into it. */
+  private start(visitor: string | undefined, calls: ToolCallEvent[], startedAt: number, at: number, countDrop: boolean): void {
+    if (this.inFlight >= MAX_IN_FLIGHT || !this.limiter.take()) {
+      if (countDrop) this.dropped++;
+      return;
+    }
+    let suffix = "";
+    if (this.dropped > 0) {
+      suffix = ` _(+${this.dropped} earlier ${this.dropped === 1 ? "call" : "calls"} not posted)_`;
+      this.dropped = 0;
+    }
+    const burst: Burst = { startedAt, lastAt: at, calls, suffix, failed: false, shown: calls.length, lastSentAt: at, notBefore: 0, retries: 0, timer: false, sending: true };
+    if (visitor) {
+      if (this.bursts.size >= MAX_BURSTS) this.prune(at);
+      this.bursts.set(visitor, burst);
+    }
+    this.inFlight++;
+    this.track(this.post(POST_URL, { text: formatBurst(calls, at - startedAt) + suffix }).then((answer) => {
+      burst.sending = false;
+      if (!answer.posted?.ts) { burst.failed = true; return; }
+      burst.posted = answer.posted;
+      this.schedule(burst);
+    }).finally(() => this.inFlight--));
+  }
+
   private track(work: Promise<unknown>): void {
     this.pending.add(work);
     void work.finally(() => this.pending.delete(work));
   }
 
-  /** Rewrites the burst's message with every call so far; one update in flight per burst, the last text wins. */
-  private update(burst: Burst): void {
-    if (burst.updating) { burst.dirty = true; return; }
-    burst.updating = true;
-    this.track((async () => {
-      try {
-        const posted = await burst.ts;
-        if (!posted) return; // The first post failed, so there is nothing to update.
-        do {
-          burst.dirty = false;
-          await this.post(UPDATE_URL, { ...posted, text: formatBurst(burst.calls, burst.lastAt - burst.startedAt) + burst.suffix });
-        } while (burst.dirty);
-      } finally {
-        burst.updating = false;
+  /** Queues one rewrite of the burst's message, no sooner than UPDATE_EVERY_MS after the last. */
+  private schedule(burst: Burst): void {
+    if (burst.timer || burst.sending || !burst.posted || burst.calls.length <= burst.shown) return;
+    burst.timer = true;
+    const wait = Math.max(0, burst.lastSentAt + UPDATE_EVERY_MS - this.now(), burst.notBefore - this.now());
+    this.later(() => { burst.timer = false; this.flush(burst); }, wait);
+  }
+
+  /** Sends the latest text; on a busy cap or Slack's 429 it keeps that text and tries again later. */
+  private flush(burst: Burst): void {
+    try {
+      if (!burst.posted || burst.calls.length <= burst.shown) return;
+      if (this.inFlight >= MAX_IN_FLIGHT || !this.updates.take()) {
+        burst.notBefore = this.now() + BUSY_RETRY_MS;
+        return this.schedule(burst);
       }
-    })());
+      const count = burst.calls.length;
+      burst.sending = true;
+      this.inFlight++;
+      this.track(this.post(UPDATE_URL, { ...burst.posted, text: formatBurst(burst.calls, burst.lastAt - burst.startedAt) + burst.suffix }).then((answer) => {
+        burst.lastSentAt = this.now();
+        if (answer.posted) {
+          burst.shown = count; burst.retries = 0;
+        } else if (answer.retryAfterMs !== undefined && ++burst.retries <= MAX_UPDATE_RETRIES) {
+          burst.notBefore = this.now() + answer.retryAfterMs; // keep `shown`, so the latest text is retried
+        } else {
+          burst.shown = count; burst.retries = 0; // give up on this text; a later call tries again
+        }
+      }).finally(() => {
+        burst.sending = false;
+        this.inFlight--;
+        this.schedule(burst);
+      }));
+    } catch {
+      // Never reaches a tool call.
+    }
   }
 
   private prune(at: number): void {
@@ -198,8 +254,8 @@ export class SlackActivity {
     if (this.bursts.size >= MAX_BURSTS) this.bursts.clear();
   }
 
-  /** Where Slack put the message, when it took it. */
-  private async post(url: string, fields: { text: string; ts?: string; channel?: string }): Promise<Posted | undefined> {
+  /** Where Slack put the message when it took it; how long to wait when it was rate limited. */
+  private async post(url: string, fields: { text: string; ts?: string; channel?: string }): Promise<Answer> {
     try {
       const response = await this.fetchImpl(url, {
         method: "POST",
@@ -208,11 +264,18 @@ export class SlackActivity {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       const answer = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; ts?: string; channel?: string };
-      if (!answer.ok) this.logOnce(answer.error ?? `http_${response.status}`);
-      return answer.ok && typeof answer.ts === "string" ? { ts: answer.ts, channel: typeof answer.channel === "string" ? answer.channel : this.settings.channel } : undefined;
+      if (answer.ok) {
+        return { posted: { ts: typeof answer.ts === "string" ? answer.ts : fields.ts ?? "", channel: typeof answer.channel === "string" ? answer.channel : fields.channel ?? this.settings.channel } };
+      }
+      this.logOnce(answer.error ?? `http_${response.status}`);
+      if (response.status === 429 || answer.error === "ratelimited") {
+        const seconds = Number(response.headers.get("retry-after"));
+        return { retryAfterMs: Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, 300) * 1000 : DEFAULT_RETRY_AFTER_MS };
+      }
+      return {};
     } catch (err) {
       this.logOnce((err as Error)?.name === "TimeoutError" ? "timeout" : "unreachable");
-      return undefined;
+      return {};
     }
   }
 
