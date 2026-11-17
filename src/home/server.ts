@@ -16,7 +16,7 @@ import { mapboxAssetTags } from "./mapbox-assets.js";
 import { homeWidgetAssetValues } from "./widget-assets.js";
 import { PLACE_KINDS, TRAVEL_MODES, type MapboxRoutes } from "./routes.js";
 import { WISHES } from "./wishes.js";
-import { callDetail, outcomeOf, shownToolName, type HomeCall } from "./activity.js";
+import { callDetail, callFacts, outcomeOf, shownToolName, type HomeCall } from "./activity.js";
 
 type Schema = Record<string, unknown>;
 type Tool = { name: string; title: string; description: string; inputSchema: Schema; outputSchema?: Schema; _meta?: Record<string, unknown> };
@@ -344,7 +344,8 @@ export function buildHomeServer(client: HomeClient, account?: HomeAccount, optio
       try {
         const tool = shownToolName(request.params.name);
         const args = (request.params.arguments ?? {}) as Record<string, unknown>;
-        options.onToolCall?.({ tool, outcome, ms: Date.now() - started, detail: callDetail(tool, args, answer?.isError ? undefined : answer?.structuredContent as Record<string, unknown> | undefined), subject: request.params._meta?.["openai/subject"] });
+        const body = answer?.isError ? undefined : answer?.structuredContent as Record<string, unknown> | undefined;
+        options.onToolCall?.({ tool, outcome, ms: Date.now() - started, detail: callDetail(tool, args, body), facts: callFacts(tool, args, body), subject: request.params._meta?.["openai/subject"] });
       } catch {
         // Reporting never changes a tool call's answer.
       }

@@ -566,6 +566,7 @@ test("activity: one line per Homemove call with the service and price at area le
   assert.equal(events[0]!.detail, "Level 2 Survey, priced £499 (from records), home picked, NR4");
   assert.equal(events[1]!.detail, "front door: Home insurance");
   assert.equal(events[2]!.outcome, "rate limited");
+  assert.match((events[0] as { visitor?: string }).visitor!, /^homemove:[0-9a-f]{6}$/, "Homemove calls fold per visitor too, apart from Home's");
   for (const e of events) assert.doesNotMatch(JSON.stringify(e), /Barnesdale|6LL|user-a|100090887383/);
   } finally { http.closeAllConnections(); await new Promise((resolve) => http.close(resolve)); }
 });

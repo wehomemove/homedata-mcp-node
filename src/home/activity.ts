@@ -14,6 +14,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { HOME_ROUTE_TOOLS, HOME_TOOLS } from "./server.js";
 import { ACCOUNT_TOOLS } from "./account.js";
 import { WISHES } from "./wishes.js";
+import type { CallFacts } from "../activity.js";
 
 // Built on first use: server.ts imports this module, so its tool lists are not defined yet at load.
 let known: Set<string> | undefined;
@@ -29,7 +30,7 @@ const DISTRICT = /^[A-Z]{1,2}\d[A-Z\d]?$/i;
 const TOWN = /^[A-Za-z][A-Za-z .,'&-]{0,39}$/;
 
 /** One call, as the Home server saw it. */
-export interface HomeCall { tool: string; outcome: string; ms: number; detail?: string; subject?: unknown }
+export interface HomeCall { tool: string; outcome: string; ms: number; detail?: string; facts?: CallFacts; subject?: unknown }
 
 /** Why a request was refused, as a fixed label: never the text the user or model sent. */
 const REFUSALS: Array<[RegExp, string]> = [
@@ -76,31 +77,55 @@ const money = (value: unknown) => typeof value === "number" && Number.isFinite(v
 const count = (value: unknown) => Array.isArray(value) ? value.length : undefined;
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-/** What a call was about and what it found, at area level. */
-export function callDetail(tool: string, args: Record<string, unknown>, body: Record<string, unknown> | undefined): string | undefined {
-  const parts: string[] = [];
-  const add = (part: string | undefined | false) => { if (part) parts.push(part); };
+const PROPERTY_TYPE_LABELS: Record<string, string> = { detached: "detached", semi_detached: "semi-detached", terraced: "terraced", flat: "flats" };
+const days = (value: unknown) => typeof value === "number" && Number.isInteger(value) && value > 0 ? plural(value, "day") : undefined;
+
+/**
+ * What a call was about and what it found, in parts and at area level. search_homes carries its
+ * date filters, so "0 homes, new in last 1 day" reads as nothing new today, not a broken search.
+ */
+export function callFacts(tool: string, args: Record<string, unknown>, body: Record<string, unknown> | undefined): CallFacts {
+  const filters: string[] = [];
+  const add = (part: string | undefined | false) => { if (part) filters.push(part); };
+  const facts: CallFacts = {};
   switch (tool) {
     case "search_homes": {
-      add(coarsePlace(args["location"]));
+      facts.place = coarsePlace(args["location"]);
       add(args["listing_type"] === "rent" ? "to rent" : args["listing_type"] === "sale" ? "to buy" : undefined);
       add(typeof args["min_beds"] === "number" && args["min_beds"] > 0 ? `${args["min_beds"]}+ beds` : undefined);
       const max = money(args["max_price"]);
       add(max && `up to ${max}`);
+      add(typeof args["property_type"] === "string" ? PROPERTY_TYPE_LABELS[args["property_type"]] : undefined);
+      add(args["new_build"] === true && "new builds only");
+      const added = days(args["new_within_days"]);
+      add(added && `new in last ${added}`);
+      const reduced = days(args["reduced_within_days"]);
+      add(reduced && `reduced in last ${reduced}`);
+      const listed = days(args["on_market_at_least_days"]);
+      add(listed && `on market ${listed}+`);
       add(Array.isArray(args["wishes"]) && args["wishes"].length ? `wishes: ${args["wishes"].filter((w) => (WISHES as readonly unknown[]).includes(w)).slice(0, 4).join(", ")}` : undefined);
-      const found = count(body?.["homes"]);
-      add(found !== undefined ? `→ ${plural(found, "home")}` : undefined);
+      facts.found = count(body?.["homes"]); facts.unit = "home";
       break;
     }
-    case "area_insights": add(coarsePlace(args["postcode"])); break;
-    case "sold_prices": { add(coarsePlace(args["postcode"])); const n = count(body?.["sales"]); add(n !== undefined ? `→ ${plural(n, "sale")}` : undefined); break; }
-    case "find_agents": add(coarsePlace(args["location"])); add(args["agent_type"] === "sales" || args["agent_type"] === "lettings" ? args["agent_type"] : undefined); break;
-    case "typical_rents": add(coarsePlace(args["location"])); break;
+    case "area_insights": facts.place = coarsePlace(args["postcode"]); break;
+    case "sold_prices": facts.place = coarsePlace(args["postcode"]); facts.found = count(body?.["sales"]); facts.unit = "sale"; break;
+    case "find_agents": facts.place = coarsePlace(args["location"]); add(args["agent_type"] === "sales" || args["agent_type"] === "lettings" ? args["agent_type"] : undefined); break;
+    case "typical_rents": facts.place = coarsePlace(args["location"]); break;
     case "compare_homes": { const n = count(args["listing_ids"]); add(n ? `${n} homes` : undefined); break; }
     case "render_home_listings": { const n = count(args["homes"]); add(n ? plural(n, "card") : undefined); break; }
     case "commute_filter": add(typeof args["minutes"] === "number" && typeof args["mode"] === "string" ? `${args["minutes"]} min ${args["mode"]}` : undefined); break;
     case "plan_viewings": { const n = count(args["listing_ids"]); add(n ? `${n} stops` : undefined); break; }
   }
+  if (filters.length) facts.filters = filters;
+  if (facts.found === undefined) delete facts.unit;
+  for (const key of Object.keys(facts) as Array<keyof CallFacts>) if (facts[key] === undefined) delete facts[key];
+  return facts;
+}
+
+/** The same facts as one line: "Bath, to buy, 3+ beds, up to £500k, → 2 homes". */
+export function callDetail(tool: string, args: Record<string, unknown>, body: Record<string, unknown> | undefined): string | undefined {
+  const facts = callFacts(tool, args, body);
+  const parts = [facts.place, ...(facts.filters ?? []), facts.found !== undefined && facts.unit ? `→ ${plural(facts.found, facts.unit)}` : undefined].filter(Boolean);
   return parts.length ? parts.join(", ") : undefined;
 }
 
@@ -140,10 +165,16 @@ export class HomeVisitors {
     }
   }
 
+  /** The visitor's 6-character tag, or undefined when the client sent no subject. Counts nothing. */
+  tag(subject: unknown): string | undefined {
+    if (typeof subject !== "string" || !subject.trim()) return undefined;
+    return createHash("sha256").update(subject.trim()).digest("hex").slice(0, 6);
+  }
+
   /** "visitor 3f9a2c (new · 4 today · 57 ever)", or a fixed label when the client sent no subject. */
   label(subject: unknown): string {
-    if (typeof subject !== "string" || !subject.trim()) return "visitor (no ChatGPT id)";
-    const tag = createHash("sha256").update(subject.trim()).digest("hex").slice(0, 6);
+    const tag = this.tag(subject);
+    if (!tag) return "visitor (no ChatGPT id)";
     const day = londonDay(this.now());
     if (day !== this.day) { this.day = day; this.today.clear(); }
     const isNew = !this.seen.has(tag);

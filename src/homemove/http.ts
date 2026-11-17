@@ -6,7 +6,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { HomedataClient } from "../client.js";
 import { isMain } from "../entry.js";
 import { acceptJsonClients, checkAppsChallenge, checkCallsPerMinute, checkSlack, noStoreOnErrors } from "../http.js";
-import { SlackActivity, type ActivitySink } from "../activity.js";
+import { SlackActivity, type ActivitySink, type ToolCallEvent } from "../activity.js";
 import { crawlerName, HomeVisitors } from "../home/activity.js";
 import { shownToolName } from "./activity.js";
 import { callerKey } from "../home/http.js";
@@ -83,8 +83,11 @@ export function createHomemoveHttpHandler(options: HomemoveHttpOptions) {
     return limiter.take();
   };
   // Crawlers (catalogue indexers such as reason-catalog-sync) are not posted at all, and never counted (Louis, 6 Nov).
-  const report = (subject: unknown, call: { tool: string; outcome: string; ms: number; detail?: string }, crawler?: string) => {
-    if (options.activity && !crawler) options.activity({ organisation: `Homemove · ${visitors.label(subject)}`, ...call });
+  // A visitor's calls carry their tag, so the Slack feed folds a burst into one line (src/activity.ts).
+  const report = (subject: unknown, call: Omit<ToolCallEvent, "organisation" | "visitor">, crawler?: string) => {
+    if (!options.activity || crawler) return;
+    const visitor = visitors.tag(subject);
+    options.activity({ organisation: `Homemove · ${visitors.label(subject)}`, ...call, ...(visitor ? { visitor: `homemove:${visitor}` } : {}) });
   };
 
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
