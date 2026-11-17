@@ -3,7 +3,7 @@ import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { test } from "node:test";
 
-import type { ToolCallEvent } from "../activity.js";
+import { formatLine, type ToolCallEvent } from "../activity.js";
 import { Introspector, type OAuthSettings } from "../auth.js";
 import { HomedataClient } from "../client.js";
 import { configFromEnv, ConfigError, createHttpHandler } from "../http.js";
@@ -254,7 +254,7 @@ test("unsigned calls spend no quota, so they cannot block anyone's sign-in chall
 test("every tool call is reported with the organisation thor names, and never its arguments", async () => {
   const events: ToolCallEvent[] = [];
   const answers = {
-    named: active("ka", "1", { organization_id: "42", organization_name: "Acme  Estates\n" }),
+    named: active("ka", "1", { organization_id: "42", organization_name: "Homemove\n" }),
     unnamed: active("kb", "2", { organization_id: "7" }),
   };
   const { call, stop } = await start({ answers, activity: (e) => events.push(e) });
@@ -262,13 +262,17 @@ test("every tool call is reported with the organisation thor names, and never it
   await call("unnamed");
   await call();
   await call("named", "SW1A 2AA <!channel>");
+  for (const event of events) {
+    assert.equal(event.app, "Homedata");
+    assert.match(formatLine(event), /^:[a-z_]+: \*Homedata\* · /);
+  }
   assert.deepEqual(
     events.map(({ organisation, tool, outcome }) => ({ organisation, tool, outcome })),
     [
-      { organisation: "Acme Estates", tool: "crime", outcome: "ok" },
+      { organisation: "Homemove", tool: "crime", outcome: "ok" },
       { organisation: "organisation 7", tool: "crime", outcome: "ok" },
       { organisation: "not signed in", tool: "crime", outcome: "sign-in required" },
-      { organisation: "Acme Estates", tool: "unknown tool", outcome: "unknown tool" },
+      { organisation: "Homemove", tool: "unknown tool", outcome: "unknown tool" },
     ],
   );
   for (const event of events) assert.ok(event.ms >= 0 && event.ms < 5000);
@@ -299,6 +303,10 @@ test("a rate-limited call is still reported, with a safe tool name and no argume
   assert.equal((await call("a")).status, 200);
   assert.ok(await limited(await call("a")));
   assert.ok(await limited(await call("a", "SW1A 2AA <!channel>")));
+  for (const event of events) {
+    assert.equal(event.app, "Homedata");
+    assert.match(formatLine(event), /^:[a-z_]+: \*Homedata\* · /);
+  }
   assert.deepEqual(
     events.map(({ organisation, tool, outcome }) => ({ organisation, tool, outcome })),
     [

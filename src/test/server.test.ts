@@ -6,6 +6,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { HomedataClient, errorGuidance } from "../client.js";
 import { staticTools, tools } from "../manifest.js";
+import { formatLine, type ToolCallEvent } from "../activity.js";
 import { buildServer } from "../server.js";
 import { PROFILES, type Profile } from "../profile.js";
 
@@ -17,7 +18,7 @@ interface Sent {
   headers?: Record<string, string>;
 }
 
-async function connect(opts: { response?: () => Response; withKey?: boolean; profile?: Profile } = {}) {
+async function connect(opts: { response?: () => Response; withKey?: boolean; profile?: Profile; onToolCall?: (event: Omit<ToolCallEvent, "organisation">) => void } = {}) {
   const sent: Sent[] = [];
   const fetchImpl = (async (...args: Parameters<typeof fetch>) => {
     const [input, init] = args;
@@ -37,7 +38,7 @@ async function connect(opts: { response?: () => Response; withKey?: boolean; pro
   const homedata = opts.withKey === false ? null : new HomedataClient({ apiKey: "parity-test", fetchImpl });
   const [a, b] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "1" }, { capabilities: {} });
-  await Promise.all([(opts.profile ? buildServer(homedata, opts.profile) : buildServer(homedata)).connect(a), client.connect(b)]);
+  await Promise.all([buildServer(homedata, opts.profile, { onToolCall: opts.onToolCall }).connect(a), client.connect(b)]);
   return { client, sent };
 }
 
@@ -432,3 +433,13 @@ for (const [name, args, body] of [
     } finally { await client.close(); }
   });
 }
+
+test("a Homedata tool call for the Homemove organisation opens with Homedata", async () => {
+  const lines: string[] = [];
+  const { client } = await connect({ onToolCall: (event) => lines.push(formatLine({ ...event, app: "Homedata", organisation: "Homemove" })) });
+  try {
+    await client.callTool({ name: "crime", arguments: { postcode: "SW1A 2AA" } });
+    assert.equal(lines.length, 1);
+    assert.match(lines[0]!, /^:white_check_mark: \*Homedata\* · Homemove · `crime` · ok · /);
+  } finally { await client.close(); }
+});

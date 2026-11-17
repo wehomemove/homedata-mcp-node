@@ -21,6 +21,8 @@
 import { MinuteLimiter } from "./limiter.js";
 
 export interface ToolCallEvent {
+  /** The Homedata endpoint names its app separately from the caller organisation. */
+  app?: "Homedata";
   /** Who made the call, already safe to show: an organisation name or a fixed label. */
   organisation: string;
   /** A manifest tool name, or "unknown tool"; never a name the caller made up. */
@@ -63,10 +65,14 @@ export function slackEscape(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function activityLabel(event: ToolCallEvent): string {
+  return event.app === "Homedata" ? `*Homedata* · ${slackEscape(event.organisation)}` : `*${slackEscape(event.organisation)}*`;
+}
+
 export function formatLine(event: ToolCallEvent): string {
   const seconds = event.ms < 1000 ? `${Math.round(event.ms)} ms` : `${(event.ms / 1000).toFixed(1)} s`;
   const icon = event.outcome === "ok" ? ":white_check_mark:" : ":warning:";
-  return `${icon} *${slackEscape(event.organisation)}* · \`${slackEscape(event.tool)}\` · ${slackEscape(event.outcome)} · ${seconds}${event.detail ? ` · ${slackEscape(event.detail)}` : ""}`;
+  return `${icon} ${activityLabel(event)} · \`${slackEscape(event.tool)}\` · ${slackEscape(event.outcome)} · ${seconds}${event.detail ? ` · ${slackEscape(event.detail)}` : ""}`;
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -102,7 +108,7 @@ export function formatBurst(calls: ToolCallEvent[], spanMs = 0): string {
   if (details.length) parts.push(details.slice(0, 3).join(" | ") + (details.length > 3 ? ` (+${details.length - 3} more)` : ""));
   const minutes = spanMs >= 60_000 ? ` · over ${Math.round(spanMs / 60_000)} min` : "";
   const icon = allOk ? ":white_check_mark:" : ":warning:";
-  return `${icon} *${slackEscape(first.organisation)}* · \`${slackEscape(tools)}\` · ${slackEscape(outcome)}${minutes}${parts.length ? ` · ${slackEscape(parts.join(" · "))}` : ""}`;
+  return `${icon} ${activityLabel(first)} · \`${slackEscape(tools)}\` · ${slackEscape(outcome)}${minutes}${parts.length ? ` · ${slackEscape(parts.join(" · "))}` : ""}`;
 }
 
 interface Posted { ts: string; channel: string }
