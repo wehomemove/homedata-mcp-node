@@ -5,13 +5,13 @@ import { BURST_GAP_MS, formatBurst, formatLine, type Later, SlackActivity, type 
 import { callDetail, callFacts } from "../home/activity.js";
 import { checkSlack, ConfigError } from "../http.js";
 
-const EVENT: ToolCallEvent = { organisation: "Acme Estates", tool: "crime", outcome: "ok", ms: 412.6 };
+const EVENT: ToolCallEvent = { app: "Homedata", organisation: "Acme Estates", tool: "crime", outcome: "ok", ms: 412.6 };
 
-test("a line is organisation, tool, outcome and duration, with Slack markup shown as text", () => {
-  assert.equal(formatLine(EVENT), ":white_check_mark: *Acme Estates* · `crime` · ok · 413 ms");
+test("a Homedata line is app, organisation, tool, outcome and duration, with Slack markup shown as text", () => {
+  assert.equal(formatLine(EVENT), ":white_check_mark: *Homedata* · Acme Estates · `crime` · ok · 413 ms");
   assert.equal(
-    formatLine({ organisation: "<!channel> & co", tool: "epc", outcome: "API error 404", ms: 2345 }),
-    ":warning: *&lt;!channel&gt; &amp; co* · `epc` · API error 404 · 2.3 s",
+    formatLine({ app: "Homedata", organisation: "<!channel> & co", tool: "epc", outcome: "API error 404", ms: 2345 }),
+    ":warning: *Homedata* · &lt;!channel&gt; &amp; co · `epc` · API error 404 · 2.3 s",
   );
 });
 
@@ -247,4 +247,17 @@ test("search_homes detail shows its date and type filters, so 0 homes reads as n
   assert.equal(callDetail("search_homes", { location: "CB21 5AB", property_type: "semi_detached", new_build: true, reduced_within_days: 7, on_market_at_least_days: 30 }, { homes: [{}] }),
     "CB21, semi-detached, new builds only, reduced in last 7 days, on market 30 days+, → 1 home");
   assert.equal(callDetail("search_homes", { location: "Bath", property_type: "castle", new_within_days: "1", new_build: "yes" }, undefined), "Bath", "values outside the schema are never shown");
+});
+
+test("Homedata labels cannot be mistaken for app names, in single calls or bursts", () => {
+  for (const organisation of ["Homemove", "Home", "server key (test wallet)", "not signed in"]) {
+    const event: ToolCallEvent = { ...EVENT, organisation };
+    assert.equal(formatLine(event), `:white_check_mark: *Homedata* · ${organisation} · \`crime\` · ok · 413 ms`);
+    assert.equal(formatBurst([event, event]), `:white_check_mark: *Homedata* · ${organisation} · \`crime ×2\` · ok`);
+  }
+  for (const app of ["Home", "Homemove"]) {
+    const event: ToolCallEvent = { organisation: `${app} · visitor abc123`, tool: "search", outcome: "ok", ms: 10 };
+    assert.equal(formatLine(event), `:white_check_mark: *${app} · visitor abc123* · \`search\` · ok · 10 ms`);
+    assert.equal(formatBurst([event, event]), `:white_check_mark: *${app} · visitor abc123* · \`search ×2\` · ok`);
+  }
 });

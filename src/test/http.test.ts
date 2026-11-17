@@ -132,6 +132,8 @@ test("a low balance answers in ChatGPT with a plain message: no credits, price, 
   try {
     const result = await client.callTool({ name: "property_core", arguments: { uprn: "100023336956" } });
     assert.equal(sent.length, 1);
+    assert.equal(events[0]!.app, "Homedata");
+    assert.equal(events[0]!.organisation, "server key (test wallet)");
     assert.equal(result.isError, true);
     const text = (result.content as Array<{ text: string }>).map((c) => c.text).join("\n");
     assert.match(text, /cannot run this lookup for the connected account/);

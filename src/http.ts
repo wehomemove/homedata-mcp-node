@@ -349,7 +349,7 @@ export function createHttpHandler(opts: HttpOptions) {
         // it, with the same safe tool name a completed call would carry.
         for (const call of calls) {
           try {
-            opts.activity?.({ organisation, tool: reportedToolName(PROFILES.chatgpt, call.name), outcome: "rate limited", ms: 0 });
+            opts.activity?.({ app: "Homedata", organisation, tool: reportedToolName(PROFILES.chatgpt, call.name), outcome: "rate limited", ms: 0 });
           } catch {
             // Reporting never changes the answer.
           }
@@ -364,7 +364,7 @@ export function createHttpHandler(opts: HttpOptions) {
     }
 
     const activity = opts.activity;
-    const onToolCall = activity ? (event: Omit<ToolCallEvent, "organisation">) => activity({ organisation, ...event }) : undefined;
+    const onToolCall = activity ? (event: Omit<ToolCallEvent, "organisation">) => activity({ ...event, app: "Homedata", organisation }) : undefined;
     const server =
       auth.mode === "server-key"
         ? buildServer(client, PROFILES.chatgpt, { onToolCall })
