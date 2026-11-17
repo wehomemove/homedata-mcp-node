@@ -2,10 +2,10 @@
   "schema_version": 1,
   "source": {
     "repository": "wehomemove/thor",
-    "commit": "de5f6c103e54ab2f85dbe61362c210e795c70132",
+    "commit": "44167c1d8584413d68d7085b43c3be810b09de09",
     "catalogue": "resources/js/Pages/Developer/Playground/Index.vue",
-    "catalogue_sha256": "ef6d61dc1c12bbc0aa2ab21fec81067b27d05510c0391f6d640966ac294c53c6",
-    "llms_full_api_surface_source_hash": "e14ab6ad7036ec2941af2fd517596cd653df6538d3c5621d94ed4d76aaddefaa"
+    "catalogue_sha256": "cbe5b2be878295d23aa8e824ff027823bccc4cdaa66718da2b4c8ebd6c5bcfb4",
+    "llms_full_api_surface_source_hash": "7b8633023ef2fbef3729dc0c4f9239f06b71496ffa73d0e1ab9542f8caeda461"
   },
   "rules": {
     "offered": "Playground ENDPOINTS entries with a path, not enterprise:true, not adminOnly:true",
@@ -175,6 +175,7 @@
           "council_tax_full": 5,
           "solar": 5,
           "broadband": 1,
+          "mobile_coverage": 1,
           "roof": 1,
           "garden": 1,
           "parking": 1,
@@ -948,6 +949,45 @@
           "type": "string",
           "required": true,
           "playground_hint": "UK postcode (e.g. SW1A 2AA or SW1A2AA: spaces optional)"
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "mobile_coverage",
+      "playground_id": "mobile-coverage",
+      "label": "Mobile Coverage",
+      "method": "GET",
+      "path": "/mobile-coverage/",
+      "params": [
+        {
+          "name": "postcode",
+          "in": "query",
+          "type": "string",
+          "required": true,
+          "playground_hint": "Full UK postcode (e.g. SW1A 2AA or SW1A2AA: spaces optional). Outcodes are rejected."
+        }
+      ],
+      "tokens": {
+        "default": 1
+      }
+    },
+    {
+      "name": "attr_mobile_coverage",
+      "playground_id": "attr-mobile-coverage",
+      "label": "Mobile coverage (one address)",
+      "method": "GET",
+      "path": "/properties/{uprn}/mobile_coverage/",
+      "params": [
+        {
+          "name": "uprn",
+          "in": "path",
+          "type": "string",
+          "required": true,
+          "pattern": "^\\d+$",
+          "playground_hint": "Unique Property Reference Number (12 digits)"
         }
       ],
       "tokens": {

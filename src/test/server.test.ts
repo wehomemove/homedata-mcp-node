@@ -52,7 +52,7 @@ test("the server offers exactly the manifest", async () => {
   const listed = (await client.listTools()).tools.map((t) => t.name).sort();
   const expected = [...tools().map((t) => t.name), ...staticTools().map((t) => t.name)].sort();
   assert.deepEqual(listed, expected);
-  assert.equal(tools().length, 61, "Python and Node expose 61 API tools plus two helpers");
+  assert.equal(tools().length, 63, "Python and Node expose 63 API tools plus two helpers");
   await client.close();
 });
 
@@ -76,7 +76,32 @@ test("EPC history lists its price and returns all certificates from the history 
   }
 });
 
-test("the curated ChatGPT tool names remain unchanged after adding EPC history", async () => {
+for (const coverage of [
+  { name: "mobile_coverage", args: { postcode: "SW1A 2AA" }, required: "postcode", path: "/mobile-coverage/", query: { postcode: "SW1A 2AA" }, invalid: [{}, { postcode: 123 }] },
+  { name: "attr_mobile_coverage", args: { uprn: "100023336956" }, required: "uprn", path: "/properties/100023336956/mobile_coverage/", query: {}, invalid: [{}, { uprn: "invalid" }] },
+]) {
+  test(`${coverage.name} lists its price and schema and calls the coverage endpoint`, async () => {
+    const response = { coverage: [{ operator: "EE", rating: 4 }] };
+    const { client, sent } = await connect({ response: () => new Response(JSON.stringify(response)) });
+    try {
+      const tool = (await client.listTools()).tools.find((t) => t.name === coverage.name);
+      assert.ok(tool);
+      assert.match(tool.description ?? "", /Costs 1 token/);
+      assert.deepEqual(tool.inputSchema.required, [coverage.required]);
+      const result = await client.callTool({ name: coverage.name, arguments: coverage.args });
+      assert.deepEqual(result.content, [{ type: "text", text: JSON.stringify(response, null, 2) }]);
+      assert.deepEqual(sent, [{ method: "GET", path: coverage.path, query: coverage.query }]);
+      for (const args of coverage.invalid) {
+        assert.equal((await client.callTool({ name: coverage.name, arguments: args })).isError, true);
+      }
+      assert.equal(sent.length, 1, "invalid coverage calls must not reach the API");
+    } finally {
+      await client.close();
+    }
+  });
+}
+
+test("the curated ChatGPT tool names remain unchanged after adding mobile coverage", async () => {
   const { client } = await connect({ profile: PROFILES.chatgpt });
   try {
     assert.deepEqual((await client.listTools()).tools.map((t) => t.name).sort(), [

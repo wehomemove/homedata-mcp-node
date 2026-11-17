@@ -51,6 +51,7 @@
     "rental_appraisal.beds": "Bedroom count; 0 means studio. Required if the property record has none, including coordinates; optional for a room.",
     "rental_appraisal.type": "flat, house or room. Overrides the property record; required if the record has none, including coordinates.",
     "rental_appraisal.as_of": "Appraisal date as YYYY-MM-DD, from 2025-01-01 to today. Defaults to today.",
-    "rental_appraisal.limit": "Number of comparables to return, 0 to 100; default 100. Use 0 for the estimate only. The estimate always uses up to 100 comparables."
+    "rental_appraisal.limit": "Number of comparables to return, 0 to 100; default 100. Use 0 for the estimate only. The estimate always uses up to 100 comparables.",
+    "mobile_coverage.postcode": "Full UK postcode, for example SW1A 2AA. Spaces optional. An outcode such as SW1A is rejected."
   }
 }

@@ -8,6 +8,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- `mobile_coverage` and `attr_mobile_coverage` for Ofcom predicted mobile coverage
+  by postcode and UPRN (1 token each), vendored from the Python manifest.
+  `property_custom` also accepts the `mobile_coverage` add-on.
 - `attr_ground_stability` and `rental_appraisal`, vendored from the Python package's
   manifest. `rental_appraisal` costs 1000 tokens (£10 + VAT); its description asks
   for approval before spending and states the refund terms.
